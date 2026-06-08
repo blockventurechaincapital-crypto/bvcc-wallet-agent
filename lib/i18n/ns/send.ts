@@ -1,0 +1,38 @@
+export const send = {
+  en: {
+    send: {
+      title: 'Send',
+      titleToken: 'Send {token}',
+      destinationLabel: 'Destination address',
+      destinationPlaceholder: '0x... or contact name',
+      amountLabel: 'Amount ({token})',
+      willReceive: 'Will receive',
+      willSend: 'Will send',
+      feeBvcc: 'BVCC fee (0.05%)',
+      confirmFaceId: 'Confirm with Face ID',
+      statusBuilding: 'Preparing...',
+      statusSigning: 'Waiting for Face ID...',
+      statusSending: 'Sending...',
+      successTitle: 'Sent',
+      backBtn: '← Back',
+    },
+  },
+  es: {
+    send: {
+      title: 'Enviar',
+      titleToken: 'Enviar {token}',
+      destinationLabel: 'Dirección destino',
+      destinationPlaceholder: '0x... o nombre de contacto',
+      amountLabel: 'Cantidad ({token})',
+      willReceive: 'Recibirá',
+      willSend: 'Enviará',
+      feeBvcc: 'Fee BVCC (0.05%)',
+      confirmFaceId: 'Confirmar con Face ID',
+      statusBuilding: 'Preparando...',
+      statusSigning: 'Esperando Face ID...',
+      statusSending: 'Enviando...',
+      successTitle: 'Enviado',
+      backBtn: '← Volver',
+    },
+  },
+}
