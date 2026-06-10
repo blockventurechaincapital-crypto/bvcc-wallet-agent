@@ -94,6 +94,19 @@ function extractPublicKeyFromAuthData(authData: Uint8Array): { pubKeyX: bigint; 
 // Registro WebAuthn
 // ---------------------------------------------------------------------------
 
+// rpId = dominio padre para que la misma passkey funcione en todos los
+// subdominios (wallet.*, bvccwallet.*, ...). El navegador exige que el rpId
+// sea sufijo del hostname actual, asi que en localhost / otros dominios
+// (self-hosted) se usa el hostname tal cual.
+const PARENT_RP_ID = 'blockventurechaincapital.com'
+
+function getRpId(): string {
+  const host = window.location.hostname
+  return host === PARENT_RP_ID || host.endsWith('.' + PARENT_RP_ID)
+    ? PARENT_RP_ID
+    : host
+}
+
 /**
  * Registra una nueva credencial biometrica (Face ID / huella) en el TPM del
  * dispositivo y devuelve la clave publica P256 junto con el credentialId.
@@ -111,7 +124,7 @@ export async function registerWebAuthn(username: string): Promise<{
       challenge,
       rp: {
         name: 'BVCC Wallet',
-        id: window.location.hostname,
+        id: getRpId(),
       },
       user: {
         id: userId,
@@ -225,7 +238,7 @@ export async function authenticateWebAuthn(
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: challenge.buffer as ArrayBuffer,
-      rpId: window.location.hostname,
+      rpId: getRpId(),
       ...(allowCredentials ? { allowCredentials } : {}),
       userVerification: 'required',
       timeout: 60000,

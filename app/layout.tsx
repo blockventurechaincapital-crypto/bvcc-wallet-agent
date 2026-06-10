@@ -18,7 +18,7 @@ const OG_DESC =
   'Da una wallet a tu agente IA con límites que no puede cruzar: presupuesto por periodo, lista de destinatarios y pausa instantánea. Auto-custodia con Face ID, sin KYC.'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://wallet.blockventurechaincapital.com'),
+  metadataBase: new URL('https://bvccwallet.blockventurechaincapital.com'),
   title: 'BVCC Wallet — Smart wallet para ti y tu agente IA',
   description:
     'Smart wallet auto-custodiada con Face ID. Entrega una agent wallet a tu IA con límites reales: presupuesto, lista de destinatarios y pausa instantánea. Sin KYC, ERC-4337.',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: 'website',
-    url: 'https://wallet.blockventurechaincapital.com',
+    url: 'https://bvccwallet.blockventurechaincapital.com',
     siteName: 'BVCC Wallet',
     title: 'BVCC Wallet — Smart wallet para ti y tu agente IA',
     description: OG_DESC,

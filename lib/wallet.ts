@@ -1,4 +1,4 @@
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, http, type Address, type AbiEvent } from 'viem'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI } from './abis'
 import type { NetworkConfig } from './networks'
 
@@ -109,12 +109,15 @@ export async function getCredentialIdFromChain(
             { name: 'pubKeyY',      type: 'uint256', indexed: false },
             { name: 'credentialId', type: 'string',  indexed: false },
           ],
-        } as const,
+        } as AbiEvent,
         args: { wallet: walletAddress },
         fromBlock: 0n,
         toBlock: 'latest',
       })
-      if (logs.length > 0) return (logs[0].args.credentialId as string) ?? null
+      if (logs.length > 0) {
+        const args = logs[0].args as { credentialId?: string }
+        return args.credentialId ?? null
+      }
     } catch {
       // try next source
     }

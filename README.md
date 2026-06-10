@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <b>URL:</b> wallet.blockventurechaincapital.com
+  <b>URL:</b> bvccwallet.blockventurechaincapital.com
 </p>
 
 ## Screenshots
@@ -215,12 +215,4 @@ lib/
 
 ---
 
-## Deploy (VPS)
 
-```bash
-npm run build
-# Serve with PM2 + nginx reverse proxy
-# In production the server-side bundler (BUNDLER_PRIVATE_KEY) is used for a
-# Face-ID-only UX. Without that key it still works in fallback mode (the
-# connected wallet pays the gas), so it can also run on Vercel.
-```

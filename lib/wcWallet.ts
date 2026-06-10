@@ -29,8 +29,8 @@ export async function getWeb3Wallet(): Promise<InstanceType<typeof Web3Wallet>> 
       metadata: {
         name: 'BVCC Wallet',
         description: 'Smart wallet auto-custodiada con Face ID',
-        url: 'https://wallet.blockventurechaincapital.com',
-        icons: ['https://wallet.blockventurechaincapital.com/icon.png'],
+        url: 'https://bvccwallet.blockventurechaincapital.com',
+        icons: ['https://bvccwallet.blockventurechaincapital.com/icon.png'],
       },
     })
 

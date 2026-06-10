@@ -61,7 +61,7 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
             const updated = wc.getActiveSessions()
             setSessions(Object.values(updated) as WcSession[])
           } catch (e) {
-            console.error('[WC] session_proposal error', e)
+            console.warn('[WC] session_proposal error', e)
           }
         })
 

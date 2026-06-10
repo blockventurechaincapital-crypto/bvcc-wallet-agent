@@ -8,7 +8,9 @@ export const config = createConfig({
   chains: [arbitrumSepolia, base, arbitrum, mainnet, bsc],
   connectors: [
     injected(),
-    walletConnect({ projectId, showQrModal: false }),
+    // 'silent' evita que el Core interno del connector emita console.error
+    // por errores benignos del relay (igual que en lib/wcWallet.ts)
+    walletConnect({ projectId, showQrModal: false, logger: 'silent' }),
   ],
   transports: {
     [arbitrumSepolia.id]: http(),
