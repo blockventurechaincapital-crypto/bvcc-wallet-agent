@@ -15,7 +15,7 @@ import {SignerP256} from "@openzeppelin/contracts/utils/cryptography/signers/Sig
 import {SignerWebAuthn} from "@openzeppelin/contracts/utils/cryptography/signers/SignerWebAuthn.sol";
 import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
 
-contract BVCCSmartWalletV1 is Account, EIP712, ERC7739, SignerP256, SignerWebAuthn, ERC7821, ERC721Holder, ERC1155Holder {
+contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAuthn, ERC7821, ERC721Holder, ERC1155Holder {
     using ERC7579Utils for *;
 
     // -------------------------------------------------------------------------
@@ -36,6 +36,13 @@ contract BVCCSmartWalletV1 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
 
     /// @notice Max token addresses to scan per call (bounds gas)
     uint256 private constant MAX_SCAN_TOKENS = 10;
+
+    /// @notice Gas cap for every balanceOf probe (snapshot + fee collection).
+    ///         High enough for exotic tokens (rebasing aTokens/cTokens), low enough
+    ///         that a gas-burning candidate (e.g. Arbitrum precompiles 0x64-0x6f)
+    ///         cannot inflate eth_estimateGas: worst case is
+    ///         (MAX_SCAN_TOKENS + 1) * 2 * PROBE_GAS_CAP ≈ 2.2M, vs 32M before the fix.
+    uint256 private constant PROBE_GAS_CAP = 100_000;
 
     error AlreadyApproved();
     error ETHFeeFailed();
@@ -85,7 +92,7 @@ contract BVCCSmartWalletV1 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
     // -------------------------------------------------------------------------
 
     constructor(bytes32 qx, bytes32 qy)
-        EIP712("BVCCSmartWalletV1", "1")
+        EIP712("BVCCSmartWalletV2", "1")
         SignerP256(qx, qy)
     {}
 
@@ -263,7 +270,13 @@ contract BVCCSmartWalletV1 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
         uint256[] memory balancesBefore
     ) internal {
         for (uint256 i = 0; i < tokens.length; i++) {
-            uint256 newBal = IERC20(tokens[i]).balanceOf(address(this));
+            // Gas-capped like _tryBalanceOf: a token that misbehaves after the swap
+            // (or burns gas) must skip its fee, never starve or revert the user's call.
+            (bool balOk, bytes memory balRet) = tokens[i].staticcall{gas: PROBE_GAS_CAP}(
+                abi.encodeWithSelector(IERC20.balanceOf.selector, address(this))
+            );
+            if (!balOk || balRet.length < 32) continue;
+            uint256 newBal = abi.decode(balRet, (uint256));
             if (newBal > balancesBefore[i]) {
                 uint256 increase = newBal - balancesBefore[i];
                 uint256 fee = (increase * _feeNumerator()) / FEE_DENOMINATOR;
@@ -277,13 +290,18 @@ contract BVCCSmartWalletV1 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
         }
     }
 
+    /// @dev Gas-capped probe. Arbitrum precompiles (0x64-0x6f) report bytecode
+    ///      0xfe, so the code-length guard does not filter them, and calling them
+    ///      consumes ALL forwarded gas (not a cheap revert). A real ERC-20
+    ///      balanceOf needs well under PROBE_GAS_CAP, so the cap is harmless for
+    ///      tokens and bounds the damage from any gas-burning candidate.
     function _tryBalanceOf(address token) internal view returns (bool, uint256) {
         if (token.code.length == 0) return (false, 0);
-        try IERC20(token).balanceOf(address(this)) returns (uint256 bal) {
-            return (true, bal);
-        } catch {
-            return (false, 0);
-        }
+        (bool ok, bytes memory ret) = token.staticcall{gas: PROBE_GAS_CAP}(
+            abi.encodeWithSelector(IERC20.balanceOf.selector, address(this))
+        );
+        if (!ok || ret.length < 32) return (false, 0);
+        return (true, abi.decode(ret, (uint256)));
     }
 
     function _inArray(address[] memory arr, uint256 len, address candidate)

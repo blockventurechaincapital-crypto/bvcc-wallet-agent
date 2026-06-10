@@ -2,6 +2,7 @@
 import { useAccountStatus } from '@/lib/useAccountStatus'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import DeployOnNetwork from '@/components/DeployOnNetwork'
 
 function Item({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
   return (
@@ -48,6 +49,12 @@ export default function AccountStatusCard({ address }: { address: string }) {
         <Item label={t('dashboard.accountOps')} value={isLoading ? '…' : String(data?.nonce ?? 0)} />
         <Item label={t('dashboard.accountGuardians')} value={isLoading ? '…' : `${data?.guardianCount ?? 0} / 3`} />
       </div>
+
+      {!isLoading && !deployed && network.contracts.factory && (
+        <div style={{ marginTop: '14px' }}>
+          <DeployOnNetwork address={address} />
+        </div>
+      )}
     </div>
   )
 }

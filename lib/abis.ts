@@ -325,10 +325,6 @@ export const BVCC_WALLET_ABI = [
   { "type": "error", "name": "UnsupportedExecutionMode", "inputs": [] }
 ] as const
 
-// BVCCWalletFactory — Arbitrum Sepolia (chainId 421614)
-// v5: fix Case 3 forwarda exec.value al target (swap ETH→token funciona)
-export const FACTORY_ADDRESS = '0x6890bCC6F53463cDECAcce3D8bE72bb8fD81F58d' as `0x${string}`
-
 // walletType() — shared by both BVCCWallet and BVCCAgentWallet
 // Returns 0 (STANDARD) or 1 (AGENT)
 export const WALLET_TYPE_ABI = [
@@ -399,6 +395,16 @@ export const BVCC_AGENT_WALLET_FACTORY_ABI = [
 //  allowedProtocols[], allowedRecipients[],
 //  expiry, periodDuration, periodStart, active)
 export const BVCC_AGENT_WALLET_ABI = [
+  // Agent custom errors (selectors confirmed on-chain via eth_call probes against the
+  // deployed wallet; contract source is not in this repo). Adding them lets viem decode
+  // agent-protection reverts instead of showing "unknown reason".
+  { "type": "error", "name": "ExceedsPerTxLimit", "inputs": [] },        // 0x34305581 — ETH amount > maxPerTxWei
+  { "type": "error", "name": "DailyLimitExceeded", "inputs": [] },       // 0x194bd314 — ETH daily cumulative > dailyLimitWei
+  { "type": "error", "name": "ExceedsTokenMaxAmount", "inputs": [] },    // 0xe72e13de — token amount > tokenMaxAmounts
+  { "type": "error", "name": "TokenDailyLimitExceeded", "inputs": [] },  // 0x4535941f — token daily cumulative > tokenDailyLimits
+  { "type": "error", "name": "TokenNotAllowed", "inputs": [] },          // 0xa29c4986 — token not in allowedTokens
+  { "type": "error", "name": "NotAuthorizedAgent", "inputs": [] },       // 0x50699b39 — caller is not an active agent
+  { "type": "error", "name": "AgentCannotCallWallet", "inputs": [] },    // 0x852d39d2 — agent may not target the wallet itself (blocks owner-fn self-call escalation)
   {
     "type": "function",
     "name": "walletType",

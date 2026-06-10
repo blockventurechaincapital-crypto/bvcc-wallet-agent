@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCSmartWalletV1} from "../src/BVCCWallet.sol";
+import {BVCCSmartWalletV2} from "../src/BVCCWallet.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 import {ERC7579Utils} from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
@@ -34,7 +34,55 @@ contract MockSwapTarget {
     }
 }
 
-contract BVCCSmartWalletV1Test is Test {
+// ---------------------------------------------------------------------------
+// Mock gas-burner — simulates an Arbitrum precompile (e.g. 0x64): reports
+// bytecode (so the code-length guard does not filter it) and consumes ALL
+// forwarded gas on any call. _tryBalanceOf must cap gas so this cannot drain
+// the swap's gas budget. Deployed at a low precompile-like address via etch.
+// ---------------------------------------------------------------------------
+contract MockGasBurner {
+    fallback() external {
+        // Infinite loop — burns every wei of gas it is given
+        while (true) {}
+    }
+}
+
+// Swap target whose calldata embeds a gas-burner address as a candidate token,
+// then mints tokenOut. Mirrors the real bug: a small uint in calldata matched a
+// precompile address and the snapshot probe burned the gas budget.
+contract MockSwapWithTrap {
+    function swap(address trap, address tokenOut, uint256 amountOut) external {
+        MockERC20(tokenOut).mint(msg.sender, amountOut);
+    }
+}
+
+// balanceOf that returns 64 bytes (a uint + garbage). The fix decodes the first
+// word, so it must be treated as a valid token (abi.decode reads 32 bytes).
+contract MockFatReturnToken {
+    mapping(address => uint256) public bal;
+    function mint(address to, uint256 a) external { bal[to] += a; }
+    function balanceOf(address a) external view returns (uint256, uint256) {
+        return (bal[a], 12345); // 64-byte return
+    }
+    function transfer(address to, uint256 a) external returns (bool) {
+        require(bal[msg.sender] >= a, "insufficient");
+        bal[msg.sender] -= a;
+        bal[to] += a;
+        return true;
+    }
+    function swapMint(address tokenOut, uint256 amt) external {
+        MockFatReturnToken(tokenOut).mint(msg.sender, amt);
+    }
+}
+
+// balanceOf that reverts — must be filtered out (not treated as a token).
+contract MockRevertingBalanceToken {
+    function balanceOf(address) external pure returns (uint256) {
+        revert("nope");
+    }
+}
+
+contract BVCCSmartWalletV2Test is Test {
     using ERC7579Utils for *;
 
     address constant ENTRY_POINT = 0x433709009B8330FDa32311DF1C2AFA402eD8D009;
@@ -49,7 +97,7 @@ contract BVCCSmartWalletV1Test is Test {
     uint256 constant FEE_NUM = 500;
     uint256 constant FEE_DEN = 1_000_000;
 
-    BVCCSmartWalletV1 wallet;
+    BVCCSmartWalletV2 wallet;
     MockERC20  token;
     MockSwapTarget swapTarget;
 
@@ -61,7 +109,7 @@ contract BVCCSmartWalletV1Test is Test {
     address g3 = address(3);
 
     function setUp() public {
-        wallet     = new BVCCSmartWalletV1(P256_GX, P256_GY);
+        wallet     = new BVCCSmartWalletV2(P256_GX, P256_GY);
         token      = new MockERC20();
         swapTarget = new MockSwapTarget();
 
@@ -185,6 +233,72 @@ contract BVCCSmartWalletV1Test is Test {
         assertEq(token.balanceOf(feeWallet), fee, "Fee wallet should receive 0.05% of increase");
     }
 
+    // Regression: a gas-burning candidate (Arbitrum precompile pattern) in the
+    // Case-3 calldata must NOT starve the swap of gas. Before the fix,
+    // _tryBalanceOf forwarded all gas to the candidate; the precompile burned it
+    // and the swap reverted with out-of-gas (UserOp success=false on-chain).
+    function test_Case3_GasBurnerCandidateDoesNotStarveSwap() public {
+        // Etch the gas-burner at a precompile-like low address so the snapshot
+        // scanner finds it via the calldata word and probes its balanceOf.
+        address trap = address(0x0000000000000000000000000000000000000064);
+        vm.etch(trap, address(new MockGasBurner()).code);
+
+        MockSwapWithTrap target = new MockSwapWithTrap();
+        uint256 swapOut = 1000 ether;
+        uint256 fee     = (swapOut * FEE_NUM) / FEE_DEN;
+        address feeWallet = wallet.BVCC_FEE_WALLET();
+
+        // calldata embeds: trap (0x..64), token, swapOut → scanner probes both
+        bytes memory cd = abi.encodeWithSignature(
+            "swap(address,address,uint256)", trap, address(token), swapOut
+        );
+
+        // Give the outer call a realistic budget. With the gas cap the swap
+        // succeeds; without it the trap would consume the whole budget.
+        vm.prank(ENTRY_POINT);
+        wallet.execute{value: 0, gas: 2_000_000}(
+            BATCH_MODE, _batch(address(target), 0, cd)
+        );
+
+        assertEq(token.balanceOf(address(wallet)), swapOut - fee, "Swap should complete despite gas-burner in calldata");
+        assertEq(token.balanceOf(feeWallet), fee, "Fee still collected on the increase");
+    }
+
+    // A token whose balanceOf returns more than 32 bytes must still be detected
+    // (abi.decode reads the first word) and have its fee collected.
+    function test_Case3_FatReturnTokenStillSnapshotted() public {
+        MockFatReturnToken fat = new MockFatReturnToken();
+        uint256 swapOut = 1000 ether;
+        uint256 fee     = (swapOut * FEE_NUM) / FEE_DEN;
+        address feeWallet = wallet.BVCC_FEE_WALLET();
+
+        bytes memory cd = abi.encodeWithSignature(
+            "swapMint(address,uint256)", address(fat), swapOut
+        );
+        _execute(address(fat), 0, cd);
+
+        assertEq(fat.bal(feeWallet), fee, "Fee collected from 64-byte-return token");
+    }
+
+    // A candidate whose balanceOf reverts must be filtered (no fee, no revert of
+    // the whole batch) — confirms the staticcall failure path matches old catch.
+    function test_Case3_RevertingBalanceOfIsFilteredNotFatal() public {
+        MockRevertingBalanceToken bad = new MockRevertingBalanceToken();
+        uint256 swapOut = 1000 ether;
+        uint256 fee     = (swapOut * FEE_NUM) / FEE_DEN;
+        address feeWallet = wallet.BVCC_FEE_WALLET();
+
+        // calldata embeds both the reverting candidate and the real token
+        bytes memory cd = abi.encodeWithSignature(
+            "swap(address,address,uint256)", address(bad), address(token), swapOut
+        );
+        MockSwapWithTrap target = new MockSwapWithTrap();
+        _execute(address(target), 0, cd);
+
+        // Real token's fee still collected; reverting candidate simply ignored
+        assertEq(token.balanceOf(feeWallet), fee, "Real token fee collected, bad candidate ignored");
+    }
+
     function test_Case3_NoFeeIfBalanceDoesNotIncrease() public {
         address feeWallet = wallet.BVCC_FEE_WALLET();
 
@@ -216,7 +330,7 @@ contract BVCCSmartWalletV1Test is Test {
 
         // Timelock not expired yet — reverts
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV1.TimelockNotExpired.selector);
+        vm.expectRevert(BVCCSmartWalletV2.TimelockNotExpired.selector);
         wallet.executeRecovery();
 
         vm.warp(block.timestamp + 48 hours);
@@ -270,14 +384,14 @@ contract BVCCSmartWalletV1Test is Test {
         vm.prank(g1); wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
 
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV1.InsufficientApprovals.selector);
+        vm.expectRevert(BVCCSmartWalletV2.InsufficientApprovals.selector);
         wallet.executeRecovery();
     }
 
     function test_ApproveRevertsWhenNoRecoveryInProgress() public {
         _setGuardians();
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV1.NoRecoveryInProgress.selector);
+        vm.expectRevert(BVCCSmartWalletV2.NoRecoveryInProgress.selector);
         wallet.approveRecovery();
     }
 
@@ -287,7 +401,7 @@ contract BVCCSmartWalletV1Test is Test {
         vm.prank(g2); wallet.approveRecovery();
 
         vm.prank(g2);
-        vm.expectRevert(BVCCSmartWalletV1.AlreadyApproved.selector);
+        vm.expectRevert(BVCCSmartWalletV2.AlreadyApproved.selector);
         wallet.approveRecovery();
     }
 
@@ -313,7 +427,7 @@ contract BVCCSmartWalletV1Test is Test {
         vm.prank(g1); wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
 
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV1.OnlyWalletCanCancel.selector);
+        vm.expectRevert(BVCCSmartWalletV2.OnlyWalletCanCancel.selector);
         wallet.cancelRecovery();
     }
 
@@ -334,7 +448,7 @@ contract BVCCSmartWalletV1Test is Test {
 
     function test_SetGuardiansOnlyOnce() public {
         _setGuardians();
-        vm.expectRevert(BVCCSmartWalletV1.GuardiansAlreadySet.selector);
+        vm.expectRevert(BVCCSmartWalletV2.GuardiansAlreadySet.selector);
         wallet.setGuardians([address(4), address(5), address(6)]);
     }
 
@@ -350,7 +464,7 @@ contract BVCCSmartWalletV1Test is Test {
 
         // Guardian 3 tries to override — must revert
         vm.prank(g3);
-        vm.expectRevert(BVCCSmartWalletV1.RecoveryAlreadyApproved.selector);
+        vm.expectRevert(BVCCSmartWalletV2.RecoveryAlreadyApproved.selector);
         wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
     }
 
@@ -359,6 +473,6 @@ contract BVCCSmartWalletV1Test is Test {
     // =========================================================================
 
     function test_WalletType_IsStandard() public view {
-        assertEq(wallet.walletType(), 0, "BVCCSmartWalletV1 should return type 0 (STANDARD)");
+        assertEq(wallet.walletType(), 0, "BVCCSmartWalletV2 should return type 0 (STANDARD)");
     }
 }

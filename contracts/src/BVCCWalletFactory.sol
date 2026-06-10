@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {BVCCSmartWalletV1} from "./BVCCWallet.sol";
+import {BVCCSmartWalletV2} from "./BVCCWallet.sol";
 
-contract BVCCSmartWalletFactoryV1 {
+contract BVCCSmartWalletFactoryV2 {
 
     event WalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY, string credentialId);
     event FactoryKilled(address indexed by);
@@ -57,7 +57,7 @@ contract BVCCSmartWalletFactoryV1 {
     ) public view returns (address) {
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
         bytes32 initCodeHash = keccak256(abi.encodePacked(
-            type(BVCCSmartWalletV1).creationCode,
+            type(BVCCSmartWalletV2).creationCode,
             abi.encode(bytes32(pubKeyX), bytes32(pubKeyY))
         ));
         return address(uint160(uint256(keccak256(abi.encodePacked(
@@ -90,7 +90,7 @@ contract BVCCSmartWalletFactoryV1 {
         if (predicted.code.length > 0) return predicted;
 
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
-        BVCCSmartWalletV1 w = new BVCCSmartWalletV1{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
+        BVCCSmartWalletV2 w = new BVCCSmartWalletV2{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
         wallet = address(w);
 
         // setGuardians can only be called once (guarded by guardians[0] == address(0))

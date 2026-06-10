@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {BVCCSmartWalletV1} from "./BVCCWallet.sol";
+import {BVCCSmartWalletV2} from "./BVCCWallet.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 import {ERC7579Utils} from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
-contract BVCCAgentWalletV1 is BVCCSmartWalletV1, ReentrancyGuard, Pausable {
+contract BVCCAgentWalletV2 is BVCCSmartWalletV2, ReentrancyGuard, Pausable {
 
     uint256 public constant MAX_WHITELIST = 20;
 
@@ -119,7 +119,7 @@ contract BVCCAgentWalletV1 is BVCCSmartWalletV1, ReentrancyGuard, Pausable {
         uint128 totalSpentWei
     );
 
-    constructor(bytes32 qx, bytes32 qy) BVCCSmartWalletV1(qx, qy) {}
+    constructor(bytes32 qx, bytes32 qy) BVCCSmartWalletV2(qx, qy) {}
 
     /**
      * @notice Authorize an AI agent with specific spend permissions.
@@ -339,7 +339,10 @@ contract BVCCAgentWalletV1 is BVCCSmartWalletV1, ReentrancyGuard, Pausable {
         }
 
         // Update state BEFORE execution (reentrancy safety; nonReentrant also protects)
-        uint128 ethSpent = uint128(totalEth); // safe: totalEth <= uint128 max (checked implicitly above)
+        // Explicit bound: the limit checks above only run when the corresponding cap
+        // is non-zero, so an all-unlimited agent could otherwise truncate silently.
+        require(totalEth <= type(uint128).max, AgentBudgetExceeded());
+        uint128 ethSpent = uint128(totalEth);
         _dailySpent[today][agent] += ethSpent;
         perm.totalSpentWei        += ethSpent;
         perm.periodSpentWei       += ethSpent;

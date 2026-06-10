@@ -116,14 +116,21 @@ rm -rf .next && npm run dev
 
 | Contract | Networks | Address |
 |---|---|---|
-| BVCCSmartWalletFactoryV1 | Arbitrum One · BNB Chain · Arb Sepolia | `0xa5290A51a73903176e09C864E1542a07da67BD12` |
-| BVCCAgentWalletFactoryV1 | Arbitrum One · BNB Chain · Arb Sepolia | `0xc87aa10747A92B472EF6B36e190B84c897a2953e` |
+| BVCCSmartWalletFactoryV2 | Arbitrum One · BNB Chain · Ethereum · Arb Sepolia | `0x230b7010529AB6977Dd8581B3eF018ef865BdEf1` |
+| BVCCAgentWalletFactoryV2 | Arbitrum One · BNB Chain · Ethereum · Arb Sepolia | `0x8D9e24022777173AD6336e00884b6C87c7EF054c` |
 | EntryPoint OZ v0.9 (canonical) | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
 
 Deterministic CREATE2 deployment — same factory address on every network, which also
 gives each user the same wallet address across all supported chains. Contracts are
-verified on [Arbiscan](https://arbiscan.io/address/0xc87aa10747A92B472EF6B36e190B84c897a2953e)
-and [BscScan](https://bscscan.com/address/0xc87aa10747A92B472EF6B36e190B84c897a2953e).
+verified on [Arbiscan](https://arbiscan.io/address/0x8D9e24022777173AD6336e00884b6C87c7EF054c),
+[BscScan](https://bscscan.com/address/0x8D9e24022777173AD6336e00884b6C87c7EF054c)
+and [Etherscan](https://etherscan.io/address/0x8D9e24022777173AD6336e00884b6C87c7EF054c).
+
+> **V2 (gas hardening).** V1 had a swap gas bug: a small Uniswap fee tier matched an
+> Arbitrum precompile address during the Case-3 balance snapshot and drained the gas
+> budget. V2 caps the `balanceOf` probe (`PROBE_GAS_CAP = 100_000`). See
+> [`audits/`](audits) for the full report. Previous V1 factories
+> (`0xa5290A51…` / `0xc87aa107…`) are deprecated.
 
 ### Wallet types
 
@@ -206,7 +213,7 @@ app/
     prices/                 # CoinGecko USD prices
     check-iframe/           # Detects whether a dApp allows embedding
 lib/
-  networks.ts               # 6-network config (live: Arbitrum One, BNB Chain, Arb Sepolia)
+  networks.ts               # 6-network config (live: Arbitrum One, BNB Chain, Ethereum, Arb Sepolia)
   NetworkContext.tsx        # Active-network React context
   abis.ts                   # ABIs: BVCCWallet, Factory, AgentWallet, AgentFactory
   useWalletType.ts          # Reads walletType() on-chain

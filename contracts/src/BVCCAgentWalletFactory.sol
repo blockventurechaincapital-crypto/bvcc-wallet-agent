@@ -2,9 +2,9 @@
 // Factory for BVCCAgentWallet — AI Agent wallet type
 pragma solidity ^0.8.20;
 
-import {BVCCAgentWalletV1} from "./BVCCAgentWallet.sol";
+import {BVCCAgentWalletV2} from "./BVCCAgentWallet.sol";
 
-contract BVCCAgentWalletFactoryV1 {
+contract BVCCAgentWalletFactoryV2 {
 
     event AgentWalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY, string credentialId);
     event FactoryKilled(address indexed by);
@@ -58,7 +58,7 @@ contract BVCCAgentWalletFactoryV1 {
     ) public view returns (address) {
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
         bytes32 initCodeHash = keccak256(abi.encodePacked(
-            type(BVCCAgentWalletV1).creationCode,
+            type(BVCCAgentWalletV2).creationCode,
             abi.encode(bytes32(pubKeyX), bytes32(pubKeyY))
         ));
         return address(uint160(uint256(keccak256(abi.encodePacked(
@@ -91,7 +91,7 @@ contract BVCCAgentWalletFactoryV1 {
         if (predicted.code.length > 0) return predicted;
 
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
-        BVCCAgentWalletV1 w = new BVCCAgentWalletV1{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
+        BVCCAgentWalletV2 w = new BVCCAgentWalletV2{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
         wallet = address(w);
 
         // setGuardians can only be called once (guarded by guardians[0] == address(0))

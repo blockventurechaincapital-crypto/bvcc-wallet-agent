@@ -39,6 +39,21 @@ export const dashboard = {
       accountGuardians: 'Guardians',
       accountSigner: 'Signer (P256)',
 
+      // Deploy on this network (cross-chain)
+      depBtn: 'Deploy on this network',
+      depTitle: 'Deploy wallet',
+      depDesc: 'Your wallet already exists on another network. Deploying here recreates it with the same address, the same passkey and the same guardians. The connected wallet pays the gas.',
+      depLoading: 'Reading wallet data from the source network…',
+      depNoSource: 'Could not find this wallet deployed on any other network.',
+      depSameAddr: 'Address (same on every network)',
+      depSource: 'Copied from',
+      depConnect: 'Connect a wallet (top-right button) to pay the deployment gas.',
+      depSwitch: 'Switch network in your wallet',
+      depAction: 'Deploy',
+      depDeploying: 'Deploying…',
+      depSuccess: 'Wallet deployed on this network',
+      depAgentMissing: 'The Agent Wallet factory is not available on this network yet.',
+
       // Token detail modal
       chartUnavailable: 'Price chart not available',
       yourBalance: 'Your balance',
@@ -99,6 +114,21 @@ export const dashboard = {
       accountOps: 'Operaciones',
       accountGuardians: 'Guardianes',
       accountSigner: 'Firmante (P256)',
+
+      // Desplegar en esta red (cross-chain)
+      depBtn: 'Desplegar en esta red',
+      depTitle: 'Desplegar wallet',
+      depDesc: 'Tu wallet ya existe en otra red. Desplegarla aquí la recrea con la misma dirección, la misma passkey y los mismos guardianes. La wallet conectada paga el gas.',
+      depLoading: 'Leyendo los datos de la wallet desde la red de origen…',
+      depNoSource: 'No se encontró esta wallet desplegada en ninguna otra red.',
+      depSameAddr: 'Dirección (la misma en todas las redes)',
+      depSource: 'Copiada desde',
+      depConnect: 'Conecta una wallet (botón arriba a la derecha) para pagar el gas del despliegue.',
+      depSwitch: 'Cambia de red en tu wallet',
+      depAction: 'Desplegar',
+      depDeploying: 'Desplegando…',
+      depSuccess: 'Wallet desplegada en esta red',
+      depAgentMissing: 'La factory de Agent Wallet aún no está disponible en esta red.',
 
       // Token detail modal
       chartUnavailable: 'Gráfica de precio no disponible',

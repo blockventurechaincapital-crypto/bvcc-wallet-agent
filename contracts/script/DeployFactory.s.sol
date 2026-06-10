@@ -20,7 +20,7 @@ contract DeployFactory is Script {
         require(FACTORY_OWNER != address(0), "Set FACTORY_OWNER (admin wallet) first");
         vm.startBroadcast();
 
-        BVCCSmartWalletFactoryV1 factory = new BVCCSmartWalletFactoryV1{salt: SALT}(FACTORY_OWNER);
+        BVCCSmartWalletFactoryV2 factory = new BVCCSmartWalletFactoryV2{salt: SALT}(FACTORY_OWNER);
 
         console.log("Factory deployed at:");
         console.log(address(factory));

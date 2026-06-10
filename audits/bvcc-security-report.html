@@ -89,11 +89,11 @@
   <div class="meta">
     <table>
       <tr><td class="k">Subject</td><td>BVCC Agent Wallet (ERC-4337 / ERC-7579 smart account)</td></tr>
-      <tr><td class="k">Network</td><td>Arbitrum Sepolia — chain ID 421614</td></tr>
+      <tr><td class="k">Network</td><td>Arbitrum Sepolia (421614) · V2 factories also on Arbitrum One (42161) &amp; BNB Chain (56)</td></tr>
       <tr><td class="k">Patched wallet</td><td class="mono">0x1ED261BA084c4E6117daf289f3ca233BBA3cF0C3</td></tr>
       <tr><td class="k">Engagement</td><td>Internal security testing &amp; remediation verification</td></tr>
-      <tr><td class="k">Dates</td><td>2026-06-06 → 2026-06-08</td></tr>
-      <tr><td class="k">Status</td><td><span class="chip high">1 HIGH found</span> <span class="chip fixed">Fixed &amp; redeployed</span> <span class="chip pass">11/11 tests pass</span> <span class="chip fixed">Recovery verified</span></td></tr>
+      <tr><td class="k">Dates</td><td>2026-06-06 → 2026-06-11</td></tr>
+      <tr><td class="k">Status</td><td><span class="chip high">2 HIGH found</span> <span class="chip fixed">Fixed &amp; redeployed</span> <span class="chip pass">11/11 tests pass</span> <span class="chip fixed">Recovery verified</span> <span class="chip fixed">V2 multichain</span></td></tr>
     </table>
   </div>
 
@@ -110,11 +110,13 @@
   <p class="lead">This report documents the security testing of the BVCC Agent Wallet — an ERC-4337
   smart account that lets an owner delegate bounded spending authority to an autonomous agent (EOA).
   Work covered static analysis, a high-severity finding with its remediation, a redeploy of the
-  patched contracts, and a full re-verification of the agent permission system on the patched bytecode.</p>
+  patched contracts, and a full re-verification of the agent permission system on the patched bytecode.
+  A follow-up V2 round fixed a mainnet gas-griefing issue in the fee-snapshot logic and concluded with
+  a deterministic multichain deployment (Arbitrum One, BNB Chain, Arbitrum Sepolia — see §9).</p>
 
   <div class="kpis">
-    <div class="kpi"><div class="v">1</div><div class="l">High finding (fixed)</div></div>
-    <div class="kpi"><div class="v">128/128</div><div class="l">Unit tests (forge)</div></div>
+    <div class="kpi"><div class="v">2</div><div class="l">High findings (fixed)</div></div>
+    <div class="kpi"><div class="v">131/131</div><div class="l">Unit tests (forge)</div></div>
     <div class="kpi"><div class="v">11/11</div><div class="l">On-chain agent tests</div></div>
     <div class="kpi"><div class="v">0</div><div class="l">Open issues</div></div>
   </div>
@@ -124,6 +126,10 @@
     <li><b>High-severity vulnerability identified and fixed.</b> An <code>approve</code> cap-bypass let an
     agent move tokens past its daily/total budgets via <code>transferFrom</code>. Reproduced on-chain,
     patched in source, and re-verified after redeploy.</li>
+    <li><b>Mainnet gas-griefing issue fixed (V2).</b> Arbitrum precompiles matched by the fee-snapshot
+    calldata scan burned all forwarded gas, inflating gas estimates to ~32M and breaking swaps. Every
+    <code>balanceOf</code> probe is now gas-capped (<code>PROBE_GAS_CAP = 100k</code>); estimates return
+    to ~400k for a real swap (see §9).</li>
     <li><b>Static analysis clean.</b> Slither 0.11.3 produced no actionable findings; a defensive
     zero-address check was added to both factory constructors.</li>
     <li><b>Patched contracts redeployed</b> to Arbitrum Sepolia with the deployer key holding no
@@ -186,7 +192,9 @@
   <h3>Remediation applied</h3>
   <p>A defensive zero-address check —
   <code>if (owner_ == address(0)) revert ZeroOwner();</code> — was added to both factory constructors,
-  synchronized across both repositories. Full suite green: <b>forge test = 128/128</b> in each repo.</p>
+  synchronized across both repositories. Full suite green: <b>forge test = 128/128</b> in each repo.
+  Slither was re-run on the V2 contracts after the gas hardening (§9): <b>0 results</b>; the unit
+  suite now stands at <b>131/131</b>.</p>
 </section>
 
 <!-- ============ 4. FINDING ============ -->
@@ -333,14 +341,75 @@
   the new key operates the wallet, and the old key is cryptographically rejected by the EntryPoint during
   signature validation — it can no longer move funds even though its local credential still exists.</div>
 </section>
+</div>
+
+<!-- ============ 9. V2 GAS HARDENING & MULTICHAIN ============ -->
+<div class="page section-break">
+<section>
+  <h2><span class="n">9</span>V2 — Mainnet Gas Hardening &amp; Multichain Deployment</h2>
+  <p><span class="badge b-high">HIGH (availability / overpayment)</span> &nbsp; <span class="badge b-pass">FIXED — V2 DEPLOYED 2026-06-11</span></p>
+
+  <h3>Description</h3>
+  <p>On Arbitrum mainnet, swaps through the wallet failed at gas estimation. The Case-3 fee logic scans
+  calldata for token candidates and probes each one with <code>balanceOf</code>. Arbitrum system
+  precompiles (<code>0x64–0x6f</code>) report bytecode (<code>0xfe</code>), so the code-length guard did
+  not filter them — and calling them consumes <b>all forwarded gas</b> instead of reverting cheaply. The
+  estimator kept raising the gas limit until ~32M so the probe would “fit”; that inflated limit is what
+  the wallet would have prefunded (a 64× overpayment risk), and in practice the operation failed.</p>
+
+  <table class="data">
+    <tr><th></th><th>Before (bug)</th><th>After (V2 fix)</th></tr>
+    <tr><td>Frontend / bundler gas estimate</td><td>~32,000,000</td><td>~400,000</td></tr>
+    <tr><td>Gas-burning candidate effect</td><td>burns all forwarded gas</td><td>capped at 100k, execution continues</td></tr>
+    <tr><td>Outcome</td><td>swap fails (or 64× overpayment)</td><td>normal swap, ~$0.02–0.05 on Arbitrum</td></tr>
+  </table>
+
+  <h3>Remediation (V2)</h3>
+  <ul class="tight">
+    <li><b>Gas-capped probes.</b> A shared constant <code>PROBE_GAS_CAP = 100_000</code> caps every
+    <code>balanceOf</code> staticcall in both <code>_tryBalanceOf</code> (snapshot) and
+    <code>_collectFeesOnIncrease</code> (fee collection). Worst case across a full scan is bounded to
+    ~2.2M gas vs 32M before; real ERC-20s need well under the cap, so fee accounting is unaffected.</li>
+    <li><b>Fee collection can never break a user call.</b> If a token misbehaves after the swap, its fee
+    is skipped instead of reverting the user's transaction.</li>
+    <li><b>Explicit accounting bound.</b> <code>executeAsAgent</code> now requires
+    <code>totalEth &le; type(uint128).max</code> before casting, removing a silent-truncation edge case
+    for agents configured with no ETH limits.</li>
+  </ul>
+
+  <h3>Verification</h3>
+  <ul class="tight">
+    <li><b>forge test = 131/131</b> — regression tests added: a gas-burning candidate does not starve the
+    swap; a reverting <code>balanceOf</code> is filtered non-fatally; a fat-return token is still
+    snapshotted.</li>
+    <li><b>Slither 0.11.3 re-run on V2: 0 results.</b> (Tool note: Slither cannot generate IR for
+    OpenZeppelin's transient-storage <code>ReentrancyGuard</code> internals — a known parser limitation,
+    not a finding.)</li>
+    <li><b>EIP-170 sizes:</b> AgentWallet 21,214 B; AgentWalletFactory 23,848 B (728 B headroom);
+    SmartWallet 13,432 B; SmartWalletFactory 16,030 B.</li>
+  </ul>
+
+  <h3>V2 deployment — deterministic CREATE2, same address on every chain</h3>
+  <table class="data">
+    <tr><th>Contract</th><th>Address (identical on all networks)</th></tr>
+    <tr><td>SmartWalletFactory V2</td><td class="mono addr">0x230b7010529AB6977Dd8581B3eF018ef865BdEf1</td></tr>
+    <tr><td>AgentWalletFactory V2</td><td class="mono addr">0x8D9e24022777173AD6336e00884b6C87c7EF054c</td></tr>
+  </table>
+  <p class="foot-note">Deployed 2026-06-11 to Arbitrum One (42161), BNB Chain (56) and Arbitrum Sepolia
+  (421614). Wallets created by pre-V2 factories do not receive the fix — new wallets must be created
+  through the V2 factories.</p>
+</section>
 
 <section>
-  <h2><span class="n">9</span>Conclusion</h2>
+  <h2><span class="n">10</span>Conclusion</h2>
   <p>The BVCC Agent Wallet enforces a comprehensive, layered permission model. One high-severity bypass
   was identified, reproduced on-chain, remediated, redeployed, and re-verified. Static analysis surfaced
   no further actionable issues. The complete on-chain test battery passes on the patched bytecode, and no
   issues remain open. Guardian recovery was additionally executed and verified end-to-end — ownership
-  rotation to a new passkey plus on-chain rejection of the old key (see §8).</p>
+  rotation to a new passkey plus on-chain rejection of the old key (see §8). A follow-up V2 round fixed a
+  mainnet gas-griefing issue in the fee snapshot, was verified by tests and a clean Slither re-run, and
+  concluded with the deterministic deployment of the V2 factories to Arbitrum One, BNB Chain and Arbitrum
+  Sepolia (see §9).</p>
 
   <h3>Appendix — key identifiers</h3>
   <table class="data">
@@ -348,12 +417,16 @@
     <tr><td>Network</td><td>Arbitrum Sepolia (421614)</td></tr>
     <tr><td>Patched wallet</td><td class="mono addr">0x1ED261BA084c4E6117daf289f3ca233BBA3cF0C3</td></tr>
     <tr><td>Agent (role B)</td><td class="mono addr">0x38529C66F3cf22453D66B9E2A20FdF2676544aB4</td></tr>
-    <tr><td>AgentWalletFactory</td><td class="mono addr">0xc87aa10747A92B472EF6B36e190B84c897a2953e</td></tr>
-    <tr><td>SmartWalletFactory</td><td class="mono addr">0xa5290A51a73903176e09C864E1542a07da67BD12</td></tr>
+    <tr><td>AgentWalletFactory (Sepolia, pre-V2)</td><td class="mono addr">0xc87aa10747A92B472EF6B36e190B84c897a2953e</td></tr>
+    <tr><td>SmartWalletFactory (Sepolia, pre-V2)</td><td class="mono addr">0xa5290A51a73903176e09C864E1542a07da67BD12</td></tr>
+    <tr><td>SmartWalletFactory V2 (all networks)</td><td class="mono addr">0x230b7010529AB6977Dd8581B3eF018ef865BdEf1</td></tr>
+    <tr><td>AgentWalletFactory V2 (all networks)</td><td class="mono addr">0x8D9e24022777173AD6336e00884b6C87c7EF054c</td></tr>
+    <tr><td>V2 networks</td><td>Arbitrum One (42161) · BNB Chain (56) · Arbitrum Sepolia (421614)</td></tr>
     <tr><td>Tooling</td><td>Slither 0.11.3 · Foundry (forge 1.5.1) · viem 2.x</td></tr>
   </table>
   <p class="foot-note">Confidential — Block Venture Chain Capital. Prepared for internal review and
-  repository inclusion. All on-chain actions performed on a public testnet (Arbitrum Sepolia).</p>
+  repository inclusion. Security testing was performed on a public testnet (Arbitrum Sepolia); the V2
+  factories are additionally deployed on Arbitrum One and BNB Chain.</p>
 </section>
 </div>
 

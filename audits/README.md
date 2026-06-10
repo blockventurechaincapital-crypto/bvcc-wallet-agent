@@ -1,6 +1,6 @@
 # Audits
 
-Security & test report for the BVCC Agent Wallet (Arbitrum Sepolia engagement, 2026-06).
+Security & test report for the BVCC Agent Wallet (2026-06). Covers the Arbitrum Sepolia engagement plus the V2 round: mainnet gas hardening (`PROBE_GAS_CAP`) and the deterministic multichain deployment of the V2 factories (Arbitrum One, BNB Chain, Arbitrum Sepolia).
 
 | File | Description |
 |---|---|
