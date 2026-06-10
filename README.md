@@ -114,11 +114,16 @@ rm -rf .next && npm run dev
 
 ### Contracts (`contracts/`)
 
-| Contract | Network | Address |
+| Contract | Networks | Address |
 |---|---|---|
-| BVCCSmartWalletFactoryV1 | Arb Sepolia | `0xa5290A51a73903176e09C864E1542a07da67BD12` |
-| BVCCAgentWalletFactoryV1 | Arb Sepolia | `0xc87aa10747A92B472EF6B36e190B84c897a2953e` |
-| EntryPoint OZ v0.9 | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
+| BVCCSmartWalletFactoryV1 | Arbitrum One · BNB Chain · Arb Sepolia | `0xa5290A51a73903176e09C864E1542a07da67BD12` |
+| BVCCAgentWalletFactoryV1 | Arbitrum One · BNB Chain · Arb Sepolia | `0xc87aa10747A92B472EF6B36e190B84c897a2953e` |
+| EntryPoint OZ v0.9 (canonical) | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
+
+Deterministic CREATE2 deployment — same factory address on every network, which also
+gives each user the same wallet address across all supported chains. Contracts are
+verified on [Arbiscan](https://arbiscan.io/address/0xc87aa10747A92B472EF6B36e190B84c897a2953e)
+and [BscScan](https://bscscan.com/address/0xc87aa10747A92B472EF6B36e190B84c897a2953e).
 
 ### Wallet types
 
@@ -201,7 +206,7 @@ app/
     prices/                 # CoinGecko USD prices
     check-iframe/           # Detects whether a dApp allows embedding
 lib/
-  networks.ts               # 6-network config (Arb Sepolia active)
+  networks.ts               # 6-network config (live: Arbitrum One, BNB Chain, Arb Sepolia)
   NetworkContext.tsx        # Active-network React context
   abis.ts                   # ABIs: BVCCWallet, Factory, AgentWallet, AgentFactory
   useWalletType.ts          # Reads walletType() on-chain
