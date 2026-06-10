@@ -35,6 +35,17 @@ This monorepo contains both halves of the project so judges can review them toge
 - **Tests** — 128/128 Foundry tests passing (`contracts/test/`). Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
 - **Status** — Experimental public beta; smart contracts internally tested, **not externally audited**.
 
+## Security Report
+
+Internal security & test report for the BVCC Agent Wallet (Arbitrum Sepolia engagement, 2026-06). Full files in [`audits/`](audits).
+
+| Report | PDF | View in browser |
+|---|---|---|
+| English | [Security Report (PDF)](audits/BVCC-Agent-Wallet-Security-Report.pdf) | [Open HTML](https://htmlpreview.github.io/?https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent/blob/main/audits/bvcc-security-report.html) |
+| Español | [Informe de Seguridad (PDF)](audits/BVCC-Agent-Wallet-Informe-Seguridad.pdf) | [Abrir HTML](https://htmlpreview.github.io/?https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent/blob/main/audits/bvcc-security-report-es.html) |
+
+> Clicking a PDF opens it in GitHub's built-in viewer. "View in browser" renders the HTML source via htmlpreview.github.io. The report is internal (not an external third-party audit).
+
 ## License
 
 Licensed under **GPL-3.0-or-later**. See [LICENSE](LICENSE).
@@ -105,8 +116,8 @@ rm -rf .next && npm run dev
 
 | Contract | Network | Address |
 |---|---|---|
-| BVCCWalletFactory (patched) | Arb Sepolia | `0xa5290A51a73903176e09C864E1542a07da67BD12` |
-| BVCCAgentWalletFactory (patched) | Arb Sepolia | `0xc87aa10747A92B472EF6B36e190B84c897a2953e` |
+| BVCCSmartWalletFactoryV1 | Arb Sepolia | `0xa5290A51a73903176e09C864E1542a07da67BD12` |
+| BVCCAgentWalletFactoryV1 | Arb Sepolia | `0xc87aa10747A92B472EF6B36e190B84c897a2953e` |
 | EntryPoint OZ v0.9 | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
 
 ### Wallet types
