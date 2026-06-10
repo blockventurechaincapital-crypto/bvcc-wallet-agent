@@ -119,8 +119,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: null,
-      agentFactory: null,
+      factory: '0xa5290A51a73903176e09C864E1542a07da67BD12',
+      agentFactory: '0xc87aa10747A92B472EF6B36e190B84c897a2953e',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -181,8 +181,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'BNB', decimals: 18 },
     contracts: {
-      factory: null,
-      agentFactory: null,
+      factory: '0xa5290A51a73903176e09C864E1542a07da67BD12',
+      agentFactory: '0xc87aa10747A92B472EF6B36e190B84c897a2953e',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
