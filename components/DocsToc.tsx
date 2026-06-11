@@ -8,7 +8,7 @@ export interface TocItem {
   text: string
 }
 
-export default function DocsToc({ items }: { items: TocItem[] }) {
+export default function DocsToc({ items, heading }: { items: TocItem[]; heading: string }) {
   const [activeId, setActiveId] = useState<string | null>(items[0]?.id ?? null)
 
   useEffect(() => {
@@ -34,8 +34,8 @@ export default function DocsToc({ items }: { items: TocItem[] }) {
   if (items.length === 0) return null
 
   return (
-    <nav className="docs-toc" aria-label="On this page">
-      <div className="docs-toc-h">On this page</div>
+    <nav className="docs-toc" aria-label={heading}>
+      <div className="docs-toc-h">{heading}</div>
       {items.map((item) => (
         <a
           key={item.id}

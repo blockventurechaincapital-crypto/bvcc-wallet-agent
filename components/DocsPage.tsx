@@ -1,8 +1,14 @@
+'use client'
+
 // Developer docs article renderer — sits inside app/docs/layout.tsx (sidebar shell).
-// Canonical content lives in the monorepo's docs/*.md — keep lib/docs/* in sync.
+// Bilingual EN/ES: content modules export { en, es } DocContent pairs and the
+// active language comes from useI18n. Canonical English markdown lives in the
+// monorepo's docs/*.md — keep lib/docs/* in sync.
 import Link from 'next/link'
 import DocsToc from '@/components/DocsToc'
-import { DOC_FLAT, slugifyHeading, type DocSlug } from '@/lib/docs/nav'
+import { useI18n } from '@/lib/i18n/I18nContext'
+import { DOC_FLAT, DOCS_UI, slugifyHeading, type DocSlug } from '@/lib/docs/nav'
+import type { Lang } from '@/lib/i18n/translations'
 
 export type DocBlock =
   | { type: 'p'; text: string }
@@ -17,6 +23,11 @@ export interface DocContent {
   title: string
   intro: string
   blocks: DocBlock[]
+}
+
+export interface LocalizedDoc {
+  en: DocContent
+  es: DocContent
 }
 
 const C = {
@@ -208,7 +219,7 @@ function Block({ block }: { block: DocBlock }) {
   }
 }
 
-function PrevNext({ slug }: { slug: DocSlug }) {
+function PrevNext({ slug, lang }: { slug: DocSlug; lang: Lang }) {
   const idx = DOC_FLAT.findIndex((p) => p.slug === slug)
   const prev = idx > 0 ? DOC_FLAT[idx - 1] : null
   const next = idx >= 0 && idx < DOC_FLAT.length - 1 ? DOC_FLAT[idx + 1] : null
@@ -237,16 +248,16 @@ function PrevNext({ slug }: { slug: DocSlug }) {
     <div style={{ display: 'flex', gap: 14, marginTop: 44 }}>
       {prev ? (
         <Link href={prev.href} style={cardStyle}>
-          <div style={kickStyle}>← Previous</div>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.gold }}>{prev.label}</div>
+          <div style={kickStyle}>{DOCS_UI.previous[lang]}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.gold }}>{prev.label[lang]}</div>
         </Link>
       ) : (
         <div style={{ flex: 1 }} />
       )}
       {next ? (
         <Link href={next.href} style={{ ...cardStyle, textAlign: 'right' }}>
-          <div style={kickStyle}>Next →</div>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.gold }}>{next.label}</div>
+          <div style={kickStyle}>{DOCS_UI.next[lang]}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.gold }}>{next.label[lang]}</div>
         </Link>
       ) : (
         <div style={{ flex: 1 }} />
@@ -255,8 +266,11 @@ function PrevNext({ slug }: { slug: DocSlug }) {
   )
 }
 
-export default function DocsPage({ doc, slug }: { doc: DocContent; slug: DocSlug }) {
-  const tocItems = doc.blocks
+export default function DocsPage({ doc, slug }: { doc: LocalizedDoc; slug: DocSlug }) {
+  const { lang } = useI18n()
+  const content = doc[lang] ?? doc.en
+
+  const tocItems = content.blocks
     .filter((b): b is { type: 'h2'; text: string } => b.type === 'h2')
     .map((b) => ({ id: slugifyHeading(b.text), text: b.text }))
 
@@ -264,20 +278,20 @@ export default function DocsPage({ doc, slug }: { doc: DocContent; slug: DocSlug
     <>
       <article className="docs-article">
         <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em', margin: '0 0 16px' }}>
-          {doc.title}
+          {content.title}
         </h1>
         <p style={{ fontSize: 15, lineHeight: 1.65, color: C.dim, margin: '0 0 12px' }}>
-          <Inline text={doc.intro} />
+          <Inline text={content.intro} />
         </p>
 
-        {doc.blocks.map((block, i) => (
+        {content.blocks.map((block, i) => (
           <Block key={i} block={block} />
         ))}
 
-        <PrevNext slug={slug} />
+        <PrevNext slug={slug} lang={lang} />
       </article>
 
-      <DocsToc items={tocItems} />
+      <DocsToc items={tocItems} heading={DOCS_UI.onThisPage[lang]} />
     </>
   )
 }

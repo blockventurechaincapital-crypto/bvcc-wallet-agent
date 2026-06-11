@@ -1,14 +1,22 @@
 'use client'
 
 // Left navigation for /docs/* (Uniswap-docs style) — active link from pathname,
-// off-canvas drawer on mobile.
+// off-canvas drawer on mobile, bilingual EN/ES via useI18n.
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { DOC_NAV } from '@/lib/docs/nav'
+import { useI18n } from '@/lib/i18n/I18nContext'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
+import { DOC_NAV, DOCS_UI } from '@/lib/docs/nav'
+
+const SECURITY_PDF = {
+  en: '/audits/BVCC-Agent-Wallet-Security-Report.pdf',
+  es: '/audits/BVCC-Agent-Wallet-Informe-Seguridad.pdf',
+}
 
 export default function DocsSidebar() {
   const pathname = usePathname()
+  const { lang } = useI18n()
   const [open, setOpen] = useState(false)
 
   return (
@@ -26,11 +34,14 @@ export default function DocsSidebar() {
         <Link href="/" className="docs-brand" onClick={() => setOpen(false)}>
           <img src="/bvcc_w.png" alt="BVCC Wallet" width={96} height={96} />
         </Link>
-        <div className="docs-kicker">Developer Docs</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 6 }}>
+          <div className="docs-kicker">{DOCS_UI.kicker[lang]}</div>
+          <LanguageSwitcher />
+        </div>
 
         {DOC_NAV.map((group) => (
-          <div className="docs-group" key={group.title}>
-            <div className="docs-group-h">{group.title}</div>
+          <div className="docs-group" key={group.title.en}>
+            <div className="docs-group-h">{group.title[lang]}</div>
             {group.items.map((item) => {
               const active = pathname === item.href
               return (
@@ -40,7 +51,7 @@ export default function DocsSidebar() {
                   className={`docs-nav-link${active ? ' active' : ''}`}
                   onClick={() => setOpen(false)}
                 >
-                  {item.label}
+                  {item.label[lang]}
                 </Link>
               )
             })}
@@ -48,7 +59,7 @@ export default function DocsSidebar() {
         ))}
 
         <div className="docs-group">
-          <div className="docs-group-h">Links</div>
+          <div className="docs-group-h">{DOCS_UI.links[lang]}</div>
           <a
             className="docs-nav-link"
             href="https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent"
@@ -57,16 +68,11 @@ export default function DocsSidebar() {
           >
             GitHub ↗
           </a>
-          <a
-            className="docs-nav-link"
-            href="/audits/BVCC-Agent-Wallet-Security-Report.pdf"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Security Report (PDF) ↗
+          <a className="docs-nav-link" href={SECURITY_PDF[lang]} target="_blank" rel="noreferrer">
+            {DOCS_UI.securityReport[lang]}
           </a>
           <Link className="docs-nav-link" href="/" onClick={() => setOpen(false)}>
-            ← Back to BVCC Wallet
+            {DOCS_UI.backToWallet[lang]}
           </Link>
         </div>
       </aside>
