@@ -35,6 +35,17 @@ This monorepo contains both halves of the project so judges can review them toge
 - **Tests** — 128/128 Foundry tests passing (`contracts/test/`). Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
 - **Status** — Experimental public beta; smart contracts internally tested, **not externally audited**.
 
+## Documentation
+
+Developer docs live in [`docs/`](docs/) and on the web at [bvccwallet.blockventurechaincapital.com/docs](https://bvccwallet.blockventurechaincapital.com/docs):
+
+| Guide | What it covers |
+|---|---|
+| [Agent Integration](docs/agent-integration.md) | How an AI agent calls `executeAsAgent` — encoding, limits, whitelists, errors, Foundry + viem examples |
+| [Setup & Self-Hosting](docs/self-hosting.md) | Clone, configure `.env.local`, optional bundler, PM2 + nginx deployment |
+| [Contract Reference](docs/contracts.md) | Wallets, factories, `AuthorizeParams`, deployed addresses, security notes |
+| [Bundler API](docs/bundler-api.md) | `POST /api/send-userop` spec, sender validation, fallback behavior |
+
 ## Security Report
 
 Internal security & test report for the BVCC Agent Wallet (Arbitrum Sepolia engagement, 2026-06). Full files in [`audits/`](audits).

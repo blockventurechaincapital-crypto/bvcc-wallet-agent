@@ -116,6 +116,7 @@ export default function MarketingLanding({
             <a href="#manifiesto">{t('marketing.navPhilosophy')}</a>
             <a href="#codigo">{t('marketing.navOpenSource')}</a>
             <a href="#redes">{t('marketing.navNetworks')}</a>
+            <a href="/docs">Docs</a>
           </nav>
           <div className="nav-cta">
             <LanguageSwitcher className="nav-lang" />
@@ -440,6 +441,7 @@ export default function MarketingLanding({
             <a className="footer-link" href="https://blockventurechaincapital.com" target="_blank" rel="noreferrer">{t('marketing.footerMainSite')}</a>
             <a className="footer-link" href="https://analytics.blockventurechaincapital.com" target="_blank" rel="noreferrer">{t('marketing.footerAnalytics')}</a>
             <a className="footer-link" href="https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent" target="_blank" rel="noreferrer">GitHub ↗</a>
+            <Link className="footer-link" href="/docs">Developer Docs</Link>
           </nav>
           <nav className="footer-col">
             <span className="footer-h">{t('marketing.footerStandards')}</span>
