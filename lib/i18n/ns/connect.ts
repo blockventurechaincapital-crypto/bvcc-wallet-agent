@@ -26,6 +26,15 @@ export const connect = {
       computingHash: 'Computing hash…',
       waitingFaceId: 'Waiting for Face ID…',
       sendingTx: 'Sending transaction…',
+
+      // pending requests inbox (Safe-style)
+      pendingTitle: 'Pending signature',
+      pendingFrom: 'Request from',
+      pendingSign: 'Review & sign',
+      pendingTx: 'Transaction',
+      pendingSignature: 'Signature',
+      pendingQueued: 'Queued',
+      pendingWaiting: 'Waiting for previous tx…',
     },
   },
   es: {
@@ -55,6 +64,15 @@ export const connect = {
       computingHash: 'Calculando hash…',
       waitingFaceId: 'Esperando Face ID…',
       sendingTx: 'Enviando transacción…',
+
+      // pending requests inbox (Safe-style)
+      pendingTitle: 'Firma pendiente',
+      pendingFrom: 'Solicitud de',
+      pendingSign: 'Revisar y firmar',
+      pendingTx: 'Transacción',
+      pendingSignature: 'Firma',
+      pendingQueued: 'En cola',
+      pendingWaiting: 'Esperando la tx anterior…',
     },
   },
 }

@@ -1,13 +1,28 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei, type Address, type Hex } from 'viem'
+import {
+  createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei,
+  hashTypedData, hashMessage, type Address, type Hex,
+} from 'viem'
+import { hashMessage as hashMessage7739, wrapTypedDataSignature } from 'viem/experimental/erc7739'
+import { erc7739TypedDataDigest } from '@/lib/erc7739'
 import type { PendingRequestTypes } from '@walletconnect/types'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
 import { authenticateWebAuthn } from '@/lib/webauthn'
 import { useNetwork } from '@/lib/NetworkContext'
+import { getNetwork } from '@/lib/networks'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+
+const ERC1271_ABI = [{
+  name: 'isValidSignature',
+  type: 'function',
+  stateMutability: 'view',
+  inputs: [{ name: 'hash', type: 'bytes32' }, { name: 'signature', type: 'bytes' }],
+  outputs: [{ name: '', type: 'bytes4' }],
+}] as const
+const ERC1271_MAGIC = '0x1626ba7e'
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
@@ -51,12 +66,23 @@ export default function WcConnectModal({
   walletAddress,
   credentialId,
 }: WcConnectModalProps) {
-  const { network } = useNetwork()
+  const { network: currentNetwork } = useNetwork()
   const { t } = useI18n()
   const submitUserOp = useSubmitUserOp()
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+
+  // La petición trae su propio chainId ('eip155:42161') — la sesión es multi-red,
+  // así que NO asumimos la red activa del wallet: usamos la que pide la dApp.
+  const network = useMemo(() => {
+    const c = request.params.chainId
+    const id = c?.startsWith('eip155:') ? parseInt(c.slice(7), 10) : NaN
+    if (Number.isFinite(id)) {
+      try { return getNetwork(id) } catch { /* red no soportada → red actual */ }
+    }
+    return currentNetwork
+  }, [request.params.chainId, currentNetwork])
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
@@ -69,9 +95,62 @@ export default function WcConnectModal({
     request.params.chainId ||
     'dApp desconocida'
 
+  const isTypedData = method === 'eth_signTypedData_v4' || method === 'eth_signTypedData'
   const txData = method === 'eth_sendTransaction' ? params[0] : null
   const signMessage = method === 'personal_sign' ? params[0] : null
-  const typedData = method === 'eth_signTypedData_v4' ? params[1] : null
+  const typedData = isTypedData ? params[1] : null
+
+  // Firma WebAuthn (Face ID) sobre un digest, codificada en el formato que
+  // espera SignerWebAuthn (mismo tuple que la firma de UserOps).
+  async function signDigestWithWebAuthn(digest: Hex): Promise<Hex> {
+    const { r, s, authenticatorData, clientDataJSON: clientDataHex } =
+      await authenticateWebAuthn(credentialId, hexToBytes(digest))
+    const clientDataStr = new TextDecoder().decode(hexToBytes(clientDataHex))
+    return encodeAbiParameters(
+      [
+        { name: 'r', type: 'bytes32' },
+        { name: 's', type: 'bytes32' },
+        { name: 'challengeIndex', type: 'uint256' },
+        { name: 'typeIndex', type: 'uint256' },
+        { name: 'authenticatorData', type: 'bytes' },
+        { name: 'clientDataJSON', type: 'string' },
+      ],
+      [
+        `0x${r.toString(16).padStart(64, '0')}` as Hex,
+        `0x${s.toString(16).padStart(64, '0')}` as Hex,
+        BigInt(clientDataStr.indexOf('"challenge":')),
+        BigInt(clientDataStr.indexOf('"type":')),
+        authenticatorData,
+        clientDataStr,
+      ]
+    )
+  }
+
+  // Domain EIP-712 del wallet (verifier) — leído on-chain, requerido por ERC-7739
+  async function getVerifierDomain() {
+    const { domain } = await publicClient.getEip712Domain({ address: walletAddress as Address })
+    return {
+      name: domain.name,
+      version: domain.version,
+      chainId: Number(domain.chainId),
+      verifyingContract: domain.verifyingContract,
+      salt: domain.salt,
+    }
+  }
+
+  // Guard de runtime: antes de responder a la dApp, validar la firma contra el
+  // propio wallet (ERC-1271). Si no valida on-chain, no la entregamos.
+  async function assertValidOnChain(appHash: Hex, signature: Hex) {
+    const magic = await publicClient.readContract({
+      address: walletAddress as Address,
+      abi: ERC1271_ABI,
+      functionName: 'isValidSignature',
+      args: [appHash, signature],
+    })
+    if (magic !== ERC1271_MAGIC) {
+      throw new Error('La firma no valida on-chain (isValidSignature != 0x1626ba7e)')
+    }
+  }
 
   async function handleApprove() {
     setLoading(true)
@@ -107,10 +186,26 @@ export default function WcConnectModal({
           args: [],
         })
 
-        // ── 4. Gas prices ───────────────────────────────────────────────────
+        // ── 4. Gas prices + callGas estimado ────────────────────────────────
         const feeData = await publicClient.estimateFeesPerGas()
         const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
         const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+
+        // Estimar el gas de la llamada interna (un swap de Uniswap puede superar
+        // de sobra los 400k fijos). x2 de margen por el fee snapshot del wallet,
+        // floor 400k, cap 3M para no exigir un prefund desorbitado.
+        let callGasLimit = 400_000n
+        try {
+          const est = await publicClient.estimateGas({
+            account: walletAddress as Address,
+            to: execTarget,
+            value: execValue,
+            data: execCallData,
+          })
+          callGasLimit = est * 2n + 100_000n
+          if (callGasLimit < 400_000n) callGasLimit = 400_000n
+          if (callGasLimit > 3_000_000n) callGasLimit = 3_000_000n
+        } catch { /* estimación falla (p.ej. depende de estado previo) → 400k */ }
 
         // ── 5. UserOp ───────────────────────────────────────────────────────
         const userOp = {
@@ -118,7 +213,7 @@ export default function WcConnectModal({
           nonce,
           initCode: '0x' as Hex,
           callData,
-          accountGasLimits: packBytes32(400_000n, 400_000n),
+          accountGasLimits: packBytes32(400_000n, callGasLimit),
           preVerificationGas: 80_000n,
           gasFees: packBytes32(maxPriorityFeePerGas, maxFeePerGas),
           paymasterAndData: '0x' as Hex,
@@ -178,35 +273,40 @@ export default function WcConnectModal({
         onApprove(txHash)
 
       } else if (method === 'personal_sign') {
-        if (typeof window !== 'undefined' && (window as any).ethereum) {
-          try {
-            const sig = await (window as any).ethereum.request({
-              method: 'personal_sign',
-              params: [signMessage, walletAddress],
-            })
-            onApprove(sig)
-          } catch {
-            onReject()
-          }
-        } else {
-          onApprove('0x')
-        }
-      } else if (method === 'eth_signTypedData_v4') {
-        if (typeof window !== 'undefined' && (window as any).ethereum) {
-          try {
-            const sig = await (window as any).ethereum.request({
-              method: 'eth_signTypedData_v4',
-              params: [walletAddress, typedData],
-            })
-            onApprove(sig)
-          } catch {
-            onReject()
-          }
-        } else {
-          onApprove('0x')
-        }
+        // ERC-7739 PersonalSign anidado: digest = typed data del domain del wallet
+        // sobre PersonalSign(bytes prefixed). Firmado con Face ID. El verificador
+        // (dApp/contrato) valida vía ERC-1271 isValidSignature.
+        const msgHex = signMessage as Hex
+        setLoadingMsg(t('connect.computingHash'))
+        const verifierDomain = await getVerifierDomain()
+        const digest = hashMessage7739({ message: { raw: msgHex }, verifierDomain })
+
+        setLoadingMsg(t('connect.waitingFaceId'))
+        const sig = await signDigestWithWebAuthn(digest)
+
+        await assertValidOnChain(hashMessage({ raw: msgHex }), sig)
+        onApprove(sig)
+
+      } else if (isTypedData) {
+        // ERC-7739 TypedDataSign anidado (p.ej. Permit2 de Uniswap): se firma el
+        // digest anidado con Face ID y se envuelve la firma con el domain de la
+        // dApp + contentsHash + descriptor, formato que decodifica el ERC7739 de OZ.
+        const td = typeof typedData === 'string' ? JSON.parse(typedData) : typedData
+        const { domain = {}, types, primaryType, message } = td
+
+        setLoadingMsg(t('connect.computingHash'))
+        const verifierDomain = await getVerifierDomain()
+        const digest = erc7739TypedDataDigest({ domain, types, primaryType, message, verifierDomain })
+
+        setLoadingMsg(t('connect.waitingFaceId'))
+        const webauthnSig = await signDigestWithWebAuthn(digest)
+        const wrapped = wrapTypedDataSignature({ domain, types, primaryType, message, signature: webauthnSig })
+
+        await assertValidOnChain(hashTypedData({ domain, types, primaryType, message }), wrapped)
+        onApprove(wrapped)
+
       } else {
-        onApprove('0x')
+        throw new Error(`Método no soportado: ${method}`)
       }
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : String(err))

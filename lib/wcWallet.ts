@@ -22,6 +22,10 @@ export async function getWeb3Wallet(): Promise<InstanceType<typeof Web3Wallet>> 
       // 'silent' evita que el logger interno de WalletConnect emita console.error
       // (errores/reintentos benignos del relay que el overlay de Next.js mostraba como error)
       logger: 'silent',
+      // El connector walletConnect de wagmi crea SU PROPIO Core (aviso "Init()
+      // was called 2 times"). Sin prefijo propio ambos comparten las claves
+      // wc@2:* del storage y se pisan suscripciones → peticiones que no llegan.
+      customStoragePrefix: 'bvccW3W',
     })
 
     const instance = await Web3Wallet.init({

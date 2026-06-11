@@ -1,7 +1,10 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import { createPublicClient, http, type Hex } from 'viem'
+import type { PendingRequestTypes } from '@walletconnect/types'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
+import { getNetwork } from '@/lib/networks'
 import { useWcWallet } from '@/lib/useWcWallet'
 import WcConnectModal from '@/components/WcConnectModal'
 import { useI18n } from '@/lib/i18n/I18nContext'
@@ -27,11 +30,29 @@ export default function WalletConnectButton() {
   const { network } = useNetwork()
   const { t } = useI18n()
   const {
-    sessions, pendingRequest, ready, error: wcError,
+    sessions, pendingRequests, ready, error: wcError,
     pair, respondSuccess, respondError, disconnect,
   } = useWcWallet(walletAddr, network.chainId)
 
+  // Petición que el usuario decidió revisar (abre el modal de Face ID)
+  const [activeRequest, setActiveRequest] = useState<PendingRequestTypes.Struct | null>(null)
+  // Tx enviada y aún sin minar: bloquea firmar la siguiente para no pisar el
+  // nonce del wallet (dos UserOps con el mismo nonce → la segunda revienta).
+  const [inFlight, setInFlight] = useState<Hex | null>(null)
   const [open, setOpen] = useState(false)
+
+  function trackTxUntilMined(txHash: Hex, request: PendingRequestTypes.Struct) {
+    setInFlight(txHash)
+    const c = request.params.chainId
+    const reqChainId = c?.startsWith('eip155:') ? parseInt(c.slice(7), 10) : network.chainId
+    let net = network
+    try { net = getNetwork(reqChainId) } catch { /* red no soportada → red actual */ }
+    const client = createPublicClient({ chain: net.viemChain, transport: http(net.rpcUrl) })
+    client
+      .waitForTransactionReceipt({ hash: txHash, timeout: 180_000 })
+      .catch(() => { /* timeout/replaced: liberar igualmente */ })
+      .finally(() => setInFlight(null))
+  }
   const [mounted, setMounted] = useState(false)
   const [wcUri, setWcUri] = useState('')
   const [wcConnecting, setWcConnecting] = useState(false)
@@ -187,13 +208,102 @@ export default function WalletConnectButton() {
         )}
       </div>
 
-      {pendingRequest && walletAddr && (
+      {/* Bandeja de firmas pendientes (estilo Safe): caja flotante con botón
+          para revisar — el modal con Face ID solo se abre al pulsarlo */}
+      {pendingRequests.length > 0 && !activeRequest && walletAddr && (
+        <div style={{
+          position: 'fixed', bottom: 20, right: 20, zIndex: 900,
+          display: 'flex', flexDirection: 'column', gap: 10,
+          width: 320, maxWidth: 'calc(100vw - 40px)',
+        }}>
+          {pendingRequests.map((req, idx) => {
+            const session = sessions.find(s => s.topic === req.topic)
+            const meta = session?.peer.metadata
+            const method = req.params.request.method
+            const isTx = method === 'eth_sendTransaction'
+            // Estrictamente secuencial: solo la petición más antigua es accionable,
+            // y solo si no hay una tx anterior aún sin minar.
+            const blocked = idx > 0 || inFlight !== null
+            return (
+              <div key={req.id} style={{
+                background: '#0d1117',
+                border: '1px solid rgba(212,175,55,0.4)',
+                borderRadius: 12, padding: '14px 16px',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                    background: COLORS.gold, boxShadow: '0 0 8px rgba(212,175,55,0.8)',
+                    animation: 'wcPulse 1.6s ease-in-out infinite',
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: COLORS.textPrimary }}>
+                      {t('connect.pendingTitle')}
+                    </p>
+                    <p style={{ margin: '1px 0 0', fontSize: 11, color: COLORS.textSubtle, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {t('connect.pendingFrom')} {meta?.name ?? 'dApp'} · {isTx ? t('connect.pendingTx') : t('connect.pendingSignature')}
+                    </p>
+                  </div>
+                  {meta?.icons?.[0] && (
+                    <img src={meta.icons[0]} alt="" width={24} height={24}
+                      style={{ borderRadius: 5, flexShrink: 0, objectFit: 'contain' }}
+                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => respondError(req.topic, req.id, 'User rejected the request')}
+                    style={{
+                      flex: 1, padding: '8px 0', background: 'transparent',
+                      border: '1px solid rgba(252,129,129,0.25)', borderRadius: 7,
+                      color: '#fc8181', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                    }}
+                  >
+                    {t('connect.reject')}
+                  </button>
+                  <button
+                    onClick={() => !blocked && setActiveRequest(req)}
+                    disabled={blocked}
+                    style={{
+                      flex: 2, padding: '8px 0',
+                      background: blocked ? 'rgba(212,175,55,0.25)' : COLORS.gold,
+                      border: 'none', borderRadius: 7, color: blocked ? 'rgba(0,0,0,0.6)' : '#000',
+                      fontSize: 12, fontWeight: 600,
+                      cursor: blocked ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {inFlight !== null && idx === 0
+                      ? t('connect.pendingWaiting')
+                      : idx > 0
+                        ? t('connect.pendingQueued')
+                        : t('connect.pendingSign')}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+          <style>{`@keyframes wcPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
+        </div>
+      )}
+
+      {activeRequest && walletAddr && (
         <WcConnectModal
-          request={pendingRequest}
+          request={activeRequest}
           walletAddress={walletAddr}
           credentialId={credentialId}
-          onApprove={(result) => respondSuccess(pendingRequest.topic, pendingRequest.id, result)}
-          onReject={() => respondError(pendingRequest.topic, pendingRequest.id, 'User rejected the request')}
+          onApprove={(result) => {
+            respondSuccess(activeRequest.topic, activeRequest.id, result)
+            // Si era una tx, bloquear la siguiente firma hasta que mine
+            if (activeRequest.params.request.method === 'eth_sendTransaction') {
+              trackTxUntilMined(result as Hex, activeRequest)
+            }
+            setActiveRequest(null)
+          }}
+          onReject={() => {
+            respondError(activeRequest.topic, activeRequest.id, 'User rejected the request')
+            setActiveRequest(null)
+          }}
         />
       )}
     </>
