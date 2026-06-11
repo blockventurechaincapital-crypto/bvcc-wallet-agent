@@ -13,6 +13,14 @@
   <b>URL:</b> bvccwallet.blockventurechaincapital.com
 </p>
 
+<p align="center">
+  <a href="#documentation"><b>📚 Documentation</b></a> ·
+  <a href="docs/agent-integration.md">Agent Integration</a> ·
+  <a href="docs/self-hosting.md">Self-Hosting</a> ·
+  <a href="docs/contracts.md">Contracts</a> ·
+  <a href="docs/bundler-api.md">Bundler API</a>
+</p>
+
 ## Screenshots
 
 ### Dashboard — balances, assets & recent activity
