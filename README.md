@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <b>URL:</b> bvccwallet.blockventurechaincapital.com
+  <a href="https://bvccwallet.blockventurechaincapital.com"><b>bvccwallet.blockventurechaincapital.com</b></a>
 </p>
 
 <p align="center">
