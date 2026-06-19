@@ -276,6 +276,15 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
         .bottom-nav-item:hover:not(.disabled) {
           color: #D4AF37 !important;
         }
+        /* Version badge — fijo abajo a la derecha, oculto en móvil (choca con bottom nav) */
+        .wallet-version-badge {
+          display: none;
+        }
+        @media (min-width: 768px) {
+          .wallet-version-badge {
+            display: block;
+          }
+        }
       `}</style>
 
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: COLORS.bg }}>
@@ -495,6 +504,25 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             </button>
           ))}
         </nav>
+
+        {/* Version badge — siempre visible abajo a la derecha (desktop) */}
+        <div
+          className="wallet-version-badge"
+          style={{
+            position: 'fixed',
+            bottom: '10px',
+            right: '14px',
+            zIndex: 40,
+            fontSize: '11px',
+            fontFamily: 'monospace',
+            color: COLORS.textSubtle,
+            letterSpacing: '0.04em',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          BVCC Wallet · {t('settings.version')}
+        </div>
       </div>
     </>
   )

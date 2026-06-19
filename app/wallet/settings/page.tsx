@@ -7,6 +7,7 @@ import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride } from '@/lib/wcCalls'
 
 const COLORS = {
   bg: '#06080f',
@@ -217,6 +218,27 @@ export default function SettingsPage() {
   const [guardians, setGuardians] = useState<(string | null)[]>([null, null, null])
   const [loadingChain, setLoadingChain] = useState(false)
   const [chainError, setChainError] = useState(false)
+  const [atomicEnabled, setAtomicEnabled] = useState(false)
+  const [maxGas, setMaxGas] = useState('')
+
+  // Lectura de localStorage tras montar (evita mismatch de hidratación SSR)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAtomicEnabled(getAtomicBatchEnabled())
+    const mg = getMaxGasOverride()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (mg) setMaxGas(mg.toString())
+  }, [])
+  const toggleAtomic = () => {
+    const v = !atomicEnabled
+    setAtomicBatchEnabled(v)
+    setAtomicEnabled(v)
+  }
+  const saveMaxGas = (raw: string) => {
+    const digits = raw.replace(/[^\d]/g, '')
+    setMaxGas(digits)
+    try { setMaxGasOverride(digits ? BigInt(digits) : null) } catch { /* ignora */ }
+  }
 
   useEffect(() => {
     if (!isLoaded || !walletAddress) return
@@ -442,6 +464,70 @@ export default function SettingsPage() {
             </Card>
           </div>
 
+          {/* ── Sección: Seguridad ────────────────────────────── */}
+          <div className="settings-section" style={{ marginBottom: '28px' }}>
+            <SectionLabel>{t('settings.sectionSecurity')}</SectionLabel>
+            <Card>
+              <Row>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: 600, color: COLORS.textPrimary }}>
+                      {t('settings.atomicTitle')}
+                    </p>
+                    <p style={{ margin: '0 0 8px', fontSize: '11px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
+                      {t('settings.atomicDesc')}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '11px', color: '#fc8181', lineHeight: 1.6 }}>
+                      ⚠️ {t('settings.atomicWarn')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={toggleAtomic}
+                    role="switch"
+                    aria-checked={atomicEnabled}
+                    style={{
+                      flexShrink: 0, width: '44px', height: '26px', borderRadius: '13px',
+                      border: 'none', cursor: 'pointer', position: 'relative',
+                      background: atomicEnabled ? COLORS.gold : 'rgba(255,255,255,0.12)',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: '3px', left: atomicEnabled ? '21px' : '3px',
+                      width: '20px', height: '20px', borderRadius: '50%',
+                      background: atomicEnabled ? '#000' : '#f0f4f8',
+                      transition: 'left 0.15s',
+                    }} />
+                  </button>
+                </div>
+              </Row>
+              <Row last>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: 600, color: COLORS.textPrimary }}>
+                      {t('settings.maxGasTitle')}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '11px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
+                      {t('settings.maxGasDesc')}
+                    </p>
+                  </div>
+                  <input
+                    value={maxGas}
+                    onChange={(e) => saveMaxGas(e.target.value)}
+                    inputMode="numeric"
+                    placeholder={t('settings.maxGasAuto')}
+                    style={{
+                      flexShrink: 0, width: '110px', padding: '7px 9px',
+                      background: '#06080f', border: `1px solid ${COLORS.border}`,
+                      borderRadius: '6px', color: COLORS.textPrimary,
+                      fontSize: '13px', fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right',
+                    }}
+                  />
+                </div>
+              </Row>
+            </Card>
+          </div>
+
           {/* ── Sección 4: Sesión y datos ─────────────────────── */}
           <div className="settings-section" style={{ marginBottom: '28px' }}>
             <SectionLabel>{t('settings.sectionSession')}</SectionLabel>
@@ -550,7 +636,7 @@ export default function SettingsPage() {
             letterSpacing: '0.05em',
             marginTop: '8px',
           }}>
-            BVCC Wallet · {t('settings.version')} · {network.shortName}
+            BVCC Wallet · {t('settings.version')}
           </p>
 
         </div>

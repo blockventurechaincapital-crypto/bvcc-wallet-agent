@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPublicClient, http, type Hex } from 'viem'
 import { getWeb3Wallet } from './wcWallet'
-import { NETWORKS } from './networks'
+import { NETWORKS, getNetwork } from './networks'
+import { getAtomicBatchEnabled, getBatch } from './wcCalls'
 import type { SessionTypes, PendingRequestTypes } from '@walletconnect/types'
 
 export type WcSession = {
@@ -32,9 +34,12 @@ function buildNamespaces(address: string, activeChainId: number) {
         'eth_signTypedData',
         'eth_signTypedData_v4',
         'personal_sign',
-        'eth_sign',
         'wallet_switchEthereumChain',
         'wallet_addEthereumChain',
+        // EIP-5792: batching atómico (approve+acción en una sola firma vía ERC-7821)
+        'wallet_sendCalls',
+        'wallet_getCallsStatus',
+        'wallet_getCapabilities',
       ],
       events: ['chainChanged', 'accountsChanged'],
       accounts: chainIds.map((id) => `eip155:${id}:${address}`),
@@ -48,6 +53,12 @@ function isChainSwitch(method: string) {
   return method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain'
 }
 
+function chainIdFromReq(event: PendingRequestTypes.Struct): number {
+  const c = event.params.chainId
+  const id = c?.startsWith('eip155:') ? parseInt(c.slice(7), 10) : NaN
+  return Number.isFinite(id) ? id : 0
+}
+
 // Los ids JSON-RPC de WC derivan del timestamp (ms*1000). El relay caduca las
 // peticiones a los ~5 min: las viejas se rechazan y purgan para que no queden
 // tarjetas zombi que la dApp ya dio por muertas.
@@ -57,26 +68,111 @@ function isExpired(req: PendingRequestTypes.Struct): boolean {
   return ageMs > REQUEST_TTL_MS
 }
 
-// Cambio de red: todas las redes ya están en la sesión — responder OK y emitir
-// chainChanged, sin UI.
+// Cambio de red: si la red está soportada (está en la sesión) respondemos OK y
+// emitimos chainChanged sin UI. Si NO la soportamos, devolvemos 4902 en vez de
+// decir "ok" a ciegas (si no, las txs posteriores fallarían en una red que no
+// manejamos).
 async function autoRespondChainSwitch(wc: Wc, event: PendingRequestTypes.Struct) {
   try {
     const params = event.params.request.params as { chainId?: string }[] | undefined
     const newChainId = parseInt(params?.[0]?.chainId ?? '0x0', 16)
+
+    let supported = false
+    try { getNetwork(newChainId); supported = newChainId > 0 } catch { supported = false }
+
+    if (!supported) {
+      await wc.respondSessionRequest({
+        topic: event.topic,
+        response: { id: event.id, jsonrpc: '2.0', error: { code: 4902, message: 'Unrecognized chain ID' } },
+      })
+      return
+    }
+
     await wc.respondSessionRequest({
       topic: event.topic,
       response: { id: event.id, jsonrpc: '2.0', result: null },
     })
-    if (newChainId > 0) {
-      await wc.emitSessionEvent({
-        topic: event.topic,
-        event: { name: 'chainChanged', data: newChainId },
-        chainId: `eip155:${newChainId}`,
-      })
-    }
+    await wc.emitSessionEvent({
+      topic: event.topic,
+      event: { name: 'chainChanged', data: newChainId },
+      chainId: `eip155:${newChainId}`,
+    })
   } catch (e) {
     console.warn('[WC] switchChain error', e)
   }
+}
+
+// EIP-5792 wallet_getCapabilities: el batch atómico es OPT-IN del usuario
+// (Settings). Solo lo reportamos como soportado si lo tiene encendido; si no,
+// 'unsupported' y ejecutaremos las calls una a una (no mentimos a la dApp).
+async function autoRespondCapabilities(wc: Wc, event: PendingRequestTypes.Struct) {
+  const atomicOn = getAtomicBatchEnabled()
+  const caps: Record<string, unknown> = {}
+  for (const n of NETWORKS) {
+    caps['0x' + n.chainId.toString(16)] = {
+      atomic: { status: atomicOn ? 'supported' : 'unsupported' },  // EIP-5792 (rev actual)
+      atomicBatch: { supported: atomicOn },                        // EIP-5792 (rev 1.0, compat)
+    }
+  }
+  await wc.respondSessionRequest({
+    topic: event.topic,
+    response: { id: event.id, jsonrpc: '2.0', result: caps },
+  })
+}
+
+// EIP-5792 wallet_getCallsStatus: el id mapea en el store a 1+ txHashes (varias
+// en modo secuencial). Leemos los receipts y agregamos. status 100 (pending) /
+// 200 (confirmado, una vez todas tienen receipt). Sin UI.
+async function autoRespondCallsStatus(wc: Wc, event: PendingRequestTypes.Struct) {
+  try {
+    const raw = (event.params.request.params as unknown[])?.[0]
+    const id = (typeof raw === 'string' ? raw : (raw as { id?: string })?.id) as Hex
+
+    // El id puede venir del store (batch) o ser directamente un txHash (compat).
+    const rec = getBatch(id)
+    const chainId = rec?.chainId ?? chainIdFromReq(event)
+    const hashes: Hex[] = rec ? rec.txHashes : [id]
+
+    const net = getNetwork(chainId)
+    const client = createPublicClient({ chain: net.viemChain, transport: http(net.rpcUrl) })
+
+    const receipts = await Promise.all(hashes.map(async (h) => {
+      try { return await client.getTransactionReceipt({ hash: h }) } catch { return null }
+    }))
+
+    const allMined = receipts.every((r) => r !== null)
+    const result = {
+      status: allMined ? 200 : 100,
+      receipts: receipts.filter((r): r is NonNullable<typeof r> => r !== null).map((r) => ({
+        transactionHash: r.transactionHash,
+        blockHash: r.blockHash,
+        blockNumber: '0x' + r.blockNumber.toString(16),
+        gasUsed: '0x' + r.gasUsed.toString(16),
+        status: r.status === 'success' ? '0x1' : '0x0',
+        logs: r.logs,
+      })),
+    }
+
+    await wc.respondSessionRequest({
+      topic: event.topic,
+      response: { id: event.id, jsonrpc: '2.0', result },
+    })
+  } catch {
+    await wc.respondSessionRequest({
+      topic: event.topic,
+      response: { id: event.id, jsonrpc: '2.0', error: { code: -32000, message: 'getCallsStatus failed' } },
+    })
+  }
+}
+
+// Métodos que respondemos automáticamente, sin tarjeta de aprobación.
+// Devuelve true si lo manejó.
+async function autoHandle(wc: Wc, event: PendingRequestTypes.Struct): Promise<boolean> {
+  const m = event.params.request.method
+  if (isChainSwitch(m)) { await autoRespondChainSwitch(wc, event); return true }
+  if (m === 'wallet_getCapabilities') { await autoRespondCapabilities(wc, event); return true }
+  if (m === 'wallet_getCallsStatus') { await autoRespondCallsStatus(wc, event); return true }
+  return false
 }
 
 export function useWcWallet(walletAddress: string | null, chainId = 421614) {
@@ -107,8 +203,8 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
               response: { id: req.id, jsonrpc: '2.0', error: { code: 4001, message: 'Request expired' } },
             })
           } catch { /* ya purgada por el relay */ }
-        } else if (isChainSwitch(req.params.request.method)) {
-          await autoRespondChainSwitch(wc, req)
+        } else if (await autoHandle(wc, req)) {
+          /* respondido automáticamente (switch chain / capabilities / calls status) */
         } else {
           queue.push(req)
         }
@@ -153,10 +249,7 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
         // dApp pide firmar / enviar tx / cambiar de red
         const onRequest = async (event: PendingRequestTypes.Struct) => {
           if (cancelled) return
-          if (isChainSwitch(event.params.request.method)) {
-            await autoRespondChainSwitch(wc, event)
-            return
-          }
+          if (await autoHandle(wc, event)) return
           setPendingRequests((prev) =>
             prev.some((r) => r.id === event.id) ? prev : [...prev, event]
           )

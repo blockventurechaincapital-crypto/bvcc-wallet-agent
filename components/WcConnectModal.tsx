@@ -1,9 +1,13 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei,
   hashTypedData, hashMessage, type Address, type Hex,
 } from 'viem'
+import {
+  classifyCall, buildKnownSet, getAtomicBatchEnabled, getMaxGas, newBatchId, recordBatch,
+  type WcCall, type CallRisk, type RiskLevel,
+} from '@/lib/wcCalls'
 import { hashMessage as hashMessage7739, wrapTypedDataSignature } from 'viem/experimental/erc7739'
 import { erc7739TypedDataDigest } from '@/lib/erc7739'
 import type { PendingRequestTypes } from '@walletconnect/types'
@@ -48,6 +52,80 @@ function truncateHex(hex: string, maxLen = 32): string {
   return hex.slice(0, maxLen) + '…'
 }
 
+// Color por nivel de riesgo de una call.
+const RISK_COLOR: Record<RiskLevel, string> = {
+  safe: '#48bb78',     // verde
+  caution: '#D4AF37',  // ámbar
+  danger: '#fc8181',   // rojo
+}
+const RISK_DOT: Record<RiskLevel, string> = { safe: '🟢', caution: '🟡', danger: '🔴' }
+
+// Parámetros de gas de un userOp (editables en el panel Avanzado).
+type GasParams = { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint; callGasLimit: bigint }
+const VERIF_GAS = 400_000n     // verificationGasLimit (firma WebAuthn) — fijo
+const PREVERIF_GAS = 80_000n   // preVerificationGas — fijo
+const fmtGwei = (wei: bigint) => (Number(wei) / 1e9).toString()
+
+// Una fila de call con su badge de riesgo (usada en tx única y en batch).
+function CallRow({ index, risk }: { index?: number; risk: CallRisk }) {
+  return (
+    <div style={{ borderTop: index && index > 0 ? '1px solid rgba(255,255,255,0.04)' : undefined, paddingTop: index ? '8px' : 0, marginTop: index ? '8px' : 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <span style={{ color: '#4a5568' }}>
+          {index !== undefined ? `#${index + 1} ` : ''}→ {truncateHex(risk.target, 16)}{' '}
+          <span style={{ color: risk.targetKnown ? '#48bb78' : '#fc8181', fontSize: '10px' }}>
+            ({risk.targetKnown ? 'conocido' : 'desconocido'})
+          </span>
+        </span>
+        <span style={{ color: RISK_COLOR[risk.level] }}>{RISK_DOT[risk.level]} {risk.fn}</span>
+      </div>
+      {risk.warn && (
+        <div style={{ marginTop: '4px', color: RISK_COLOR[risk.level], fontSize: '10px' }}>⚠️ {risk.warn}</div>
+      )}
+    </div>
+  )
+}
+
+// Campo editable del panel de gas (estilo MetaMask avanzado).
+function GasInput({ label, value, onChange, disabled }: {
+  label: string; value: string; onChange: (v: string) => void; disabled?: boolean
+}) {
+  return (
+    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#8892a4' }}>
+      <span>{label}</span>
+      <input
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode="decimal"
+        style={{
+          width: '120px', padding: '5px 8px', backgroundColor: '#06080f',
+          border: '1px solid rgba(255,255,255,0.1)', borderRadius: '5px',
+          color: '#f0f4f8', fontSize: '12px', fontFamily: 'IBM Plex Mono, monospace', textAlign: 'right',
+        }}
+      />
+    </label>
+  )
+}
+
+// Traduce reverts/errores crudos a algo legible para el usuario.
+function friendlyError(raw: string): string {
+  const m = raw.toLowerCase()
+  if (m.includes('insufficient balance for fee') || m.includes('tokenfeefailed'))
+    return 'Saldo insuficiente para cubrir el fee de la wallet (0.05% / 0.15%).'
+  if (m.includes('prefund') || m.includes('aa21') || m.includes("didn't pay"))
+    return 'La wallet no tiene suficiente ETH para pagar el gas de esta operación.'
+  if (m.includes('aa23') || m.includes('aa40') || m.includes('out of gas') || m.includes('overflow'))
+    return 'La operación necesitó más gas del estimado. Reinténtala.'
+  if (m.includes('isvalidsignature') || m.includes('1626ba7e'))
+    return raw // ya es específico (firma ERC-1271/7739)
+  if (m.includes('user rejected') || m.includes('cancel') || m.includes('canceló') || m.includes('notallowed'))
+    return 'Operación cancelada.'
+  if (m.includes('unrecognized chain') || m.includes('4902'))
+    return 'La dApp pidió una red que esta wallet no soporta.'
+  return raw
+}
+
 function formatValue(value: string | undefined): string {
   if (!value) return '0'
   try {
@@ -72,6 +150,18 @@ export default function WcConnectModal({
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+  // Firma secuencial (modo una-a-una de wallet_sendCalls)
+  const [seqIndex, setSeqIndex] = useState(0)
+  const [ack, setAck] = useState(false) // checkbox de "asumo el riesgo" ante calls peligrosas
+  const seqHashes = useRef<Hex[]>([])
+  const atomicMode = useMemo(() => getAtomicBatchEnabled(), [])
+  // Editor de gas (panel Avanzado, estilo MetaMask)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [gasEdited, setGasEdited] = useState(false)
+  const [gasMaxFee, setGasMaxFee] = useState('')   // gwei
+  const [gasPriority, setGasPriority] = useState('') // gwei
+  const [gasLimit, setGasLimit] = useState('')      // unidades
+  const [walletBalance, setWalletBalance] = useState<bigint | null>(null)
 
   // La petición trae su propio chainId ('eip155:42161') — la sesión es multi-red,
   // así que NO asumimos la red activa del wallet: usamos la que pide la dApp.
@@ -99,6 +189,53 @@ export default function WcConnectModal({
   const txData = method === 'eth_sendTransaction' ? params[0] : null
   const signMessage = method === 'personal_sign' ? params[0] : null
   const typedData = isTypedData ? params[1] : null
+  const sendCalls = method === 'wallet_sendCalls' ? (params[0] as { calls?: WcCall[] }) : null
+
+  // ── Clasificación de riesgo de las llamadas ────────────────────────────────
+  const known = useMemo(() => buildKnownSet(walletAddress), [walletAddress])
+  const allCalls: WcCall[] = useMemo(() => {
+    if (method === 'wallet_sendCalls') return sendCalls?.calls ?? []
+    if (method === 'eth_sendTransaction' && txData) return [txData as WcCall]
+    return []
+  }, [method, sendCalls, txData])
+  const risks = useMemo(() => allCalls.map((c) => classifyCall(c, known)), [allCalls, known])
+
+  // ¿Hay que marcar el checkbox de riesgo? En secuencial, según la call actual;
+  // en atómico / tx única, si cualquiera es peligrosa.
+  const seqMode = method === 'wallet_sendCalls' && !atomicMode
+  const needsAck = seqMode
+    ? risks[seqIndex]?.level === 'danger'
+    : risks.some((r) => r.level === 'danger')
+
+  const isTxMethod = method === 'eth_sendTransaction' || method === 'wallet_sendCalls'
+  // Calls que cuentan para el gas sugerido (en secuencial, solo la call actual).
+  const gasCalls = useMemo(
+    () => (seqMode ? (allCalls[seqIndex] ? [allCalls[seqIndex]] : []) : allCalls),
+    [seqMode, allCalls, seqIndex],
+  )
+
+  // Prerrellenar el editor de gas con la estimación + leer saldo del wallet.
+  // No sobrescribe si el usuario ya editó a mano (gasEdited).
+  useEffect(() => {
+    if (!isTxMethod || gasCalls.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const bal = await publicClient.getBalance({ address: walletAddress as Address })
+        if (!cancelled) setWalletBalance(bal)
+      } catch { /* ignora */ }
+      if (gasEdited) return
+      try {
+        const g = await suggestGasParams(toExec(gasCalls))
+        if (!cancelled && !gasEdited) {
+          setGasMaxFee(fmtGwei(g.maxFeePerGas))
+          setGasPriority(fmtGwei(g.maxPriorityFeePerGas))
+          setGasLimit(g.callGasLimit.toString())
+        }
+      } catch { /* ignora */ }
+    })()
+    return () => { cancelled = true }
+  }, [gasCalls, isTxMethod]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Firma WebAuthn (Face ID) sobre un digest, codificada en el formato que
   // espera SignerWebAuthn (mismo tuple que la firma de UserOps).
@@ -152,125 +289,167 @@ export default function WcConnectModal({
     }
   }
 
+  // calls → tuple[] de ejecución ERC-7821
+  function toExec(calls: WcCall[]) {
+    return calls.map((c) => ({
+      target: ((c.to ?? c.target) ?? walletAddress) as Address,
+      value: c.value ? BigInt(c.value) : 0n,
+      callData: (c.data && c.data !== '0x') ? c.data as Hex : '0x' as Hex,
+    }))
+  }
+
+  // Estima precio de gas + callGasLimit. callGasLimit = suma de estimaciones por
+  // call (x2 margen por el fee snapshot); si alguna falla (approve+acción en
+  // batch) → fallback generoso por nº de calls. Floor 500k, cap 8M.
+  async function suggestGasParams(exec: ReturnType<typeof toExec>): Promise<GasParams> {
+    const feeData = await publicClient.estimateFeesPerGas()
+    const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+    let callGasLimit = 0n
+    let estimated = true
+    for (const c of exec) {
+      try {
+        callGasLimit += await publicClient.estimateGas({
+          account: walletAddress as Address, to: c.target, value: c.value, data: c.callData,
+        })
+      } catch { estimated = false; break }
+    }
+    callGasLimit = estimated ? callGasLimit * 2n + 150_000n : 1_500_000n * BigInt(exec.length)
+    const cap = getMaxGas(network.chainId)               // por red (L1 3M / L2 8M) o override del usuario
+    if (callGasLimit < 500_000n) callGasLimit = 500_000n
+    if (callGasLimit > cap) callGasLimit = cap >= 500_000n ? cap : 500_000n
+    return { maxFeePerGas, maxPriorityFeePerGas, callGasLimit }
+  }
+
+  // Construye UN userOp con N llamadas (ERC-7821 batch), lo firma con Face ID y lo
+  // envía. Sirve tanto para eth_sendTransaction (1 call) como para wallet_sendCalls.
+  // `override` = valores de gas editados a mano por el usuario (panel Avanzado).
+  async function buildAndSubmitBatch(calls: WcCall[], override?: GasParams): Promise<string> {
+    if (!calls.length) throw new Error('No hay llamadas que ejecutar')
+
+    const exec = toExec(calls)
+    const executionData = encodeAbiParameters(
+      [{ type: 'tuple[]', components: [
+        { name: 'target', type: 'address' },
+        { name: 'value', type: 'uint256' },
+        { name: 'callData', type: 'bytes' },
+      ]}],
+      [exec]
+    )
+    const callData = encodeFunctionData({
+      abi: BVCC_WALLET_ABI,
+      functionName: 'execute',
+      args: [BATCH_MODE, executionData],
+    })
+
+    setLoadingMsg(t('connect.fetchingNonce'))
+    const nonce = await publicClient.readContract({
+      address: walletAddress as Address,
+      abi: BVCC_WALLET_ABI,
+      functionName: 'getNonce',
+      args: [],
+    })
+
+    // Gas: el override manual del usuario tiene prioridad sobre la estimación.
+    const { maxFeePerGas, maxPriorityFeePerGas, callGasLimit } = override ?? await suggestGasParams(exec)
+
+    const userOp = {
+      sender: walletAddress as Address,
+      nonce,
+      initCode: '0x' as Hex,
+      callData,
+      accountGasLimits: packBytes32(VERIF_GAS, callGasLimit),
+      preVerificationGas: PREVERIF_GAS,
+      gasFees: packBytes32(maxPriorityFeePerGas, maxFeePerGas),
+      paymasterAndData: '0x' as Hex,
+      signature: '0x' as Hex,
+    }
+
+    // ── 6. userOpHash → Face ID → firma WebAuthn ────────────────────────────
+    setLoadingMsg(t('connect.computingHash'))
+    const userOpHash = await publicClient.readContract({
+      address: ENTRYPOINT_ADDRESS,
+      abi: ENTRYPOINT_ABI,
+      functionName: 'getUserOpHash',
+      args: [userOp],
+    }) as Hex
+
+    setLoadingMsg(t('connect.waitingFaceId'))
+    const signature = await signDigestWithWebAuthn(userOpHash)
+
+    // ── 7. Enviar (bundler o fallback wallet conectada) ─────────────────────
+    setLoadingMsg(t('connect.sendingTx'))
+    const { txHash } = await submitUserOp({
+      chainId: network.chainId,
+      userOp: {
+        ...userOp,
+        nonce: (nonce as bigint).toString(),
+        preVerificationGas: userOp.preVerificationGas.toString(),
+        signature,
+      },
+    })
+    return txHash
+  }
+
+  // Override de gas si el usuario editó el panel Avanzado (lanza si es inválido).
+  function gasOverrideFromFields(): GasParams | undefined {
+    if (!gasEdited) return undefined
+    let override: GasParams
+    try {
+      override = {
+        maxFeePerGas: parseGwei(gasMaxFee),
+        maxPriorityFeePerGas: parseGwei(gasPriority || '0'),
+        callGasLimit: BigInt(gasLimit),
+      }
+    } catch { throw new Error('Valores de gas inválidos.') }
+    if (override.callGasLimit < 21_000n) throw new Error('El gas limit es demasiado bajo.')
+    if (override.maxFeePerGas <= 0n) throw new Error('El max fee debe ser mayor que 0.')
+    return override
+  }
+
   async function handleApprove() {
     setLoading(true)
     setErrorMsg('')
     try {
+      const gasOverride = gasOverrideFromFields()
+
       if (method === 'eth_sendTransaction') {
-        // ── 1. Parse tx params ──────────────────────────────────────────────
-        const execTarget = (txData.to ?? walletAddress) as Address
-        const execValue = txData.value ? BigInt(txData.value) : 0n
-        const execCallData = (txData.data && txData.data !== '0x') ? txData.data as Hex : '0x' as Hex
-
-        // ── 2. Build execute callData ───────────────────────────────────────
-        const executionData = encodeAbiParameters(
-          [{ type: 'tuple[]', components: [
-            { name: 'target', type: 'address' },
-            { name: 'value', type: 'uint256' },
-            { name: 'callData', type: 'bytes' },
-          ]}],
-          [[{ target: execTarget, value: execValue, callData: execCallData }]]
-        )
-        const callData = encodeFunctionData({
-          abi: BVCC_WALLET_ABI,
-          functionName: 'execute',
-          args: [BATCH_MODE, executionData],
-        })
-
-        // ── 3. Nonce ────────────────────────────────────────────────────────
-        setLoadingMsg(t('connect.fetchingNonce'))
-        const nonce = await publicClient.readContract({
-          address: walletAddress as Address,
-          abi: BVCC_WALLET_ABI,
-          functionName: 'getNonce',
-          args: [],
-        })
-
-        // ── 4. Gas prices + callGas estimado ────────────────────────────────
-        const feeData = await publicClient.estimateFeesPerGas()
-        const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
-        const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
-
-        // Estimar el gas de la llamada interna (un swap de Uniswap puede superar
-        // de sobra los 400k fijos). x2 de margen por el fee snapshot del wallet,
-        // floor 400k, cap 3M para no exigir un prefund desorbitado.
-        let callGasLimit = 400_000n
-        try {
-          const est = await publicClient.estimateGas({
-            account: walletAddress as Address,
-            to: execTarget,
-            value: execValue,
-            data: execCallData,
-          })
-          callGasLimit = est * 2n + 100_000n
-          if (callGasLimit < 400_000n) callGasLimit = 400_000n
-          if (callGasLimit > 3_000_000n) callGasLimit = 3_000_000n
-        } catch { /* estimación falla (p.ej. depende de estado previo) → 400k */ }
-
-        // ── 5. UserOp ───────────────────────────────────────────────────────
-        const userOp = {
-          sender: walletAddress as Address,
-          nonce,
-          initCode: '0x' as Hex,
-          callData,
-          accountGasLimits: packBytes32(400_000n, callGasLimit),
-          preVerificationGas: 80_000n,
-          gasFees: packBytes32(maxPriorityFeePerGas, maxFeePerGas),
-          paymasterAndData: '0x' as Hex,
-          signature: '0x' as Hex,
-        }
-
-        // ── 6. userOpHash ───────────────────────────────────────────────────
-        setLoadingMsg(t('connect.computingHash'))
-        const userOpHash = await publicClient.readContract({
-          address: ENTRYPOINT_ADDRESS,
-          abi: ENTRYPOINT_ABI,
-          functionName: 'getUserOpHash',
-          args: [userOp],
-        }) as Hex
-
-        // ── 7. Face ID ──────────────────────────────────────────────────────
-        setLoadingMsg(t('connect.waitingFaceId'))
-        const { r, s, authenticatorData, clientDataJSON: clientDataHex } =
-          await authenticateWebAuthn(credentialId, hexToBytes(userOpHash))
-
-        // ── 8. WebAuthn signature ───────────────────────────────────────────
-        const clientDataStr = new TextDecoder().decode(hexToBytes(clientDataHex))
-        const challengeIndex = BigInt(clientDataStr.indexOf('"challenge":'))
-        const typeIndex = BigInt(clientDataStr.indexOf('"type":'))
-
-        const signature = encodeAbiParameters(
-          [
-            { name: 'r', type: 'bytes32' },
-            { name: 's', type: 'bytes32' },
-            { name: 'challengeIndex', type: 'uint256' },
-            { name: 'typeIndex', type: 'uint256' },
-            { name: 'authenticatorData', type: 'bytes' },
-            { name: 'clientDataJSON', type: 'string' },
-          ],
-          [
-            `0x${r.toString(16).padStart(64, '0')}` as Hex,
-            `0x${s.toString(16).padStart(64, '0')}` as Hex,
-            challengeIndex,
-            typeIndex,
-            authenticatorData,
-            clientDataStr,
-          ]
-        )
-
-        // ── 9. Submit via bundler (o fallback wallet conectada) ─────────────
-        setLoadingMsg(t('connect.sendingTx'))
-        const { txHash } = await submitUserOp({
-          chainId: network.chainId,
-          userOp: {
-            ...userOp,
-            nonce: (nonce as bigint).toString(),
-            preVerificationGas: userOp.preVerificationGas.toString(),
-            signature,
-          },
-        })
-
+        const txHash = await buildAndSubmitBatch([txData as WcCall], gasOverride)
         onApprove(txHash)
+
+      } else if (method === 'wallet_sendCalls') {
+        const calls = (sendCalls?.calls ?? []) as WcCall[]
+        if (!calls.length) throw new Error('wallet_sendCalls sin llamadas')
+
+        if (atomicMode) {
+          // ── Modo ATÓMICO (opt-in): todas las calls en un userOp, una Face ID ──
+          const txHash = await buildAndSubmitBatch(calls, gasOverride)
+          const id = newBatchId()
+          recordBatch(id, network.chainId, [txHash as Hex])
+          onApprove(id)
+        } else {
+          // ── Modo SECUENCIAL (por defecto): firma la call actual, espera a que
+          //    mine, avanza. Paramos en fallo. Cada call es su propia Face ID. ──
+          const txHash = await buildAndSubmitBatch([calls[seqIndex]], gasOverride) as Hex
+          setLoadingMsg(t('connect.sendingTx'))
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+          seqHashes.current = [...seqHashes.current, txHash]
+
+          if (receipt.status === 'reverted') {
+            throw new Error('La llamada revirtió on-chain. El lote se detuvo aquí.')
+          }
+          if (seqIndex + 1 >= calls.length) {
+            const id = newBatchId()
+            recordBatch(id, network.chainId, seqHashes.current)
+            onApprove(id)
+          } else {
+            // Quedan calls: avanzar y dejar el modal abierto para la siguiente firma.
+            // Reset de ack y gas para que la siguiente call se evalúe/estime de cero.
+            setSeqIndex(seqIndex + 1)
+            setAck(false)
+            setGasEdited(false)
+          }
+        }
 
       } else if (method === 'personal_sign') {
         // ERC-7739 PersonalSign anidado: digest = typed data del domain del wallet
@@ -292,7 +471,16 @@ export default function WcConnectModal({
         // digest anidado con Face ID y se envuelve la firma con el domain de la
         // dApp + contentsHash + descriptor, formato que decodifica el ERC7739 de OZ.
         const td = typeof typedData === 'string' ? JSON.parse(typedData) : typedData
-        const { domain = {}, types, primaryType, message } = td
+        const { types, primaryType, message } = td
+        // Normalizar el domain: viem (wrapTypedDataSignature / hashTypedData /
+        // hashAppDomain) solo incluye chainId en el EIP712Domain si es number|bigint.
+        // Algunos payloads WC lo mandan como string ("42161" / "0xa4b1") → quedaría
+        // EXCLUIDO del appSeparator y la firma no validaría (ni para el wallet ni para
+        // Permit2). Lo coercemos a number para que se incluya de forma consistente.
+        const domain = { ...(td.domain ?? {}) }
+        if (domain.chainId !== undefined && typeof domain.chainId !== 'bigint') {
+          domain.chainId = Number(domain.chainId)
+        }
 
         setLoadingMsg(t('connect.computingHash'))
         const verifierDomain = await getVerifierDomain()
@@ -309,7 +497,7 @@ export default function WcConnectModal({
         throw new Error(`Método no soportado: ${method}`)
       }
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : String(err))
+      setErrorMsg(friendlyError(err instanceof Error ? err.message : String(err)))
     } finally {
       setLoading(false)
       setLoadingMsg('')
@@ -390,15 +578,30 @@ export default function WcConnectModal({
                 <span style={{ color: '#4a5568' }}>{t('connect.value')}</span>
                 <span style={{ color: '#f0f4f8' }}>{formatValue(txData.value)}</span>
               </div>
-              {txData.data && txData.data !== '0x' && (
+              {risks[0] && (
                 <>
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.04)', margin: '8px 0' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                    <span style={{ color: '#4a5568' }}>{t('connect.data')}</span>
-                    <span style={{ color: '#8892a4', wordBreak: 'break-all' }}>{truncateHex(txData.data, 40)}</span>
-                  </div>
+                  <CallRow risk={risks[0]} />
                 </>
               )}
+            </>
+          )}
+
+          {sendCalls && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '4px' }}>
+                <span style={{ color: '#4a5568' }}>
+                  Batch · {atomicMode ? 'ATÓMICO' : 'SECUENCIAL'}
+                </span>
+                <span style={{ color: '#f0f4f8' }}>
+                  {seqMode
+                    ? `Paso ${seqIndex + 1} de ${allCalls.length}`
+                    : `${allCalls.length} acción(es)`}
+                </span>
+              </div>
+              {seqMode
+                ? (risks[seqIndex] && <CallRow risk={risks[seqIndex]} />)
+                : risks.map((r, i) => <CallRow key={i} index={i} risk={r} />)}
             </>
           )}
 
@@ -425,6 +628,54 @@ export default function WcConnectModal({
           )}
         </div>
 
+        {/* Avanzado: editor de gas (estilo MetaMask) — solo en operaciones con tx */}
+        {isTxMethod && (
+          <div style={{ marginBottom: '14px' }}>
+            <button
+              onClick={() => setShowAdvanced((v) => !v)}
+              disabled={loading}
+              style={{
+                background: 'none', border: 'none', color: '#8892a4', fontSize: '11px',
+                cursor: loading ? 'not-allowed' : 'pointer', padding: '4px 0',
+                fontFamily: 'IBM Plex Mono, monospace',
+              }}
+            >
+              {showAdvanced ? '▾' : '▸'} Avanzado (gas)
+            </button>
+            {showAdvanced && (
+              <div style={{
+                marginTop: '6px', padding: '12px',
+                backgroundColor: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px',
+                display: 'flex', flexDirection: 'column', gap: '8px',
+              }}>
+                <GasInput label="Max fee (gwei)" value={gasMaxFee} disabled={loading}
+                  onChange={(v) => { setGasEdited(true); setGasMaxFee(v) }} />
+                <GasInput label="Priority (gwei)" value={gasPriority} disabled={loading}
+                  onChange={(v) => { setGasEdited(true); setGasPriority(v) }} />
+                <GasInput label="Gas limit" value={gasLimit} disabled={loading}
+                  onChange={(v) => { setGasEdited(true); setGasLimit(v) }} />
+                {(() => {
+                  let prefund: bigint | null = null
+                  try { prefund = (VERIF_GAS + BigInt(gasLimit || '0') + PREVERIF_GAS) * parseGwei(gasMaxFee || '0') } catch { prefund = null }
+                  const exceeds = prefund !== null && walletBalance !== null && prefund > walletBalance
+                  return (
+                    <div style={{ marginTop: '2px', fontSize: '10px', color: exceeds ? '#fc8181' : '#4a5568', lineHeight: 1.6 }}>
+                      Prefund estimado: ~{prefund !== null ? (Number(prefund) / 1e18).toFixed(6) : '—'} ETH
+                      {walletBalance !== null && <> · saldo: {(Number(walletBalance) / 1e18).toFixed(6)} ETH</>}
+                      {exceeds && (
+                        <div style={{ color: '#fc8181', marginTop: '3px' }}>
+                          ⚠️ El prefund supera tu saldo: la operación fallará. Baja el gas limit o el max fee.
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Error */}
         {errorMsg && (
           <div style={{
@@ -437,6 +688,29 @@ export default function WcConnectModal({
           }}>
             {errorMsg}
           </div>
+        )}
+
+        {/* Gate de riesgo: si hay una call peligrosa, hay que marcar el checkbox */}
+        {needsAck && (
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: '8px',
+            padding: '10px 12px', marginBottom: '14px',
+            backgroundColor: 'rgba(252,129,129,0.06)',
+            border: '1px solid rgba(252,129,129,0.25)',
+            borderRadius: '6px',
+            fontSize: '11px', color: '#fc8181', lineHeight: 1.5, cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={ack}
+              onChange={(e) => setAck(e.target.checked)}
+              style={{ marginTop: '2px', accentColor: '#fc8181' }}
+            />
+            <span>
+              ⚠️ Esta {seqMode ? 'llamada incluye' : 'operación incluye una o más acciones con'} permisos peligrosos
+              (aprobación/transferencia a destino desconocido o ilimitada). Entiendo y asumo el riesgo.
+            </span>
+          </label>
         )}
 
         {/* Actions */}
@@ -461,15 +735,15 @@ export default function WcConnectModal({
 
           <button
             onClick={handleApprove}
-            disabled={loading}
+            disabled={loading || (needsAck && !ack)}
             style={{
               flex: 1, padding: '11px 0',
-              backgroundColor: loading ? 'rgba(212,175,55,0.4)' : '#D4AF37',
+              backgroundColor: (loading || (needsAck && !ack)) ? 'rgba(212,175,55,0.4)' : '#D4AF37',
               border: 'none',
               borderRadius: '6px',
               color: '#000',
               fontSize: '13px', fontWeight: '600',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: (loading || (needsAck && !ack)) ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
               transition: 'opacity 0.15s',
             }}
@@ -486,7 +760,9 @@ export default function WcConnectModal({
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {t('connect.approveWithFaceId')}
+                {seqMode
+                  ? `Firmar #${seqIndex + 1} con Face ID`
+                  : t('connect.approveWithFaceId')}
               </>
             )}
           </button>

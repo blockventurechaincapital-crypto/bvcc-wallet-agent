@@ -11,6 +11,8 @@ import {
   encodePacked,
   encodeAbiParameters,
   toHex,
+  hashDomain,
+  getTypesForEIP712Domain,
   type Hex,
   type TypedDataDomain,
 } from 'viem'
@@ -50,23 +52,20 @@ export function encodeType712(primaryType: string, types: TypedDataTypes): strin
     .join('')
 }
 
-// Domain separator de la app: solo los campos presentes, en orden EIP-712 estándar
-const DOMAIN_FIELDS = [
-  { name: 'name', type: 'string' },
-  { name: 'version', type: 'string' },
-  { name: 'chainId', type: 'uint256' },
-  { name: 'verifyingContract', type: 'address' },
-  { name: 'salt', type: 'bytes32' },
-] as const
-
+// Domain separator de la app. ⚠️ DEBE coincidir byte a byte con el que produce
+// viem en `wrapTypedDataSignature` (appSeparator embebido en la firma) y en
+// `hashTypedData` (appHash). Por eso delegamos en el MISMO `hashDomain` +
+// `getTypesForEIP712Domain` de viem en vez de filtrar campos a mano: viem
+// incluye `chainId` solo si es number/bigint (no string), etc. Si lo
+// replicáramos con otra regla, el digest firmado divergiría del que el contrato
+// reconstruye desde el wrap → isValidSignature devolvería 0xffffffff.
 export function hashAppDomain(domain: TypedDataDomain): Hex {
-  const fields = DOMAIN_FIELDS.filter(
-    (f) => (domain as Record<string, unknown>)[f.name] !== undefined
-  )
-  return hashStruct({
-    data: domain as Record<string, unknown>,
-    primaryType: 'EIP712Domain',
-    types: { EIP712Domain: fields },
+  return (hashDomain as (args: {
+    domain: TypedDataDomain
+    types: { EIP712Domain: { name: string; type: string }[] }
+  }) => Hex)({
+    domain,
+    types: { EIP712Domain: getTypesForEIP712Domain({ domain }) },
   })
 }
 
