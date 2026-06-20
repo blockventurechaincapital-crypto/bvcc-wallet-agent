@@ -15,6 +15,7 @@ import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import DisclaimerModal from '@/components/DisclaimerModal'
+import { AgentAvatar, AgentAvatarPicker } from '@/components/AgentAvatar'
 import type { NetworkConfig } from '@/lib/networks'
 
 const C = {
@@ -571,6 +572,8 @@ export default function AgentsPage() {
     const [revoking, setRevoking] = useState(false)
     const [editingAlias, setEditingAlias] = useState(false)
     const [aliasInput, setAliasInput] = useState('')
+    const [picking, setPicking] = useState(false)
+    const [, forceAvatar] = useState(0)
     const alias = aliases[info.address.toLowerCase()] ?? ''
 
     async function doRevoke() {
@@ -611,7 +614,9 @@ export default function AgentsPage() {
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div>
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+            <AgentAvatar wallet={walletAddress ?? ''} agent={info.address} active={isActive} onPick={() => setPicking(v => !v)} size={56} />
+            <div>
             {/* Alias */}
             {editingAlias ? (
               <div style={{ display: 'flex', gap: '6px', marginBottom: '4px' }}>
@@ -651,6 +656,7 @@ export default function AgentsPage() {
             }}>
               {status.label}
             </span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
@@ -679,6 +685,10 @@ export default function AgentsPage() {
             )}
           </div>
         </div>
+
+        {picking && (
+          <AgentAvatarPicker wallet={walletAddress ?? ''} agent={info.address} onClose={() => setPicking(false)} onSaved={() => forceAvatar(n => n + 1)} />
+        )}
 
         {/* ETH Limits grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>

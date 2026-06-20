@@ -69,6 +69,10 @@ export const dashboard = {
       agentDaily: 'daily',
       agentTotal: 'total',
       agentUnlimited: 'Unlimited',
+      agentLastActivity: 'Last activity',
+      agentNever: 'No activity yet',
+      agentPause: 'Pause',
+      agentResume: 'Resume',
 
       // Recent transactions header
       recentTransactions: 'Recent transactions',
@@ -145,6 +149,10 @@ export const dashboard = {
       agentDaily: 'diario',
       agentTotal: 'total',
       agentUnlimited: 'Sin límite',
+      agentLastActivity: 'Última actividad',
+      agentNever: 'Sin actividad aún',
+      agentPause: 'Pausar',
+      agentResume: 'Reactivar',
 
       // Recent transactions header
       recentTransactions: 'Transacciones recientes',

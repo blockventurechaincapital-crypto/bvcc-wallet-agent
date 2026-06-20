@@ -127,6 +127,24 @@ function IconAgent() {
   )
 }
 
+function IconShield() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5l8-3z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  )
+}
+
+function IconLiquidity() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3c3.5 4 6 7 6 10a6 6 0 0 1-12 0c0-3 2.5-6 6-10z" />
+      <path d="M9 14a3 3 0 0 0 3 3" />
+    </svg>
+  )
+}
+
 export default function WalletLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -139,6 +157,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
   const navSections = useMemo(() => {
     const defiItems: NavItem[] = [
       { label: t('nav.swap'), href: '/wallet/swap', icon: <IconSwap />, disabled: false },
+      { label: t('nav.positions'), href: '/wallet/positions', icon: <IconLiquidity />, disabled: false },
       { label: t('nav.dapps'), href: '/wallet/dapps', icon: <IconDapps />, disabled: false },
     ]
     if (walletType === 1) {
@@ -151,6 +170,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
         items: [
           { label: t('nav.overview'), href: '/wallet', icon: <IconAssets />, disabled: false },
           { label: t('nav.transactions'), href: '/wallet/transactions', icon: <IconHistory />, disabled: false },
+          { label: t('nav.allowances'), href: '/wallet/allowances', icon: <IconShield />, disabled: false },
           { label: t('nav.addressBook'), href: '/wallet/address-book', icon: <IconAddressBook />, disabled: false },
         ] as NavItem[],
       },

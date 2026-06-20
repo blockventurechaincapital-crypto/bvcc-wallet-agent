@@ -2,10 +2,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei,
-  hashTypedData, hashMessage, type Address, type Hex,
+  parseUnits, formatUnits, hashTypedData, hashMessage, type Address, type Hex,
 } from 'viem'
 import {
   classifyCall, buildKnownSet, getAtomicBatchEnabled, getMaxGas, newBatchId, recordBatch,
+  getApproveInfo, encodeApproveAmount, MAX_UINT256,
   type WcCall, type CallRisk, type RiskLevel,
 } from '@/lib/wcCalls'
 import { hashMessage as hashMessage7739, wrapTypedDataSignature } from 'viem/experimental/erc7739'
@@ -66,18 +67,35 @@ const VERIF_GAS = 400_000n     // verificationGasLimit (firma WebAuthn) — fijo
 const PREVERIF_GAS = 80_000n   // preVerificationGas — fijo
 const fmtGwei = (wei: bigint) => (Number(wei) / 1e9).toString()
 
+// Address completa, clickable, que abre el explorer en pestaña nueva.
+function ExplorerAddress({ addr, explorerBase }: { addr: string; explorerBase?: string }) {
+  const style: React.CSSProperties = { color: '#7c93b5', fontFamily: 'monospace', fontSize: '11px', wordBreak: 'break-all' }
+  if (!explorerBase || !addr) return <span style={style}>{addr || '—'}</span>
+  return (
+    <a href={`${explorerBase}/address/${addr}`} target="_blank" rel="noopener noreferrer"
+      title="Ver en el explorador" style={{ ...style, textDecoration: 'underline', textDecorationColor: 'rgba(124,147,181,0.4)', cursor: 'pointer' }}>
+      {addr} ↗
+    </a>
+  )
+}
+
 // Una fila de call con su badge de riesgo (usada en tx única y en batch).
-function CallRow({ index, risk }: { index?: number; risk: CallRisk }) {
+function CallRow({ index, risk, explorerBase }: { index?: number; risk: CallRisk; explorerBase?: string }) {
   return (
     <div style={{ borderTop: index && index > 0 ? '1px solid rgba(255,255,255,0.04)' : undefined, paddingTop: index ? '8px' : 0, marginTop: index ? '8px' : 0 }}>
+      {risk.summary && (
+        <div style={{ color: '#e8edf4', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>
+          {RISK_DOT[risk.level]} {risk.summary}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-        <span style={{ color: '#4a5568' }}>
-          {index !== undefined ? `#${index + 1} ` : ''}→ {truncateHex(risk.target, 16)}{' '}
+        <span style={{ color: '#4a5568', minWidth: 0 }}>
+          {index !== undefined ? `#${index + 1} ` : ''}→ <ExplorerAddress addr={risk.target} explorerBase={explorerBase} />{' '}
           <span style={{ color: risk.targetKnown ? '#48bb78' : '#fc8181', fontSize: '10px' }}>
             ({risk.targetKnown ? 'conocido' : 'desconocido'})
           </span>
         </span>
-        <span style={{ color: RISK_COLOR[risk.level] }}>{RISK_DOT[risk.level]} {risk.fn}</span>
+        <span style={{ color: RISK_COLOR[risk.level] }}>{risk.summary ? '' : RISK_DOT[risk.level] + ' '}{risk.fn}</span>
       </div>
       {risk.warn && (
         <div style={{ marginTop: '4px', color: RISK_COLOR[risk.level], fontSize: '10px' }}>⚠️ {risk.warn}</div>
@@ -198,7 +216,19 @@ export default function WcConnectModal({
     if (method === 'eth_sendTransaction' && txData) return [txData as WcCall]
     return []
   }, [method, sendCalls, txData])
-  const risks = useMemo(() => allCalls.map((c) => classifyCall(c, known)), [allCalls, known])
+
+  // Edición del límite de approve (estilo MetaMask): override del monto por índice
+  // de call. `effectiveCalls` re-codifica la calldata con el nuevo monto antes de
+  // clasificar/estimar/firmar. `approveInput` guarda el texto del editor por índice.
+  const [approveOverrides, setApproveOverrides] = useState<Record<number, bigint>>({})
+  const [approveInput, setApproveInput] = useState<Record<number, string>>({})
+  const effectiveCalls: WcCall[] = useMemo(() => allCalls.map((c, i) => {
+    const ov = approveOverrides[i]
+    if (ov === undefined) return c
+    try { return { ...c, data: encodeApproveAmount(c, ov) } } catch { return c }
+  }), [allCalls, approveOverrides])
+
+  const risks = useMemo(() => effectiveCalls.map((c) => classifyCall(c, known)), [effectiveCalls, known])
 
   // ¿Hay que marcar el checkbox de riesgo? En secuencial, según la call actual;
   // en atómico / tx única, si cualquiera es peligrosa.
@@ -210,8 +240,8 @@ export default function WcConnectModal({
   const isTxMethod = method === 'eth_sendTransaction' || method === 'wallet_sendCalls'
   // Calls que cuentan para el gas sugerido (en secuencial, solo la call actual).
   const gasCalls = useMemo(
-    () => (seqMode ? (allCalls[seqIndex] ? [allCalls[seqIndex]] : []) : allCalls),
-    [seqMode, allCalls, seqIndex],
+    () => (seqMode ? (effectiveCalls[seqIndex] ? [effectiveCalls[seqIndex]] : []) : effectiveCalls),
+    [seqMode, effectiveCalls, seqIndex],
   )
 
   // Prerrellenar el editor de gas con la estimación + leer saldo del wallet.
@@ -414,11 +444,11 @@ export default function WcConnectModal({
       const gasOverride = gasOverrideFromFields()
 
       if (method === 'eth_sendTransaction') {
-        const txHash = await buildAndSubmitBatch([txData as WcCall], gasOverride)
+        const txHash = await buildAndSubmitBatch([effectiveCalls[0]], gasOverride)
         onApprove(txHash)
 
       } else if (method === 'wallet_sendCalls') {
-        const calls = (sendCalls?.calls ?? []) as WcCall[]
+        const calls = effectiveCalls
         if (!calls.length) throw new Error('wallet_sendCalls sin llamadas')
 
         if (atomicMode) {
@@ -504,6 +534,54 @@ export default function WcConnectModal({
     }
   }
 
+  // Editor del límite de un approve (estilo MetaMask). Solo se muestra si la call
+  // de índice `i` es un approve. Re-codifica la calldata vía approveOverrides.
+  function approveEditor(i: number) {
+    const info = getApproveInfo(allCalls[i])
+    if (!info) return null
+    const ov = approveOverrides[i]
+    const effective = ov ?? info.amount
+    const effectiveLabel = effective >= (1n << 128n)
+      ? 'Ilimitado'
+      : `${formatUnits(effective, info.decimals)} ${info.symbol}`
+    const applyCustom = () => {
+      const raw = (approveInput[i] ?? '').trim().replace(',', '.')
+      if (!raw) return
+      try {
+        setApproveOverrides({ ...approveOverrides, [i]: parseUnits(raw, info.decimals) })
+        setErrorMsg('')
+      } catch { setErrorMsg('Monto inválido') }
+    }
+    return (
+      <div style={{ marginTop: '8px', padding: '10px', borderRadius: '8px', background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.18)' }}>
+        <div style={{ fontSize: '11px', color: '#D4AF37', marginBottom: '6px' }}>
+          Límite de gasto · {info.symbol} {ov !== undefined && <span style={{ color: '#8892a4' }}>(modificado)</span>}
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <input
+            value={approveInput[i] ?? ''}
+            onChange={(e) => setApproveInput({ ...approveInput, [i]: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') applyCustom() }}
+            placeholder={info.unlimited ? 'Ilimitado' : formatUnits(info.amount, info.decimals)}
+            inputMode="decimal"
+            style={{ flex: 1, minWidth: '90px', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0d1017', color: '#f0f4f8', fontSize: '12px' }}
+          />
+          <button type="button" onClick={applyCustom}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(212,175,55,0.4)', background: 'transparent', color: '#D4AF37', fontSize: '11px', cursor: 'pointer' }}>
+            Aplicar
+          </button>
+          <button type="button" onClick={() => { setApproveOverrides({ ...approveOverrides, [i]: MAX_UINT256 }); setApproveInput({ ...approveInput, [i]: '' }) }}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#8892a4', fontSize: '11px', cursor: 'pointer' }}>
+            ∞
+          </button>
+        </div>
+        <div style={{ marginTop: '6px', fontSize: '10px', color: '#8892a4' }}>
+          Aprobarás: <span style={{ color: '#f0f4f8' }}>{effectiveLabel}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
@@ -571,7 +649,7 @@ export default function WcConnectModal({
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                 <span style={{ color: '#4a5568' }}>{t('connect.to')}</span>
-                <span style={{ color: '#f0f4f8' }}>{truncateHex(txData.to ?? '', 20)}</span>
+                <ExplorerAddress addr={txData.to ?? ''} explorerBase={network.blockExplorer.url} />
               </div>
               <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.04)', margin: '8px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
@@ -581,7 +659,8 @@ export default function WcConnectModal({
               {risks[0] && (
                 <>
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.04)', margin: '8px 0' }} />
-                  <CallRow risk={risks[0]} />
+                  <CallRow risk={risks[0]} explorerBase={network.blockExplorer.url} />
+                  {approveEditor(0)}
                 </>
               )}
             </>
@@ -600,8 +679,8 @@ export default function WcConnectModal({
                 </span>
               </div>
               {seqMode
-                ? (risks[seqIndex] && <CallRow risk={risks[seqIndex]} />)
-                : risks.map((r, i) => <CallRow key={i} index={i} risk={r} />)}
+                ? (risks[seqIndex] && <>{<CallRow risk={risks[seqIndex]} explorerBase={network.blockExplorer.url} />}{approveEditor(seqIndex)}</>)
+                : risks.map((r, i) => <div key={i}><CallRow index={i} risk={r} explorerBase={network.blockExplorer.url} />{approveEditor(i)}</div>)}
             </>
           )}
 
