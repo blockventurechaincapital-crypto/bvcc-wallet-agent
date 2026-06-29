@@ -18,7 +18,7 @@ export const allowances = {
       unknownSpender: 'Unknown contract',
       riskUnlimited: 'Unlimited allowance',
       connectFirst: 'No active wallet.',
-      faceIdHint: 'Revoking signs a transaction with Face ID.',
+      faceIdHint: 'Revoking signs a transaction with your biometrics.',
     },
   },
   es: {
@@ -40,7 +40,7 @@ export const allowances = {
       unknownSpender: 'Contrato desconocido',
       riskUnlimited: 'Allowance ilimitada',
       connectFirst: 'No hay wallet activa.',
-      faceIdHint: 'Revocar firma una transacción con Face ID.',
+      faceIdHint: 'Revocar firma una transacción con tu biometría.',
     },
   },
 }

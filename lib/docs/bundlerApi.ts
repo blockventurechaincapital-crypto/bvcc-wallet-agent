@@ -29,7 +29,7 @@ export const bundlerApi: LocalizedDoc = {
       },
       {
         type: 'p',
-        text: 'AI agents do not need this route — they call `executeAsAgent` directly as a normal transaction (see Agent Integration). This route serves the app UI (send/swap/recovery flows signed with Face ID).',
+        text: 'AI agents do not need this route — they call `executeAsAgent` directly as a normal transaction (see Agent Integration). This route serves the app UI (send/swap/recovery flows signed with biometrics / WebAuthn).',
       },
 
       { type: 'h2', text: 'POST /api/send-userop' },
@@ -105,7 +105,7 @@ export const bundlerApi: LocalizedDoc = {
       },
       {
         type: 'p',
-        text: 'Los agentes IA no necesitan este route — llaman a `executeAsAgent` directamente como transacción normal (mira Integración de agentes). Este route sirve a la UI de la app (flujos de envío/swap/recovery firmados con Face ID).',
+        text: 'Los agentes IA no necesitan este route — llaman a `executeAsAgent` directamente como transacción normal (mira Integración de agentes). Este route sirve a la UI de la app (flujos de envío/swap/recovery firmados con biometría / WebAuthn).',
       },
 
       { type: 'h2', text: 'POST /api/send-userop' },

@@ -840,7 +840,7 @@ export default function WcConnectModal({
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {seqMode
-                  ? `Firmar #${seqIndex + 1} con Face ID`
+                  ? `Firmar #${seqIndex + 1} con biometría`
                   : t('connect.approveWithFaceId')}
               </>
             )}

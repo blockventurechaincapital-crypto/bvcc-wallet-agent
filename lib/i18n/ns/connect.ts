@@ -15,7 +15,7 @@ export const connect = {
       // WcConnectModal
       dappRequest: 'dApp request',
       reject: 'Reject',
-      approveWithFaceId: 'Approve with Face ID',
+      approveWithFaceId: 'Approve with biometrics',
       processing: 'Processing…',
       // tx detail labels
       to: 'To',
@@ -24,7 +24,7 @@ export const connect = {
       // loading steps
       fetchingNonce: 'Fetching nonce…',
       computingHash: 'Computing hash…',
-      waitingFaceId: 'Waiting for Face ID…',
+      waitingFaceId: 'Waiting for biometrics…',
       sendingTx: 'Sending transaction…',
 
       // pending requests inbox (Safe-style)
@@ -53,7 +53,7 @@ export const connect = {
       // WcConnectModal
       dappRequest: 'Solicitud de dApp',
       reject: 'Rechazar',
-      approveWithFaceId: 'Aprobar con Face ID',
+      approveWithFaceId: 'Aprobar con biometría',
       processing: 'Procesando…',
       // tx detail labels
       to: 'Para',
@@ -62,7 +62,7 @@ export const connect = {
       // loading steps
       fetchingNonce: 'Obteniendo nonce…',
       computingHash: 'Calculando hash…',
-      waitingFaceId: 'Esperando Face ID…',
+      waitingFaceId: 'Esperando biometría…',
       sendingTx: 'Enviando transacción…',
 
       // pending requests inbox (Safe-style)

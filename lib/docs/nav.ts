@@ -1,7 +1,13 @@
 // Docs navigation tree (Uniswap-docs style sidebar) — shared by sidebar, index and prev/next.
 // Docs content is localized EN/ES via { en, es } objects (not the ns dict system:
 // article blocks are structured data, not flat UI strings).
-export type DocSlug = 'index' | 'agent-integration' | 'self-hosting' | 'contracts' | 'bundler-api'
+export type DocSlug =
+  | 'index'
+  | 'connect-ai'
+  | 'agent-integration'
+  | 'self-hosting'
+  | 'contracts'
+  | 'bundler-api'
 
 export interface Localized {
   en: string
@@ -47,6 +53,15 @@ export const DOC_NAV: DocNavGroup[] = [
   {
     title: { en: 'AI Agents', es: 'Agentes IA' },
     items: [
+      {
+        slug: 'connect-ai',
+        href: '/docs/connect-ai',
+        label: { en: 'Connect an AI Assistant (MCP)', es: 'Conecta un asistente IA (MCP)' },
+        blurb: {
+          en: 'Connect Hermes, Claude, Cursor or LM Studio over MCP — install, configure, authorize, verify.',
+          es: 'Conecta Hermes, Claude, Cursor o LM Studio vía MCP — instalar, configurar, autorizar, verificar.',
+        },
+      },
       {
         slug: 'agent-integration',
         href: '/docs/agent-integration',

@@ -135,8 +135,8 @@ rm -rf .next && npm run dev
 
 | Contract | Networks | Address |
 |---|---|---|
-| BVCCSmartWalletFactoryV2 | Arbitrum One · BNB Chain · Ethereum · Arb Sepolia | `0x230b7010529AB6977Dd8581B3eF018ef865BdEf1` |
-| BVCCAgentWalletFactoryV2 | Arbitrum One · BNB Chain · Ethereum · Arb Sepolia | `0x8D9e24022777173AD6336e00884b6C87c7EF054c` |
+| BVCCSmartWalletFactoryV2 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0x230b7010529AB6977Dd8581B3eF018ef865BdEf1` |
+| BVCCAgentWalletFactoryV2 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0x8D9e24022777173AD6336e00884b6C87c7EF054c` |
 | EntryPoint OZ v0.9 (canonical) | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
 
 Deterministic CREATE2 deployment — same factory address on every network, which also
@@ -232,7 +232,7 @@ app/
     prices/                 # CoinGecko USD prices
     check-iframe/           # Detects whether a dApp allows embedding
 lib/
-  networks.ts               # 6-network config (live: Arbitrum One, BNB Chain, Ethereum, Arb Sepolia)
+  networks.ts               # 6-network config (live: Arbitrum One, Base, BNB Chain, Ethereum, Polygon, Arb Sepolia)
   NetworkContext.tsx        # Active-network React context
   abis.ts                   # ABIs: BVCCWallet, Factory, AgentWallet, AgentFactory
   useWalletType.ts          # Reads walletType() on-chain

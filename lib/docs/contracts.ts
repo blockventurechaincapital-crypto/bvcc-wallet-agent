@@ -41,7 +41,7 @@ export const contracts: LocalizedDoc = {
       { type: 'table', headers: ['Contract', 'Address'], rows: ADDR_ROWS },
       {
         type: 'p',
-        text: 'Live on Arbitrum One, BNB Chain, Ethereum and Arbitrum Sepolia (testnet). Base deployment is pending and will use the same addresses.',
+        text: 'Live on Arbitrum One, Base, BNB Chain, Ethereum, Polygon and Arbitrum Sepolia (testnet) — same addresses on every network.',
       },
 
       { type: 'h2', text: 'BVCCSmartWalletV2 — personal wallet (walletType 0)' },
@@ -88,7 +88,7 @@ export const contracts: LocalizedDoc = {
       },
       { type: 'p', text: 'Whitelists max 20 entries each. The four token arrays must have equal length.' },
 
-      { type: 'h3', text: 'Owner functions (callable only via the wallet’s own execute(), i.e. Face ID)' },
+      { type: 'h3', text: 'Owner functions (callable only via the wallet’s own execute(), i.e. biometrics / WebAuthn)' },
       { type: 'code', lang: 'solidity', code: CODE_OWNER_FNS },
 
       { type: 'h3', text: 'Agent functions' },
@@ -133,7 +133,7 @@ export const contracts: LocalizedDoc = {
       { type: 'table', headers: ['Contrato', 'Dirección'], rows: ADDR_ROWS },
       {
         type: 'p',
-        text: 'En vivo en Arbitrum One, BNB Chain, Ethereum y Arbitrum Sepolia (testnet). El despliegue en Base está pendiente y usará las mismas direcciones.',
+        text: 'En vivo en Arbitrum One, Base, BNB Chain, Ethereum, Polygon y Arbitrum Sepolia (testnet) — mismas direcciones en todas las redes.',
       },
 
       { type: 'h2', text: 'BVCCSmartWalletV2 — wallet personal (walletType 0)' },
@@ -180,7 +180,7 @@ export const contracts: LocalizedDoc = {
       },
       { type: 'p', text: 'Whitelists de máximo 20 entradas cada una. Los cuatro arrays de tokens deben tener la misma longitud.' },
 
-      { type: 'h3', text: 'Funciones de dueño (solo llamables vía el execute() de la propia wallet, es decir Face ID)' },
+      { type: 'h3', text: 'Funciones de dueño (solo llamables vía el execute() de la propia wallet, es decir biometría / WebAuthn)' },
       { type: 'code', lang: 'solidity', code: CODE_OWNER_FNS },
 
       { type: 'h3', text: 'Funciones de agente' },

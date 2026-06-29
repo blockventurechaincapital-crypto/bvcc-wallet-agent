@@ -14,7 +14,7 @@ Deterministic CREATE2 — **same address on every network**:
 | `BVCCAgentWalletFactoryV2` | `0x8D9e24022777173AD6336e00884b6C87c7EF054c` |
 | EntryPoint (OpenZeppelin v0.9) | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
 
-Live on **Arbitrum One**, **BNB Chain** and **Arbitrum Sepolia** (testnet). Ethereum and Base deployments are pending and will use the same addresses.
+Live on **Arbitrum One**, **Base**, **BNB Chain**, **Ethereum**, **Polygon** and **Arbitrum Sepolia** (testnet) — same addresses on every network.
 
 ## BVCCSmartWalletV2 — personal wallet (`walletType() = 0`)
 

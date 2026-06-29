@@ -76,7 +76,7 @@ export const appshell = {
       // Left panel (access step)
       accessHeroTitle1: 'Your',
       accessHeroTitle2: 'self-custodied',
-      accessHeroTitle3: 'wallet with Face ID.',
+      accessHeroTitle3: 'wallet with passkeys.',
       accessHeroDesc: 'No email, no KYC, no database. BVCC does not receive, store, or custody private keys.',
       accessFeature1: 'ERC-4337 Account Abstraction',
       accessFeature2: 'Recovery with 3 guardians',
@@ -160,7 +160,7 @@ export const appshell = {
       // Left panel (access step)
       accessHeroTitle1: 'Tu wallet',
       accessHeroTitle2: 'auto-custodiada',
-      accessHeroTitle3: 'con Face ID.',
+      accessHeroTitle3: 'con passkeys.',
       accessHeroDesc: 'Sin email, sin KYC, sin base de datos. BVCC no recibe, almacena ni custodia claves privadas.',
       accessFeature1: 'ERC-4337 Account Abstraction',
       accessFeature2: 'Recuperación con 3 guardians',

@@ -3,6 +3,7 @@ export const marketing = {
     marketing: {
       // Nav
       navAgents: 'Agents',
+      navConnect: 'Connect',
       navPhilosophy: 'Philosophy',
       navOpenSource: 'Open Source',
       navNetworks: 'Networks',
@@ -20,7 +21,7 @@ export const marketing = {
       heroLine3Part2: '',
       lede: 'Experimental non-custodial smart wallet for WebAuthn account abstraction and permission-limited AI agent execution.',
       heroCreateBtn: 'Create beta wallet',
-      heroRiskNotice: 'Use small amounts only. Smart contracts may contain bugs. BVCC does not custody funds, recover wallets, or reverse transactions.',
+      heroRiskNotice: 'Smart contracts may contain bugs. BVCC does not custody funds, recover wallets, or reverse transactions.',
       heroIHaveOne: 'I already have one',
       recoverLine: 'Lost access?',
       recoverCta: 'Recover with your guardians',
@@ -36,7 +37,7 @@ export const marketing = {
       cardRenewalValue: 'every 30 days',
       cardStatus: 'Status',
       cardStatusValue: '● Active',
-      cardSealText: 'Authorised by\nyour Face ID',
+      cardSealText: 'Authorised by\nyour passkey',
 
       // Agents section
       sectionAgents: '§01 — AI Agents',
@@ -54,22 +55,41 @@ export const marketing = {
       agentFeature4Title: 'EOA agents only',
       agentFeature4Body: 'External accounts only — never opaque contracts.',
 
+      // Connect your AI assistant (MCP)
+      sectionConnect: '§02 — Connect your AI assistant',
+      connectH2Part1: 'Plug your AI agent into a wallet it',
+      connectH2Gold: 'can\'t drain',
+      connectH2Part2: '.',
+      connectLede: 'Already running an agent in Hermes, Claude, Cursor or LM Studio? BVCC speaks MCP natively. One command gives your assistant an agent wallet whose limits — budget, allowed tokens, recipients — are enforced on-chain, not on our servers. The agent holds its own keypair; BVCC never sees it.',
+      connectClientsLabel: 'Works with any MCP client',
+      connectDocsBtn: 'Read the integration guide',
+      connectPoint1Title: 'Speaks MCP natively',
+      connectPoint1Body: 'Any MCP client connects with one command — no plugin to install, no custom adapter.',
+      connectPoint2Title: 'Limits enforced on-chain',
+      connectPoint2Body: 'Budget, allowed tokens, recipients and pause live in the contract, not in a server it could bypass.',
+      connectPoint3Title: 'The agent owns its keys',
+      connectPoint3Body: 'You generate the agent\'s keypair and authorise its address. No custodial API key in someone else\'s cloud.',
+      connectTermTitle: 'your AI assistant → BVCC Agent Wallet',
+      connectTerm1: '▸ 16 tools registered — send · swap · balances · limits',
+      connectTerm2: '▸ Works in Hermes · Claude · Cursor · LM Studio',
+      connectTerm3: '▸ Build your own bot on the same on-chain limits',
+
       // Manifesto
-      sectionPhilosophy: '§02 — Philosophy',
+      sectionPhilosophy: '§03 — Philosophy',
       quoteText: 'We do not hold your keys. We do not know your name. There is no server that',
       quoteGold: 'controls your wallet',
       quoteEnd: '. You hold the keys; the contract executes only what you sign.',
       quoteBy: '— Founding principle, BVCC',
 
       // Capabilities
-      sectionCaps: '§03 — Capabilities',
+      sectionCaps: '§04 — Capabilities',
       capsH2Part1: 'Built as a',
       capsH2Gold: 'security-focused smart account',
       capsH2Part2: ', not just an app.',
 
       cap01Title: 'WebAuthn / Passkeys',
       cap01Body: 'Authentication uses passkeys/WebAuthn through the device\'s secure authentication system when available. BVCC does not receive, store, or custody private keys.',
-      cap01Tag: 'Face ID · WebAuthn · P256',
+      cap01Tag: 'Passkey · WebAuthn · P256',
 
       cap02Title: 'Private by design',
       cap02Body: 'No emails, no KYC, no forms. There is no user database that can be leaked or subpoenaed. Ethereum is the only record of your account.',
@@ -84,9 +104,9 @@ export const marketing = {
       cap04Tag: 'ERC-4337 · ERC-7821',
 
       // How it works
-      sectionHow: '§04 — The journey',
+      sectionHow: '§05 — The journey',
       step01Title: 'Register your face',
-      step01Body: 'A single Face ID tap creates your key pair inside the device.',
+      step01Body: 'A single biometric tap — Face ID, fingerprint or security key — creates your key pair inside the device.',
       step02Title: 'Deploy your contract',
       step02Body: 'CREATE2 derives the address from your public key. Deterministic, no server.',
       step03Title: 'Operate freely',
@@ -95,7 +115,7 @@ export const marketing = {
       step04Body: 'Your guardians restore access without anyone else touching your funds.',
 
       // Security
-      sectionSecurity: '§05 — Security',
+      sectionSecurity: '§06 — Security',
       secH2Part1: 'You self-custody',
       secH2Gold: 'your own funds',
       secH2Part2: ' — verifiable on-chain.',
@@ -110,7 +130,7 @@ export const marketing = {
       secStat4Body: 'Deterministic address, auditable on-chain.',
 
       // Open source
-      sectionOss: '§06 — Open source',
+      sectionOss: '§07 — Open source',
       ossH2Part1: 'Don\'t trust us.',
       ossH2Gold: 'Verify it',
       ossH2Part2: ' — and run it yourself.',
@@ -120,7 +140,7 @@ export const marketing = {
       termKeysNote: '▸ BVCC does not receive, store, or custody private keys',
 
       // Fees & Networks
-      sectionFees: '§07 — Fees',
+      sectionFees: '§08 — Fees',
       feePerTx: 'per transaction',
       feesNote: 'Transparent and on-chain. The fee travels in the same transaction — no hidden charges, no subscriptions.',
       sectionDeployed: 'Deployed on',
@@ -148,6 +168,7 @@ export const marketing = {
     marketing: {
       // Nav
       navAgents: 'Agentes',
+      navConnect: 'Conectar',
       navPhilosophy: 'Filosofía',
       navOpenSource: 'Código abierto',
       navNetworks: 'Redes',
@@ -165,7 +186,7 @@ export const marketing = {
       heroLine3Part2: '',
       lede: 'Smart wallet experimental y sin custodia para abstracción de cuenta con WebAuthn y ejecución de agentes IA con permisos limitados.',
       heroCreateBtn: 'Crear wallet beta',
-      heroRiskNotice: 'Usa solo cantidades pequeñas. Los contratos inteligentes pueden contener errores. BVCC no custodia fondos, no recupera wallets ni revierte transacciones.',
+      heroRiskNotice: 'Los contratos inteligentes pueden contener errores. BVCC no custodia fondos, no recupera wallets ni revierte transacciones.',
       heroIHaveOne: 'Ya tengo una',
       recoverLine: '¿Perdiste el acceso?',
       recoverCta: 'Recupera con tus guardianes',
@@ -181,7 +202,7 @@ export const marketing = {
       cardRenewalValue: 'cada 30 días',
       cardStatus: 'Estado',
       cardStatusValue: '● Activo',
-      cardSealText: 'Autorizado por\ntu Face ID',
+      cardSealText: 'Autorizado por\ntu passkey',
 
       // Agents section
       sectionAgents: '§01 — Agentes IA',
@@ -199,22 +220,41 @@ export const marketing = {
       agentFeature4Title: 'Agentes EOA',
       agentFeature4Body: 'Solo cuentas externas, nunca contratos opacos.',
 
+      // Connect your AI assistant (MCP)
+      sectionConnect: '§02 — Conecta tu asistente IA',
+      connectH2Part1: 'Conecta tu agente IA a una wallet que',
+      connectH2Gold: 'no puede vaciar',
+      connectH2Part2: '.',
+      connectLede: '¿Ya usas un agente en Hermes, Claude, Cursor o LM Studio? BVCC habla MCP de forma nativa. Un solo comando le da a tu asistente una agent wallet cuyos límites — presupuesto, tokens permitidos, destinatarios — se imponen on-chain, no en nuestros servidores. El agente tiene su propio par de claves; BVCC nunca lo ve.',
+      connectClientsLabel: 'Funciona con cualquier cliente MCP',
+      connectDocsBtn: 'Leer la guía de integración',
+      connectPoint1Title: 'Habla MCP de forma nativa',
+      connectPoint1Body: 'Cualquier cliente MCP se conecta con un comando — sin plugins que instalar ni adaptadores a medida.',
+      connectPoint2Title: 'Límites impuestos on-chain',
+      connectPoint2Body: 'Presupuesto, tokens permitidos, destinatarios y pausa viven en el contrato, no en un servidor que pudiera saltarse.',
+      connectPoint3Title: 'El agente tiene sus claves',
+      connectPoint3Body: 'Tú generas el par de claves del agente y autorizas su dirección. Sin API key custodial en la nube de otro.',
+      connectTermTitle: 'tu asistente IA → BVCC Agent Wallet',
+      connectTerm1: '▸ 16 tools registradas — enviar · swap · saldos · límites',
+      connectTerm2: '▸ Funciona en Hermes · Claude · Cursor · LM Studio',
+      connectTerm3: '▸ Crea tu propio bot sobre los mismos límites on-chain',
+
       // Manifesto
-      sectionPhilosophy: '§02 — Filosofía',
+      sectionPhilosophy: '§03 — Filosofía',
       quoteText: 'No guardamos tus claves. No conocemos tu nombre. No existe un servidor que',
       quoteGold: 'controle tu wallet',
       quoteEnd: '. Tú tienes las claves; el contrato ejecuta solo lo que firmas.',
       quoteBy: '— Principio fundacional, BVCC',
 
       // Capabilities
-      sectionCaps: '§03 — Capacidades',
+      sectionCaps: '§04 — Capacidades',
       capsH2Part1: 'Construida como una',
       capsH2Gold: 'cuenta inteligente con foco en seguridad',
       capsH2Part2: ', no solo como una app.',
 
       cap01Title: 'WebAuthn / Passkeys',
       cap01Body: 'La autenticación se realiza mediante passkeys/WebAuthn usando el sistema seguro del dispositivo cuando está disponible. BVCC no recibe, almacena ni custodia claves privadas.',
-      cap01Tag: 'Face ID · WebAuthn · P256',
+      cap01Tag: 'Passkey · WebAuthn · P256',
 
       cap02Title: 'Anónimo por diseño',
       cap02Body: 'Sin correos, sin KYC, sin formularios. No existe una base de datos de usuarios que pueda filtrarse o ser citada. Ethereum es el único registro de tu cuenta.',
@@ -229,9 +269,9 @@ export const marketing = {
       cap04Tag: 'ERC-4337 · ERC-7821',
 
       // How it works
-      sectionHow: '§04 — El recorrido',
+      sectionHow: '§05 — El recorrido',
       step01Title: 'Registra tu rostro',
-      step01Body: 'Una sola pulsación de Face ID crea tu par de claves dentro del dispositivo.',
+      step01Body: 'Una sola pulsación biométrica — Face ID, huella o llave de seguridad — crea tu par de claves dentro del dispositivo.',
       step02Title: 'Despliega tu contrato',
       step02Body: 'CREATE2 deriva la dirección desde tu clave pública. Determinista, sin servidor.',
       step03Title: 'Opera con libertad',
@@ -240,7 +280,7 @@ export const marketing = {
       step04Body: 'Tus guardianes restauran el acceso sin que nadie más toque tus fondos.',
 
       // Security
-      sectionSecurity: '§05 — Seguridad',
+      sectionSecurity: '§06 — Seguridad',
       secH2Part1: 'Tú auto-custodias',
       secH2Gold: 'tus propios fondos',
       secH2Part2: ' — verificable on-chain.',
@@ -255,7 +295,7 @@ export const marketing = {
       secStat4Body: 'Dirección determinista, auditable on-chain.',
 
       // Open source
-      sectionOss: '§06 — Código abierto',
+      sectionOss: '§07 — Código abierto',
       ossH2Part1: 'No confíes en nosotros.',
       ossH2Gold: 'Verifícalo',
       ossH2Part2: ' — y córrelo tú mismo.',
@@ -265,7 +305,7 @@ export const marketing = {
       termKeysNote: '▸ BVCC no recibe, almacena ni custodia claves privadas',
 
       // Fees & Networks
-      sectionFees: '§07 — Comisiones',
+      sectionFees: '§08 — Comisiones',
       feePerTx: 'por transacción',
       feesNote: 'Transparente y on-chain. La comisión viaja en la misma transacción — sin cargos ocultos, sin suscripciones.',
       sectionDeployed: 'Desplegada en',

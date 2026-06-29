@@ -21,7 +21,14 @@ interface MarketingLandingProps {
   error?: string | null
 }
 
-const NETWORKS = ['Ethereum', 'Arbitrum', 'Base', 'BNB Chain', 'Arbitrum Sepolia']
+const NETWORKS = [
+  { name: 'Ethereum', logo: '/networks/ethereum.png' },
+  { name: 'Arbitrum', logo: '/networks/arbitrum.png' },
+  { name: 'Base', logo: '/networks/base.png' },
+  { name: 'BNB Chain', logo: '/networks/bsc.png' },
+  { name: 'Polygon', logo: '/networks/polygon.png' },
+  { name: 'Arbitrum Sepolia', logo: '/networks/arbitrum.png' },
+]
 
 export default function MarketingLanding({
   onCreate,
@@ -94,6 +101,12 @@ export default function MarketingLanding({
     [t('marketing.agentFeature4Title'), t('marketing.agentFeature4Body')],
   ]
 
+  const CONNECT_POINTS = [
+    [t('marketing.connectPoint1Title'), t('marketing.connectPoint1Body')],
+    [t('marketing.connectPoint2Title'), t('marketing.connectPoint2Body')],
+    [t('marketing.connectPoint3Title'), t('marketing.connectPoint3Body')],
+  ]
+
   const SEC_STATS = [
     [t('marketing.secStat1Title'), t('marketing.secStat1Body')],
     [t('marketing.secStat2Title'), t('marketing.secStat2Body')],
@@ -113,6 +126,7 @@ export default function MarketingLanding({
           </a>
           <nav className="nav-links">
             <a href="#agentes">{t('marketing.navAgents')}</a>
+            <a href="#connect">{t('marketing.navConnect')}</a>
             <a href="#manifiesto">{t('marketing.navPhilosophy')}</a>
             <a href="#codigo">{t('marketing.navOpenSource')}</a>
             <a href="#redes">{t('marketing.navNetworks')}</a>
@@ -222,7 +236,8 @@ export default function MarketingLanding({
         <div className="ticker-track">
           {[...NETWORKS, ...NETWORKS, ...NETWORKS].map((n, i) => (
             <span key={i} className="ticker-item">
-              {n} <span className="ticker-dot">◆</span>
+              <img className="ticker-logo" src={n.logo} alt="" width={18} height={18} loading="lazy" />
+              {n.name} <span className="ticker-dot">◆</span>
             </span>
           ))}
         </div>
@@ -254,6 +269,52 @@ export default function MarketingLanding({
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      {/* ── Connect your AI assistant (MCP) ─────────────────── */}
+      <section className="connect" id="connect">
+        <div className="connect-grid">
+          <div className="connect-copy" data-reveal>
+            <p className="section-index">{t('marketing.sectionConnect')}</p>
+            <h2 className="h2">
+              {t('marketing.connectH2Part1')} <span className="gold-text">{t('marketing.connectH2Gold')}</span>{t('marketing.connectH2Part2')}
+            </h2>
+            <p className="connect-lede">{t('marketing.connectLede')}</p>
+            <p className="connect-clients-label mono">{t('marketing.connectClientsLabel')}</p>
+            <div className="connect-clients">
+              {['Hermes', 'Claude', 'Cursor', 'LM Studio'].map(c => (
+                <span className="client-chip" key={c}>{c}</span>
+              ))}
+            </div>
+            <Link className="btn-gold" href="/docs/connect-ai">
+              {t('marketing.connectDocsBtn')} <span className="btn-arrow">→</span>
+            </Link>
+            <ul className="connect-points">
+              {CONNECT_POINTS.map(([title, desc]) => (
+                <li key={title}>
+                  <span className="connect-tick">✦</span>
+                  <div>
+                    <h4>{title}</h4>
+                    <p>{desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="oss-term" data-reveal>
+            <div className="term-head">
+              <span className="term-dot" /><span className="term-dot" /><span className="term-dot" />
+              <span className="term-title mono">{t('marketing.connectTermTitle')}</span>
+            </div>
+            <div className="term-body mono">
+              <p className="t-line"><span className="t-prompt">$</span> npx -y @bvcc/agent-mcp</p>
+              <p className="t-line t-ok">{t('marketing.connectTerm1')}</p>
+              <p className="t-line t-ok">{t('marketing.connectTerm2')}</p>
+              <p className="t-line"><span className="t-prompt">$</span> npm i @bvcc/agent-sdk</p>
+              <p className="t-line t-ok">{t('marketing.connectTerm3')}</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -394,10 +455,13 @@ export default function MarketingLanding({
           <div className="nets" data-reveal>
             <p className="section-index">{t('marketing.sectionDeployed')}</p>
             <ul className="net-list">
-              <li><span className="net-n mono">01</span> Ethereum</li>
-              <li><span className="net-n mono">02</span> Arbitrum</li>
-              <li><span className="net-n mono">03</span> Base</li>
-              <li><span className="net-n mono">04</span> BNB Chain</li>
+              {NETWORKS.slice(0, 5).map((n, i) => (
+                <li key={n.name}>
+                  <span className="net-n mono">{String(i + 1).padStart(2, '0')}</span>
+                  <img className="net-logo" src={n.logo} alt="" width={26} height={26} loading="lazy" />
+                  {n.name}
+                </li>
+              ))}
             </ul>
             <p className="net-testnet mono">{t('marketing.testnetActive')}</p>
           </div>
@@ -601,8 +665,9 @@ const styles = `
 /* ── ticker ── */
 .bvcc-mk .ticker { border-top:1px solid var(--line); border-bottom:1px solid var(--line); overflow:hidden; padding:15px 0; background:var(--surface-2); }
 .bvcc-mk .ticker-track { display:flex; white-space:nowrap; width:max-content; animation:mkScroll 36s linear infinite; }
-.bvcc-mk .ticker-item { font-size:15px; font-weight:600; color:var(--dim); padding:0 24px; display:inline-flex; gap:24px; letter-spacing:.02em; }
-.bvcc-mk .ticker-dot { color:var(--gold); font-size:9px; align-self:center; }
+.bvcc-mk .ticker-item { font-size:15px; font-weight:600; color:var(--dim); padding:0 24px; display:inline-flex; align-items:center; gap:11px; letter-spacing:.02em; }
+.bvcc-mk .ticker-logo { width:18px; height:18px; border-radius:50%; object-fit:cover; background:#fff; flex-shrink:0; }
+.bvcc-mk .ticker-dot { color:var(--gold); font-size:9px; align-self:center; margin-left:13px; }
 @keyframes mkScroll { from{transform:translateX(0);} to{transform:translateX(-33.33%);} }
 
 /* ── section index ── */
@@ -666,6 +731,19 @@ const styles = `
 .bvcc-mk .agents-list h4 { font-size:16px; font-weight:700; margin:0 0 6px; color:var(--text); letter-spacing:-0.01em; }
 .bvcc-mk .agents-list p { font-size:13px; line-height:1.5; color:var(--muted); margin:0; }
 
+/* ── connect (AI assistants / MCP) ── */
+.bvcc-mk .connect { max-width:var(--maxw); margin:0 auto; padding:108px 40px; border-top:1px solid var(--line); }
+.bvcc-mk .connect-grid { display:grid; grid-template-columns:1.05fr 1fr; gap:56px; align-items:center; }
+.bvcc-mk .connect-lede { font-size:16px; line-height:1.64; color:var(--dim); margin:22px 0 24px; max-width:46ch; }
+.bvcc-mk .connect-clients-label { font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
+.bvcc-mk .connect-clients { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 28px; }
+.bvcc-mk .client-chip { font-family:var(--font-plex-mono),monospace; font-size:12px; letter-spacing:.02em; color:var(--text); padding:8px 14px; border:1px solid var(--line-hi); border-radius:999px; background:var(--gold-dim); }
+.bvcc-mk .connect-points { list-style:none; margin:30px 0 0; padding:0; display:grid; gap:16px; }
+.bvcc-mk .connect-points li { display:flex; gap:13px; }
+.bvcc-mk .connect-tick { color:var(--gold); font-size:14px; line-height:1.5; }
+.bvcc-mk .connect-points h4 { font-size:15px; font-weight:700; margin:0 0 4px; color:var(--text); letter-spacing:-0.01em; }
+.bvcc-mk .connect-points p { font-size:13.5px; line-height:1.5; color:var(--muted); margin:0; }
+
 /* ── open source ── */
 .bvcc-mk .oss { max-width:var(--maxw); margin:0 auto; padding:6px 40px 108px; }
 .bvcc-mk .oss-grid { display:grid; grid-template-columns:1fr 1.05fr; gap:56px; align-items:center; }
@@ -692,8 +770,9 @@ const styles = `
 .bvcc-mk .fee-label span { font-size:13px; color:var(--muted); }
 .bvcc-mk .fees-note { font-size:14.5px; line-height:1.6; color:var(--dim); margin:24px 0 0; max-width:38ch; }
 .bvcc-mk .net-list { list-style:none; margin:0 0 20px; padding:0; }
-.bvcc-mk .net-list li { font-size:24px; font-weight:700; padding:13px 0; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:18px; color:var(--text); letter-spacing:-0.02em; }
-.bvcc-mk .net-n { font-size:12px; font-weight:500; color:var(--gold); }
+.bvcc-mk .net-list li { font-size:24px; font-weight:700; padding:13px 0; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; color:var(--text); letter-spacing:-0.02em; }
+.bvcc-mk .net-n { font-size:12px; font-weight:500; color:var(--gold); align-self:center; }
+.bvcc-mk .net-logo { width:26px; height:26px; border-radius:50%; object-fit:cover; background:#fff; flex-shrink:0; }
 .bvcc-mk .net-testnet { font-size:12px; letter-spacing:.06em; color:var(--green); }
 
 /* ── cta ── */
@@ -725,7 +804,7 @@ const styles = `
 @media (max-width:1000px){
   .bvcc-mk .hero-grid{ grid-template-columns:1fr; gap:48px; }
   .bvcc-mk .hero-aside{ justify-content:flex-start; }
-  .bvcc-mk .sec-inner,.bvcc-mk .agents-grid,.bvcc-mk .oss-grid{ grid-template-columns:1fr; gap:40px; }
+  .bvcc-mk .sec-inner,.bvcc-mk .agents-grid,.bvcc-mk .oss-grid,.bvcc-mk .connect-grid{ grid-template-columns:1fr; gap:40px; }
   .bvcc-mk .how-grid{ grid-template-columns:1fr 1fr; gap:36px 0; }
   .bvcc-mk .step{ padding:0 24px; }
   .bvcc-mk .step:nth-child(odd){ padding-left:0; border-left:0; }
@@ -738,7 +817,7 @@ const styles = `
   .bvcc-mk .nav-inner{ padding:13px 20px; }
   .bvcc-mk .hero{ padding:56px 20px 48px; }
   .bvcc-mk .manifesto{ padding:78px 20px; }
-  .bvcc-mk .caps,.bvcc-mk .agents,.bvcc-mk .how,.bvcc-mk .security,.bvcc-mk .cta{ padding-left:20px; padding-right:20px; }
+  .bvcc-mk .caps,.bvcc-mk .agents,.bvcc-mk .how,.bvcc-mk .security,.bvcc-mk .cta,.bvcc-mk .connect{ padding-left:20px; padding-right:20px; }
   .bvcc-mk .cap{ grid-template-columns:1fr; gap:12px; }
   .bvcc-mk .cap-n{ font-size:38px; }
   .bvcc-mk .how-grid{ grid-template-columns:1fr; }

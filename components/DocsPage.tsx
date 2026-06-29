@@ -41,8 +41,48 @@ const C = {
 
 const MONO = 'var(--font-plex-mono), monospace'
 
-// Render `inline code` spans inside plain text. nowrapCode keeps chips on one
-// line (used in table cells, where the wrapper scrolls horizontally instead).
+// Render markdown **bold** and [text](url) links inside a non-code text segment.
+// Internal links (starting with /) use next/link; external open in a new tab.
+function richSegment(text: string, keyBase: string) {
+  const nodes: React.ReactNode[] = []
+  const re = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g
+  let last = 0
+  let m: RegExpExecArray | null
+  let n = 0
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index))
+    if (m[1] !== undefined) {
+      nodes.push(
+        <strong key={`${keyBase}-b${n}`} style={{ fontWeight: 650, color: C.text }}>
+          {m[1]}
+        </strong>
+      )
+    } else {
+      const label = m[2]
+      const href = m[3]
+      const linkStyle = { color: C.gold, textDecoration: 'underline', textUnderlineOffset: 2 }
+      nodes.push(
+        href.startsWith('/') ? (
+          <Link key={`${keyBase}-l${n}`} href={href} style={linkStyle}>
+            {label}
+          </Link>
+        ) : (
+          <a key={`${keyBase}-l${n}`} href={href} target="_blank" rel="noreferrer" style={linkStyle}>
+            {label}
+          </a>
+        )
+      )
+    }
+    last = re.lastIndex
+    n++
+  }
+  if (last < text.length) nodes.push(text.slice(last))
+  return nodes
+}
+
+// Render `inline code` spans inside plain text, plus **bold** and [links] in the
+// non-code parts. nowrapCode keeps chips on one line (used in table cells, where
+// the wrapper scrolls horizontally instead).
 function Inline({ text, nowrapCode }: { text: string; nowrapCode?: boolean }) {
   const parts = text.split('`')
   return (
@@ -65,7 +105,7 @@ function Inline({ text, nowrapCode }: { text: string; nowrapCode?: boolean }) {
             {part}
           </code>
         ) : (
-          <span key={i}>{part}</span>
+          <span key={i}>{richSegment(part, `s${i}`)}</span>
         )
       )}
     </>

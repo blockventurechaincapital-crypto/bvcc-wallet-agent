@@ -127,7 +127,7 @@ export const selfHosting: LocalizedDoc = {
           [
             '`BUNDLER_PRIVATE_KEY`',
             'No',
-            'Nada se rompe — la app cae al fallback: la wallet conectada (MetaMask/WalletConnect) paga el gas vía `EntryPoint.handleOps`. Con ella configurada, el servidor envía los UserOps y el usuario solo usa Face ID.',
+            'Nada se rompe — la app cae al fallback: la wallet conectada (MetaMask/WalletConnect) paga el gas vía `EntryPoint.handleOps`. Con ella configurada, el servidor envía los UserOps y el usuario solo usa su biometría.',
           ],
           ['`ARBISCAN_API_KEY`', 'Recomendada', 'Deja de funcionar el historial de transacciones (proxy de Etherscan API v2).'],
           ['`COINGECKO_API_KEY`', 'No', 'Los precios en USD pueden quedar limitados o no disponibles.'],

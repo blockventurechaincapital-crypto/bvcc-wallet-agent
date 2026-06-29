@@ -1,5 +1,5 @@
 import type { Chain } from 'viem'
-import { arbitrumSepolia, base, arbitrum, mainnet, bsc } from 'viem/chains'
+import { arbitrumSepolia, base, arbitrum, mainnet, bsc, polygon } from 'viem/chains'
 
 export type NetworkConfig = {
   chainId: number
@@ -88,8 +88,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: null,
-      agentFactory: null,
+      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
+      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -142,7 +142,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#627EEA',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg',
     isTestnet: false,
-    rpcUrl: 'https://eth.llamarpc.com',
+    rpcUrl: 'https://ethereum-rpc.publicnode.com',
     blockExplorer: {
       url: 'https://etherscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api',
@@ -197,6 +197,38 @@ export const NETWORKS: NetworkConfig[] = [
       poolFee: 500, // tier preferido; el swap prueba todos los tiers y elige el mejor
     },
     viemChain: bsc,
+  },
+  {
+    chainId: 137,
+    name: 'Polygon',
+    shortName: 'Polygon',
+    color: '#8247E5',
+    logo: 'https://icons.llamao.fi/icons/chains/rsz_polygon.jpg',
+    isTestnet: false,
+    rpcUrl: 'https://polygon-bor-rpc.publicnode.com',
+    blockExplorer: {
+      url: 'https://polygonscan.com',
+      apiUrl: 'https://api.etherscan.io/v2/api',
+      apiChainId: '137',
+    },
+    nativeToken: { symbol: 'POL', decimals: 18 },
+    contracts: {
+      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
+      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      entryPoint: ENTRYPOINT,
+    },
+    tokens: {
+      usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // USDC nativo (Circle)
+      usdcDecimals: 6,
+      weth: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', // WPOL (wrapped del nativo POL)
+    },
+    // Uniswap v3 en Polygon — direcciones oficiales (docs.uniswap.org)
+    uniswap: {
+      swapRouter: '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45', // SwapRouter02
+      quoterV2: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e',
+      poolFee: 500,
+    },
+    viemChain: polygon,
   },
 ]
 

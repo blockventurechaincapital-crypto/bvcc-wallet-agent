@@ -135,7 +135,7 @@ export const agentIntegration: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'The wallet owner authorizes an agent address from the app (`/wallet/agents`), signing with Face ID / WebAuthn. This calls `authorizeAgent()` on the wallet with the agent’s limits.',
+          'The wallet owner authorizes an agent address from the app (`/wallet/agents`), signing with biometrics / WebAuthn (passkey). This calls `authorizeAgent()` on the wallet with the agent’s limits.',
           'The agent calls `executeAsAgent()` on the wallet directly, as a normal EVM transaction — no ERC-4337 UserOp, no bundler, no WebAuthn signature needed.',
           'The agent pays gas from its own EOA. The transferred funds come from the wallet.',
           'Every execution is validated against the agent’s on-chain permission set and charged a 0.15% protocol fee.',
@@ -307,7 +307,7 @@ export const agentIntegration: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'El dueño de la wallet autoriza la dirección de un agente desde la app (`/wallet/agents`), firmando con Face ID / WebAuthn. Esto llama a `authorizeAgent()` en la wallet con los límites del agente.',
+          'El dueño de la wallet autoriza la dirección de un agente desde la app (`/wallet/agents`), firmando con biometría / WebAuthn (passkey). Esto llama a `authorizeAgent()` en la wallet con los límites del agente.',
           'El agente llama a `executeAsAgent()` en la wallet directamente, como una transacción EVM normal — sin UserOp ERC-4337, sin bundler, sin firma WebAuthn.',
           'El agente paga el gas desde su propia EOA. Los fondos transferidos salen de la wallet.',
           'Cada ejecución se valida contra el set de permisos on-chain del agente y paga una comisión de protocolo del 0,15%.',
