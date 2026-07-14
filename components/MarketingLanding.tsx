@@ -30,6 +30,14 @@ const NETWORKS = [
   { name: 'Arbitrum Sepolia', logo: '/networks/arbitrum.png' },
 ]
 
+// MCP directories where @bvcc/agent-mcp is listed (public discovery).
+const CATALOGS = [
+  { name: 'MCP Registry', url: 'https://registry.modelcontextprotocol.io' },
+  { name: 'Glama', url: 'https://glama.ai/mcp/servers/blockventurechaincapital-crypto/bvcc-agent-mcp' },
+  { name: 'mcp.so', url: 'https://mcp.so/server/bvcc-agent-wallet/blockventurechaincapital-crypto' },
+  { name: 'TensorBlock', url: 'https://www.tensorblock.co/mcp/servers/github-blockventurechaincapital-crypto-bvcc-agent-mcp-5e72b45a' },
+]
+
 export default function MarketingLanding({
   onCreate,
   onAccess,
@@ -114,6 +122,16 @@ export default function MarketingLanding({
     [t('marketing.secStat4Title'), t('marketing.secStat4Body')],
   ]
 
+  const FAQS = [
+    [t('marketing.faqQ1'), t('marketing.faqA1')],
+    [t('marketing.faqQ2'), t('marketing.faqA2')],
+    [t('marketing.faqQ3'), t('marketing.faqA3')],
+    [t('marketing.faqQ4'), t('marketing.faqA4')],
+    [t('marketing.faqQ5'), t('marketing.faqA5')],
+    [t('marketing.faqQ6'), t('marketing.faqA6')],
+    [t('marketing.faqQ7'), t('marketing.faqA7')],
+  ]
+
   return (
     <div ref={rootRef} className="bvcc-mk">
       <style>{styles}</style>
@@ -130,6 +148,8 @@ export default function MarketingLanding({
             <a href="#manifiesto">{t('marketing.navPhilosophy')}</a>
             <a href="#codigo">{t('marketing.navOpenSource')}</a>
             <a href="#redes">{t('marketing.navNetworks')}</a>
+            <a href="#faq">{t('marketing.navFaq')}</a>
+            <a href="#about">{t('marketing.navAbout')}</a>
             <a href="/docs">Docs</a>
           </nav>
           <div className="nav-cta">
@@ -316,6 +336,16 @@ export default function MarketingLanding({
             </div>
           </div>
         </div>
+        <div className="connect-catalogs" data-reveal>
+          <span className="connect-clients-label mono">{t('marketing.connectListedOn')}</span>
+          <div className="catalog-row">
+            {CATALOGS.map(c => (
+              <a className="catalog-chip" key={c.name} href={c.url} target="_blank" rel="noreferrer">
+                {c.name}<span className="catalog-ext">↗</span>
+              </a>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ── Manifesto ───────────────────────────────────────── */}
@@ -465,6 +495,57 @@ export default function MarketingLanding({
             </ul>
             <p className="net-testnet mono">{t('marketing.testnetActive')}</p>
           </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ─────────────────────────────────────────────── */}
+      <section className="faq" id="faq">
+        <p className="section-index" data-reveal>{t('marketing.sectionFaq')}</p>
+        <h2 className="h2" data-reveal>
+          {t('marketing.faqH2Part1')} <span className="gold-text">{t('marketing.faqH2Gold')}</span>
+        </h2>
+        <div className="faq-list">
+          {FAQS.map(([q, a], i) => (
+            <div className="faq-item" key={i} data-reveal>
+              <h3 className="faq-q">{q}</h3>
+              <p className="faq-a">{a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── About / Makers ──────────────────────────────────── */}
+      <section className="about" id="about">
+        <p className="section-index" data-reveal>{t('marketing.sectionAbout')}</p>
+        <h2 className="h2" data-reveal>
+          {t('marketing.aboutH2Part1')} <span className="gold-text">{t('marketing.aboutH2Gold')}</span>
+        </h2>
+        <div className="faq-list">
+          <div className="faq-item" data-reveal>
+            <h3 className="faq-q">{t('marketing.aboutP1Title')}</h3>
+            <p className="faq-a">{t('marketing.aboutP1Body')}</p>
+          </div>
+          <div className="faq-item" data-reveal>
+            <h3 className="faq-q">{t('marketing.aboutP2Title')}</h3>
+            <p className="faq-a">{t('marketing.aboutP2Body')}</p>
+          </div>
+          <div className="faq-item" data-reveal>
+            <h3 className="faq-q">{t('marketing.aboutP3Title')}</h3>
+            <p className="faq-a">{t('marketing.aboutP3Body')}</p>
+          </div>
+          <div className="faq-item" data-reveal>
+            <h3 className="faq-q">{t('marketing.aboutP4Title')}</h3>
+            <p className="faq-a">{t('marketing.aboutP4Body')}</p>
+          </div>
+        </div>
+        <div className="about-connect" data-reveal>
+          <span className="about-connect-label mono">{t('marketing.aboutConnect')}</span>
+          <div className="about-social">
+            <a href="https://x.com/BLOCVENCHAINCAP" target="_blank" rel="noreferrer">X / Twitter ↗</a>
+            <a href="https://www.linkedin.com/company/blockventure-chain-capital" target="_blank" rel="noreferrer">LinkedIn ↗</a>
+            <a href="https://github.com/blockventurechaincapital-crypto" target="_blank" rel="noreferrer">GitHub ↗</a>
+          </div>
+          <span className="about-updated mono">{t('marketing.aboutUpdated')}</span>
         </div>
       </section>
 
@@ -675,7 +756,24 @@ const styles = `
 
 /* ── h2 ── */
 .bvcc-mk .h2 { font-size:clamp(27px,3.4vw,44px); font-weight:800; line-height:1.1; letter-spacing:-0.03em; margin:0; max-width:20ch; }
+
+/* FAQ */
+.bvcc-mk .faq { max-width:var(--maxw); margin:0 auto; padding:16px 40px 110px; border-top:1px solid var(--line); }
+.bvcc-mk .faq .section-index { margin-bottom:18px; }
+.bvcc-mk .faq-list { margin-top:44px; max-width:840px; }
+.bvcc-mk .faq-item { padding:26px 2px; border-top:1px solid var(--line); }
+.bvcc-mk .faq-item:last-child { border-bottom:1px solid var(--line); }
+.bvcc-mk .faq-q { font-size:clamp(17px,1.5vw,19px); font-weight:700; line-height:1.35; letter-spacing:-0.01em; color:var(--text); margin:0 0 10px; }
+.bvcc-mk .faq-a { font-size:15.5px; line-height:1.66; color:var(--dim); margin:0; max-width:72ch; }
 .bvcc-mk .h2 .gold-text { display:inline; }
+
+.bvcc-mk .about { max-width:var(--maxw); margin:0 auto; padding:108px 40px; border-top:1px solid var(--line); }
+.bvcc-mk .about-connect { margin-top:48px; display:flex; flex-wrap:wrap; align-items:center; gap:16px 26px; }
+.bvcc-mk .about-connect-label { font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold); }
+.bvcc-mk .about-social { display:flex; flex-wrap:wrap; gap:22px; }
+.bvcc-mk .about-social a { color:var(--dim); font-size:14px; font-weight:500; transition:color .2s var(--ease); }
+.bvcc-mk .about-social a:hover { color:var(--gold-hi); }
+.bvcc-mk .about-updated { margin-left:auto; font-size:12px; color:var(--muted); }
 
 /* ── manifesto ── */
 .bvcc-mk .manifesto { max-width:1000px; margin:0 auto; padding:118px 40px 108px; text-align:center; }
@@ -743,6 +841,11 @@ const styles = `
 .bvcc-mk .connect-tick { color:var(--gold); font-size:14px; line-height:1.5; }
 .bvcc-mk .connect-points h4 { font-size:15px; font-weight:700; margin:0 0 4px; color:var(--text); letter-spacing:-0.01em; }
 .bvcc-mk .connect-points p { font-size:13.5px; line-height:1.5; color:var(--muted); margin:0; }
+.bvcc-mk .connect-catalogs { margin-top:52px; padding-top:34px; border-top:1px solid var(--line); }
+.bvcc-mk .catalog-row { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.bvcc-mk .catalog-chip { display:inline-flex; align-items:center; gap:7px; font-family:var(--font-plex-mono),monospace; font-size:12px; letter-spacing:.02em; color:var(--dim); padding:9px 15px; border:1px solid var(--line-hi); border-radius:999px; background:var(--surface); transition:color .25s, border-color .25s, background .25s; }
+.bvcc-mk .catalog-chip:hover { color:var(--text); border-color:var(--gold); background:var(--gold-dim); }
+.bvcc-mk .catalog-ext { color:var(--gold); font-size:11px; }
 
 /* ── open source ── */
 .bvcc-mk .oss { max-width:var(--maxw); margin:0 auto; padding:6px 40px 108px; }
@@ -813,6 +916,7 @@ const styles = `
   .bvcc-mk .nav-links{ display:none; }
   .bvcc-mk .nav-cta .gh{ display:none; }
   .bvcc-mk .oss{ padding-left:20px; padding-right:20px; }
+  .bvcc-mk .faq{ padding-left:20px; padding-right:20px; }
   .bvcc-mk .term-body{ font-size:11px; }
   .bvcc-mk .nav-inner{ padding:13px 20px; }
   .bvcc-mk .hero{ padding:56px 20px 48px; }
