@@ -4,6 +4,7 @@
 export type DocSlug =
   | 'index'
   | 'connect-ai'
+  | 'agent-permissions'
   | 'agent-integration'
   | 'self-hosting'
   | 'contracts'
@@ -60,6 +61,15 @@ export const DOC_NAV: DocNavGroup[] = [
         blurb: {
           en: 'Connect Hermes, Claude, Cursor or LM Studio over MCP — install, configure, authorize, verify.',
           es: 'Conecta Hermes, Claude, Cursor o LM Studio vía MCP — instalar, configurar, autorizar, verificar.',
+        },
+      },
+      {
+        slug: 'agent-permissions',
+        href: '/docs/agent-permissions',
+        label: { en: 'How Agent Permissions Work', es: 'Cómo funcionan los permisos' },
+        blurb: {
+          en: 'Capabilities vs addresses, the four permission layers, call policies, and verifying contracts.',
+          es: 'Capacidades vs direcciones, las cuatro capas de permiso, call policies, y verificar contratos.',
         },
       },
       {

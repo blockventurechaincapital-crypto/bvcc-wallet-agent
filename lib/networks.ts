@@ -56,8 +56,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
-      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      factory: '0xD42F61AA856A4f47885Ecd2D0ce119411d53C192',
+      agentFactory: '0xd866a7563cDaC9F71423be3332b62c329C676064',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -88,8 +88,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
-      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      factory: '0xD42F61AA856A4f47885Ecd2D0ce119411d53C192',
+      agentFactory: '0xd866a7563cDaC9F71423be3332b62c329C676064',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -119,8 +119,9 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
-      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      // V3 factories (CREATE2 → misma address en las 6 redes). Factories V2 viejas: 0x230b…BdEf1 / 0x8D9e…054c.
+      factory: '0xD42F61AA856A4f47885Ecd2D0ce119411d53C192',
+      agentFactory: '0xd866a7563cDaC9F71423be3332b62c329C676064',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -150,8 +151,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
-      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      factory: '0xD42F61AA856A4f47885Ecd2D0ce119411d53C192',
+      agentFactory: '0xd866a7563cDaC9F71423be3332b62c329C676064',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -181,8 +182,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'BNB', decimals: 18 },
     contracts: {
-      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
-      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      factory: '0xD42F61AA856A4f47885Ecd2D0ce119411d53C192',
+      agentFactory: '0xd866a7563cDaC9F71423be3332b62c329C676064',
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -213,8 +214,8 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'POL', decimals: 18 },
     contracts: {
-      factory: '0x230b7010529AB6977Dd8581B3eF018ef865BdEf1',
-      agentFactory: '0x8D9e24022777173AD6336e00884b6C87c7EF054c',
+      factory: '0xD42F61AA856A4f47885Ecd2D0ce119411d53C192',
+      agentFactory: '0xd866a7563cDaC9F71423be3332b62c329C676064',
       entryPoint: ENTRYPOINT,
     },
     tokens: {

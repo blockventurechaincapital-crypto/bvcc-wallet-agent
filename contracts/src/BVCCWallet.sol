@@ -15,7 +15,7 @@ import {SignerP256} from "@openzeppelin/contracts/utils/cryptography/signers/Sig
 import {SignerWebAuthn} from "@openzeppelin/contracts/utils/cryptography/signers/SignerWebAuthn.sol";
 import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
 
-contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAuthn, ERC7821, ERC721Holder, ERC1155Holder {
+contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAuthn, ERC7821, ERC721Holder, ERC1155Holder {
     using ERC7579Utils for *;
 
     // -------------------------------------------------------------------------
@@ -53,6 +53,9 @@ contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
     error RecoveryAlreadyApproved();
     error TimelockNotExpired();
     error TokenFeeFailed();
+    error NotGuardian();
+    error InvalidGuardian();
+    error InsufficientBalanceForFee();
 
 
     // -------------------------------------------------------------------------
@@ -82,7 +85,7 @@ contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
             msg.sender == guardians[0] ||
             msg.sender == guardians[1] ||
             msg.sender == guardians[2],
-            "Not a guardian"
+            NotGuardian()
         );
         _;
     }
@@ -92,7 +95,7 @@ contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
     // -------------------------------------------------------------------------
 
     constructor(bytes32 qx, bytes32 qy)
-        EIP712("BVCCSmartWalletV2", "1")
+        EIP712("BVCCSmartWalletV3", "1")
         SignerP256(qx, qy)
     {}
 
@@ -147,7 +150,7 @@ contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
                 if (fee > 0) {
                     require(
                         IERC20(exec.target).balanceOf(address(this)) >= amount + fee,
-                        "Insufficient balance for fee"
+                        InsufficientBalanceForFee()
                     );
                 }
 
@@ -336,7 +339,7 @@ contract BVCCSmartWalletV2 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
             _guardians[0] != address(0) &&
             _guardians[1] != address(0) &&
             _guardians[2] != address(0),
-            "Invalid guardian address"
+            InvalidGuardian()
         );
         guardians = _guardians;
     }

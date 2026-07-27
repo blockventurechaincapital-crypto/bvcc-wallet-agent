@@ -38,9 +38,9 @@
 This monorepo contains both halves of the project so judges can review them together:
 
 - **Frontend** — Next.js app (this repo root: `app/`, `components/`, `lib/`, `public/`).
-- **Contracts** — Foundry Solidity smart wallet + AI agent wallet contracts (`contracts/`):
-  `BVCCWallet` / `BVCCWalletFactory` (personal) and `BVCCAgentWallet` / `BVCCAgentWalletFactory` (AI-agent, on-chain spending limits).
-- **Tests** — 128/128 Foundry tests passing (`contracts/test/`). Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
+- **Contracts** — Foundry Solidity smart wallet + AI agent wallet contracts (`contracts/`, V3):
+  `BVCCWallet` / `BVCCWalletFactory` (personal) and `BVCCAgentWallet` / `BVCCAgentWalletFactory` (AI-agent, on-chain spending limits + per-selector call policies), plus the V3 security layer — `BVCCValidatorRegistry`, `BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`, `BVCCHookRegistry`, `IBVCCValidator`.
+- **Tests** — 264 Foundry tests (unit, fork & fuzz) in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
 - **Status** — Experimental public beta; smart contracts internally tested, **not externally audited**.
 
 ## Documentation
@@ -135,21 +135,31 @@ rm -rf .next && npm run dev
 
 | Contract | Networks | Address |
 |---|---|---|
-| BVCCSmartWalletFactoryV2 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0x230b7010529AB6977Dd8581B3eF018ef865BdEf1` |
-| BVCCAgentWalletFactoryV2 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0x8D9e24022777173AD6336e00884b6C87c7EF054c` |
+| BVCCSmartWalletFactoryV3 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0xD42F61AA856A4f47885Ecd2D0ce119411d53C192` |
+| BVCCAgentWalletFactoryV3 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0xd866a7563cDaC9F71423be3332b62c329C676064` |
+| BVCCValidatorRegistry | all 6 (same address) | `0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2` |
+| BVCCHookRegistry | all 6 (same address) | `0x551C6e7ABdA04a110790888e711198f25621b066` |
 | EntryPoint OZ v0.9 (canonical) | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
 
-Deterministic CREATE2 deployment — same factory address on every network, which also
-gives each user the same wallet address across all supported chains. Contracts are
-verified on [Arbiscan](https://arbiscan.io/address/0x8D9e24022777173AD6336e00884b6C87c7EF054c),
-[BscScan](https://bscscan.com/address/0x8D9e24022777173AD6336e00884b6C87c7EF054c)
-and [Etherscan](https://etherscan.io/address/0x8D9e24022777173AD6336e00884b6C87c7EF054c).
+Deterministic CREATE2 deployment — the factories and both registries share the same
+address on every network, so each user gets the same wallet address across all supported
+chains. The per-router `BVCCUniversalRouterValidator` and per-PositionManager
+`BVCCPositionManagerValidator` are chain-specific (each is bound to its chain's router /
+position manager); their addresses per network are recorded in
+[`contracts/deployments/`](contracts/deployments).
 
-> **V2 (gas hardening).** V1 had a swap gas bug: a small Uniswap fee tier matched an
-> Arbitrum precompile address during the Case-3 balance snapshot and drained the gas
-> budget. V2 caps the `balanceOf` probe (`PROBE_GAS_CAP = 100_000`). See
-> [`audits/`](audits) for the full report. Previous V1 factories
-> (`0xa5290A51…` / `0xc87aa107…`) are deprecated.
+> **V3 (call-policy security model).** V3 hardens the AI-agent path so a stolen agent key
+> can no longer redirect funds through a protocol call. Case-3 (DeFi) calls are now
+> default-deny per selector: whitelisting a protocol is not enough — the owner must also
+> register a call policy that either pins the recipient argument to the wallet, or defers
+> to an on-chain validator for calldata where the recipient is buried in dynamic encoding
+> (Universal Router, v4 PositionManager). Enabling a complex protocol needs two independent
+> steps — BVCC registers its validator in the registry (48h timelock to *allow*, immediate
+> to *deny*), and the owner adds the policy — so neither side alone can widen an agent's
+> reach. The biometric owner is never restricted by policies; they apply only to agents.
+> V3 keeps the V2 swap-gas fix (`PROBE_GAS_CAP = 100_000`). Previous V2 factories
+> (`0x230b…BdEf1` / `0x8D9e…054c`) and V1 factories (`0xa5290A51…` / `0xc87aa107…`) are
+> deprecated. See [`audits/`](audits) for the report on the V2 line.
 
 ### Wallet types
 
@@ -163,6 +173,7 @@ and [Etherscan](https://etherscan.io/address/0x8D9e24022777173AD6336e00884b6C87c
   - maxPerTxWei, dailyLimitWei, totalBudgetWei
   - Renewable period budget (e.g. 500 ETH / 7 days)
   - ERC-20 token and DeFi protocol whitelist
+  - Per-selector call policies (V3): the recipient of a DeFi call is pinned to the wallet or checked by an on-chain validator
   - Expiry timestamp
 - Fee: 0.15% per transaction
 - The agent pays its own gas (direct EOA, not AA)

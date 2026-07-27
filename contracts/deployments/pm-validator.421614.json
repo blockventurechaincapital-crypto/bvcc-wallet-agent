@@ -1,0 +1,9 @@
+{
+  "chainId": 421614,
+  "hookRegistry": "0x551C6e7ABdA04a110790888e711198f25621b066",
+  "pmCodehash": "0x80ef9e16bafa80a5c631677d12fc256774aaeb63068d4ca597b0e743f7a738e2",
+  "positionManager": "0xAc631556d3d4019C95769033B5E719dD77124BAc",
+  "registry": "0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2",
+  "validator": "0x32aA1B3E35dc6fF09EB7CDc8F6b43F3573AD2182",
+  "validatorCodehash": "0xeb578d62057e75a67e5ee021bf1608402d15b4ca2ae90972609e4148f3aaf8a6"
+}

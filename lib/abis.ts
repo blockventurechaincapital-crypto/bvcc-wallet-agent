@@ -405,6 +405,33 @@ export const BVCC_AGENT_WALLET_ABI = [
   { "type": "error", "name": "TokenNotAllowed", "inputs": [] },          // 0xa29c4986 — token not in allowedTokens
   { "type": "error", "name": "NotAuthorizedAgent", "inputs": [] },       // 0x50699b39 — caller is not an active agent
   { "type": "error", "name": "AgentCannotCallWallet", "inputs": [] },    // 0x852d39d2 — agent may not target the wallet itself (blocks owner-fn self-call escalation)
+  // V3 call-policy errors (Case 3 default-deny + arg pinning + deep validation)
+  { "type": "error", "name": "SelectorNotAllowed", "inputs": [] },       // selector has no call policy registered
+  { "type": "error", "name": "PinnedArgMismatch", "inputs": [] },        // a pinned calldata word is not the wallet / a whitelisted protocol
+  { "type": "error", "name": "CalldataTooShort", "inputs": [] },
+  { "type": "error", "name": "PolicyValidationFailed", "inputs": [] },   // deep validator (e.g. Universal Router) denied the call
+  { "type": "error", "name": "OnlyWallet", "inputs": [] },
+  {
+    "type": "function",
+    "name": "setCallPolicy",
+    "inputs": [
+      { "name": "target", "type": "address", "internalType": "address" },
+      { "name": "selector", "type": "bytes4", "internalType": "bytes4" },
+      { "name": "policy", "type": "uint256", "internalType": "uint256" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getCallPolicy",
+    "inputs": [
+      { "name": "target", "type": "address", "internalType": "address" },
+      { "name": "selector", "type": "bytes4", "internalType": "bytes4" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+    "stateMutability": "view"
+  },
   {
     "type": "function",
     "name": "walletType",

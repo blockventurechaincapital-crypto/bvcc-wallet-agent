@@ -52,7 +52,11 @@ contract ERC7739VectorTest is Test {
             )
         );
 
-        // Wallet (verifier) domain: BVCCSmartWalletV2 v1, salt 0
+        // Wallet (verifier) domain: frozen synthetic test data (NOT the live wallet —
+        // verifyingContract is 0x2222…). This vector pins OZ's ERC7739Utils encoding
+        // against the frozen frontend digest, so its domain string stays "BVCCSmartWalletV2"
+        // regardless of the live contract's EIP712 name. A separate V3-domain vector must be
+        // regenerated from lib/erc7739.ts (set to "BVCCSmartWalletV3") during the C2 frontend sync.
         bytes memory domainBytes = abi.encode(
             keccak256(bytes("BVCCSmartWalletV2")),
             keccak256(bytes("1")),

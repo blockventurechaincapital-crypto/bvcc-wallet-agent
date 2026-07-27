@@ -129,7 +129,7 @@ export const agentIntegration: LocalizedDoc = {
   en: {
     title: 'Agent Integration Guide',
     intro:
-      'How an external AI agent (or any automated system) executes transactions through a BVCC Agent Wallet (`BVCCAgentWalletV2`). All permissions and spending limits are enforced on-chain — the agent cannot exceed them no matter what its code does.',
+      'How an external AI agent (or any automated system) executes transactions through a BVCC Agent Wallet (`BVCCAgentWalletV3`). All permissions, spending limits and call policies are enforced on-chain — the agent cannot exceed them no matter what its code does.',
     blocks: [
       { type: 'h2', text: 'How it works' },
       {
@@ -181,7 +181,7 @@ export const agentIntegration: LocalizedDoc = {
             '`callData` starts with `0x095ea7b3` (`approve(address,uint256)`)',
             'token whitelist + per-token amount cap + spender checked against recipient whitelist',
           ],
-          ['3. DeFi / anything else', 'any other `callData`', '`target` must be in the protocol whitelist'],
+          ['3. DeFi / anything else', 'any other `callData`', '`target` in the protocol whitelist + a call policy registered for the selector (V3)'],
         ],
       },
       {
@@ -190,6 +190,24 @@ export const agentIntegration: LocalizedDoc = {
           'The agent can never call the wallet itself (`AgentCannotCallWallet`) — owner functions stay owner-only.',
           '`approve` amounts count toward per-token daily/total budgets, same as transfers. This is intentionally conservative: it prevents draining via an external `transferFrom` after a large approve.',
         ],
+      },
+
+      { type: 'h2', text: 'Call policies (case 3, V3)' },
+      {
+        type: 'p',
+        text: 'For a DeFi call to go through, the wallet owner must have registered a call policy for that protocol + selector. This is separate from `allowedProtocols` (which only whitelists the target) and is what stops a stolen agent key from redirecting funds. You don’t set policies — the owner does, in the app — but you need to know what passes:',
+      },
+      {
+        type: 'list',
+        items: [
+          'Selector must be allowed. If the owner hasn’t registered a policy for the exact `target` + selector, it reverts with `SelectorNotAllowed`.',
+          'Recipient must be the wallet. For pinned selectors (SwapRouter02, Aave Pool supply/withdraw/borrow/repay, …) the recipient / `to` / `onBehalfOf` argument must be the agent wallet — put the wallet there, not your own address. Otherwise `PinnedArgMismatch`.',
+          'Complex calldata is validated on-chain. For the Universal Router (`execute`) and Uniswap v4 PositionManager (`modifyLiquidities`), the call is routed to an on-chain validator that checks every recipient. Fails closed (`PolicyValidationFailed`) if the validator isn’t active on that chain or a recipient isn’t the wallet.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Cases 1, 2 and 2b (ETH send, token transfer, approve) are not affected by call policies — they keep using the recipient/token whitelists. Call policies only gate case 3.',
       },
 
       { type: 'h2', text: 'Spending limits' },
@@ -228,7 +246,7 @@ export const agentIntegration: LocalizedDoc = {
         headers: ['Whitelist', 'Empty means'],
         rows: [
           ['`allowedTokens`', 'deny all ERC-20 transfers/approves'],
-          ['`allowedProtocols`', 'deny all DeFi calls (case 3)'],
+          ['`allowedProtocols`', 'reverts (`NoProtocolsWhitelisted`) — at least one protocol required for DeFi'],
           [
             '`allowedRecipients`',
             'any destination allowed (applies to ETH recipients, token recipients, and approve spenders when set)',
@@ -271,6 +289,10 @@ export const agentIntegration: LocalizedDoc = {
           ['`ExceedsTokenMaxAmount()` / `TokenBatchLimitExceeded()`', 'per-tx/batch token cap'],
           ['`TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'per-token day / lifetime budgets'],
           ['`NoProtocolsWhitelisted()` / `ProtocolNotAllowed()`', 'DeFi call with empty whitelist / target not listed'],
+          ['`SelectorNotAllowed()`', 'no call policy registered for this `target` + selector (V3)'],
+          ['`PinnedArgMismatch()`', 'a pinned calldata word (recipient/spender) is not the wallet / not a whitelisted protocol (V3)'],
+          ['`PolicyValidationFailed()`', 'a DEEP-policy validator denied the call, reverted, or isn’t registered/active (V3)'],
+          ['`CalldataTooShort()`', 'DeFi calldata under 4 bytes — no selector to check (V3)'],
           ['`RecipientNotAllowed()`', 'destination/spender not in `allowedRecipients`'],
         ],
       },
@@ -301,7 +323,7 @@ export const agentIntegration: LocalizedDoc = {
   es: {
     title: 'Guía de integración de agentes',
     intro:
-      'Cómo un agente IA externo (o cualquier sistema automatizado) ejecuta transacciones a través de una BVCC Agent Wallet (`BVCCAgentWalletV2`). Todos los permisos y límites de gasto se aplican on-chain — el agente no puede excederlos haga lo que haga su código.',
+      'Cómo un agente IA externo (o cualquier sistema automatizado) ejecuta transacciones a través de una BVCC Agent Wallet (`BVCCAgentWalletV3`). Todos los permisos, límites de gasto y call policies se aplican on-chain — el agente no puede excederlos haga lo que haga su código.',
     blocks: [
       { type: 'h2', text: 'Cómo funciona' },
       {
@@ -353,7 +375,7 @@ export const agentIntegration: LocalizedDoc = {
             '`callData` empieza por `0x095ea7b3` (`approve(address,uint256)`)',
             'whitelist de tokens + tope por token + el spender se comprueba contra la whitelist de destinatarios',
           ],
-          ['3. DeFi / cualquier otra', 'cualquier otro `callData`', 'el `target` debe estar en la whitelist de protocolos'],
+          ['3. DeFi / cualquier otra', 'cualquier otro `callData`', 'el `target` en la whitelist de protocolos + una call policy registrada para el selector (V3)'],
         ],
       },
       {
@@ -362,6 +384,24 @@ export const agentIntegration: LocalizedDoc = {
           'El agente nunca puede llamar a la propia wallet (`AgentCannotCallWallet`) — las funciones de dueño siguen siendo solo del dueño.',
           'Las cantidades de `approve` cuentan contra los presupuestos diario/total por token, igual que los transfers. Es deliberadamente conservador: evita drenar fondos con un `transferFrom` externo tras un approve grande.',
         ],
+      },
+
+      { type: 'h2', text: 'Call policies (caso 3, V3)' },
+      {
+        type: 'p',
+        text: 'Para que una llamada DeFi pase, el dueño de la wallet debe haber registrado una call policy para ese protocolo + selector. Es independiente de `allowedProtocols` (que solo whitelistea el target) y es lo que impide que una clave de agente robada redirija fondos. Tú no fijas policies — lo hace el dueño en la app — pero necesitas saber qué pasa:',
+      },
+      {
+        type: 'list',
+        items: [
+          'El selector debe estar permitido. Si el dueño no registró una policy para ese `target` + selector exacto, revierte con `SelectorNotAllowed`.',
+          'El destinatario debe ser la wallet. Para selectores pinneados (SwapRouter02, Aave Pool supply/withdraw/borrow/repay, …) el argumento recipient / `to` / `onBehalfOf` debe ser la agent wallet — pon ahí la wallet, no tu propia dirección. Si no, `PinnedArgMismatch`.',
+          'El calldata complejo se valida on-chain. Para el Universal Router (`execute`) y el v4 PositionManager (`modifyLiquidities`), la llamada se enruta a un validator on-chain que comprueba cada destinatario. Falla cerrado (`PolicyValidationFailed`) si el validator no está activo en esa red o algún destinatario no es la wallet.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Los casos 1, 2 y 2b (envío de ETH, transfer de token, approve) no se ven afectados por las call policies — siguen usando las whitelists de destinatarios/tokens. Las call policies solo gobiernan el caso 3.',
       },
 
       { type: 'h2', text: 'Límites de gasto' },
@@ -400,7 +440,7 @@ export const agentIntegration: LocalizedDoc = {
         headers: ['Whitelist', 'Vacía significa'],
         rows: [
           ['`allowedTokens`', 'denegar todos los transfers/approves ERC-20'],
-          ['`allowedProtocols`', 'denegar todas las llamadas DeFi (caso 3)'],
+          ['`allowedProtocols`', 'revierte (`NoProtocolsWhitelisted`) — se requiere al menos un protocolo para DeFi'],
           [
             '`allowedRecipients`',
             'cualquier destino permitido (cuando está definida aplica a destinatarios de ETH, de tokens y a spenders de approve)',
@@ -443,6 +483,10 @@ export const agentIntegration: LocalizedDoc = {
           ['`ExceedsTokenMaxAmount()` / `TokenBatchLimitExceeded()`', 'tope de token por tx/batch'],
           ['`TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'presupuestos por token (día / vida)'],
           ['`NoProtocolsWhitelisted()` / `ProtocolNotAllowed()`', 'llamada DeFi con whitelist vacía / target no listado'],
+          ['`SelectorNotAllowed()`', 'sin call policy registrada para este `target` + selector (V3)'],
+          ['`PinnedArgMismatch()`', 'una palabra pinneada del calldata (recipient/spender) no es la wallet / no es un protocolo whitelisteado (V3)'],
+          ['`PolicyValidationFailed()`', 'un validator de policy DEEP denegó la llamada, revirtió, o no está registrado/activo (V3)'],
+          ['`CalldataTooShort()`', 'calldata DeFi de menos de 4 bytes — no hay selector que comprobar (V3)'],
           ['`RecipientNotAllowed()`', 'destino/spender fuera de `allowedRecipients`'],
         ],
       },

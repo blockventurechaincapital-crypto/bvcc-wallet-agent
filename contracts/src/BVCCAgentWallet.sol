@@ -1,19 +1,35 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {BVCCSmartWalletV2} from "./BVCCWallet.sol";
+import {BVCCSmartWalletV3} from "./BVCCWallet.sol";
+import {IBVCCValidator} from "./IBVCCValidator.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 import {ERC7579Utils} from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
-contract BVCCAgentWalletV2 is BVCCSmartWalletV2, ReentrancyGuard, Pausable {
+contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
 
     uint256 public constant MAX_WHITELIST = 20;
 
     /// @dev ERC-20 approve(address,uint256) selector — same calldata layout as transfer.
     ///      transfer is decoded via the inherited _isDirectTransfer/_decodeTransfer helpers.
     bytes4 private constant APPROVE_SELECTOR = bytes4(keccak256("approve(address,uint256)"));
+
+    /// @dev Fixed validator registry for DEEP_VALIDATION policies (CREATE2 — same
+    ///      address on every chain, deployed BEFORE the factories). Compiled in as
+    ///      a constant so policies never carry validator addresses (anti-phishing).
+    ///      Must match the address asserted by test/Create2Consistency.t.sol.
+    address internal constant VALIDATOR_REGISTRY = 0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2;
+
+    /// @dev Call-policy word layout (one uint256 per (target, selector)):
+    ///      bit 255           = selector allowed (0 == whole policy denied)
+    ///      bit 254           = DEEP_VALIDATION via VALIDATOR_REGISTRY (fail-closed)
+    ///      bits 223..192     = PIN_WALLET bitmap  (calldata word i == address(this))
+    ///      bits 191..160     = PIN_PROTOCOL bitmap (calldata word i in allowedProtocols)
+    ///      bits 159..0       = reserved (0)
+    uint256 internal constant POLICY_ALLOWED = 1 << 255;
+    uint256 internal constant POLICY_DEEP    = 1 << 254;
 
     error AgentBudgetExceeded();
     error AgentCannotCallWallet();
@@ -40,6 +56,10 @@ contract BVCCAgentWalletV2 is BVCCSmartWalletV2, ReentrancyGuard, Pausable {
     error TooManyRecipients();
     error TooManyTokens();
     error UnknownAgent();
+    error SelectorNotAllowed();
+    error PinnedArgMismatch();
+    error CalldataTooShort();
+    error PolicyValidationFailed();
     error ZeroAmount();
 
 
@@ -95,6 +115,14 @@ contract BVCCAgentWalletV2 is BVCCSmartWalletV2, ReentrancyGuard, Pausable {
     address[] private _agentList;
     mapping(address => bool) private _isAgent;
 
+    /// @dev target => selector => policy word. 0 = denied. Agent Case 3 calls are
+    ///      default-deny: a whitelisted protocol is callable only on selectors the
+    ///      owner registered here (wallet-global — policies describe the protocol,
+    ///      not the agent).
+    mapping(address => mapping(bytes4 => uint256)) private _callPolicies;
+
+    event CallPolicySet(address indexed target, bytes4 indexed selector, uint256 policy);
+
     /// @dev Transient-like flag: set to agent address before super.execute(), cleared after.
     ///      Allows _erc7821AuthorizedExecutor to grant execute() access during agent calls.
     address private _currentAgent;
@@ -119,7 +147,7 @@ contract BVCCAgentWalletV2 is BVCCSmartWalletV2, ReentrancyGuard, Pausable {
         uint128 totalSpentWei
     );
 
-    constructor(bytes32 qx, bytes32 qy) BVCCSmartWalletV2(qx, qy) {}
+    constructor(bytes32 qx, bytes32 qy) BVCCSmartWalletV3(qx, qy) {}
 
     /**
      * @notice Authorize an AI agent with specific spend permissions.
@@ -433,15 +461,70 @@ contract BVCCAgentWalletV2 is BVCCSmartWalletV2, ReentrancyGuard, Pausable {
         } else {
             // ── Case 3: DeFi / Swap ────────────────────────────────────────
             require(perm.allowedProtocols.length > 0, NoProtocolsWhitelisted());
+            require(_isAllowedProtocol(perm, exec.target), ProtocolNotAllowed());
+            _checkCallPolicy(perm, exec);
+        }
+    }
 
-            bool found = false;
-            for (uint256 i = 0; i < perm.allowedProtocols.length; i++) {
-                if (perm.allowedProtocols[i] == exec.target) {
-                    found = true;
-                    break;
-                }
+    /**
+     * @notice Register, update or revoke (policy = 0) the call policy for a
+     *         (target, selector) pair. See the policy word layout above.
+     * @dev Must be called via execute() — authenticated by Face ID / WebAuthn.
+     */
+    function setCallPolicy(address target, bytes4 selector, uint256 policy) external {
+        require(msg.sender == address(this), OnlyWallet());
+        _callPolicies[target][selector] = policy;
+        emit CallPolicySet(target, selector, policy);
+    }
+
+    function getCallPolicy(address target, bytes4 selector) external view returns (uint256) {
+        return _callPolicies[target][selector];
+    }
+
+    /// @dev Linear membership check over the agent's protocol whitelist (<= 20 items).
+    function _isAllowedProtocol(AgentPermission storage perm, address a) internal view returns (bool) {
+        for (uint256 i = 0; i < perm.allowedProtocols.length; i++) {
+            if (perm.allowedProtocols[i] == a) return true;
+        }
+        return false;
+    }
+
+    /**
+     * @dev Case 3 policy enforcement: default-deny per selector; pinned calldata
+     *      words must be the wallet (PIN_WALLET) or a whitelisted protocol
+     *      (PIN_PROTOCOL); DEEP_VALIDATION defers to the fixed registry.
+     *      Reading past calldata end yields 0 => pin mismatch => revert, so no
+     *      per-word bounds check is needed (fail-closed).
+     */
+    function _checkCallPolicy(AgentPermission storage perm, Execution calldata exec) internal view {
+        bytes calldata data = exec.callData;
+        require(data.length >= 4, CalldataTooShort());
+        bytes4 sel;
+        assembly { sel := calldataload(data.offset) }
+        uint256 policy = _callPolicies[exec.target][sel];
+        require(policy & POLICY_ALLOWED != 0, SelectorNotAllowed());
+
+        uint256 pinsW = (policy >> 192) & 0xFFFFFFFF;
+        uint256 pinsP = (policy >> 160) & 0xFFFFFFFF;
+        for (uint256 w = 0; (pinsW | pinsP) >> w != 0; w++) {
+            if (((pinsW | pinsP) >> w) & 1 == 0) continue;
+            uint256 word;
+            assembly { word := calldataload(add(data.offset, add(4, mul(w, 32)))) }
+            if ((pinsW >> w) & 1 == 1) {
+                // Full-word compare also rejects dirty high bits.
+                require(word == uint256(uint160(address(this))), PinnedArgMismatch());
+            } else {
+                require(word >> 160 == 0 && _isAllowedProtocol(perm, address(uint160(word))), PinnedArgMismatch());
             }
-            require(found, ProtocolNotAllowed());
+        }
+
+        if (policy & POLICY_DEEP != 0) {
+            // Fail-closed: a revert in the registry (or no code at the address)
+            // bubbles up and denies; an explicit false is rejected here.
+            require(
+                IBVCCValidator(VALIDATOR_REGISTRY).validate(address(this), exec.target, exec.value, data),
+                PolicyValidationFailed()
+            );
         }
     }
 

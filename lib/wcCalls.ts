@@ -92,7 +92,6 @@ const INFRA = [
   '0x66a9893cc07d91d95644aedd05d03f95e1dba8af', // Ethereum (v4)
   '0x5e325eda8064b456f4781070c0738d849c824258', // Arbitrum One (v3-era)
   '0xa51afafe0263b40edaef0df8781ea9aa03e381a3', // Arbitrum One (v4, docs)
-  '0x8b844f885672f333bc0042cb669255f93a4c1e6b', // Arbitrum One (el que usa la app, confirmado on-chain)
   '0x6ff5693b99212da76ad316178a184ab56d299b43', // Base (v4)
   '0x4dae2f939acf50408e13d58534ff8c2776d45265', // BNB Chain
   // Aave V3 Pool

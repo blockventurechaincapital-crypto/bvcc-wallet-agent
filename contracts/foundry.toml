@@ -8,8 +8,18 @@ remappings = [
     "@openzeppelin/community-contracts/=lib/openzeppelin-community-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
 ]
+# V3 build is FROZEN for deterministic CREATE2. Do not change solc/optimizer_runs/
+# evm_version without re-baking VALIDATOR_REGISTRY (BVCCAgentWallet.sol) and the
+# EXPECTED_* addresses (DeployFactoriesMainnet.s.sol) — test/Create2Consistency.t.sol
+# guards this. solc 0.8.36 chosen deliberately: skips the via-IR pipeline bug range
+# 0.8.28–0.8.33; +30 bytes vs 0.8.30 is acceptable (293 bytes of factory margin).
+solc = "0.8.36"
 via_ir = true
+evm_version = "cancun"
 optimizer = true
-optimizer_runs = 200
+optimizer_runs = 50
+
+# Deploy scripts write per-network provenance manifests here. No effect on bytecode/CREATE2.
+fs_permissions = [{ access = "write", path = "./deployments" }]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

@@ -2,11 +2,11 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCSmartWalletFactoryV2} from "../src/BVCCWalletFactory.sol";
-import {BVCCSmartWalletV2} from "../src/BVCCWallet.sol";
+import {BVCCSmartWalletFactoryV3} from "../src/BVCCWalletFactory.sol";
+import {BVCCSmartWalletV3} from "../src/BVCCWallet.sol";
 
-contract BVCCSmartWalletFactoryV2Test is Test {
-    BVCCSmartWalletFactoryV2 factory;
+contract BVCCSmartWalletFactoryV3Test is Test {
+    BVCCSmartWalletFactoryV3 factory;
 
     // P-256 generator point — valid public key
     uint256 constant PUB_KEY_X = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296;
@@ -18,7 +18,7 @@ contract BVCCSmartWalletFactoryV2Test is Test {
     address constant OWNER = address(0xB0CC);
 
     function setUp() public {
-        factory = new BVCCSmartWalletFactoryV2(OWNER);
+        factory = new BVCCSmartWalletFactoryV3(OWNER);
     }
 
     // =========================================================================
@@ -59,7 +59,7 @@ contract BVCCSmartWalletFactoryV2Test is Test {
     function test_WalletCreatedEventEmitted() public {
         address predicted = factory.getWalletAddress(PUB_KEY_X, PUB_KEY_Y);
         vm.expectEmit(true, false, false, true);
-        emit BVCCSmartWalletFactoryV2.WalletCreated(predicted, PUB_KEY_X, PUB_KEY_Y, CRED_ID);
+        emit BVCCSmartWalletFactoryV3.WalletCreated(predicted, PUB_KEY_X, PUB_KEY_Y, CRED_ID);
         factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
     }
 
@@ -69,7 +69,7 @@ contract BVCCSmartWalletFactoryV2Test is Test {
 
     function test_GuardiansSetOnDeployedWallet() public {
         address deployed = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
-        BVCCSmartWalletV2 w = BVCCSmartWalletV2(payable(deployed));
+        BVCCSmartWalletV3 w = BVCCSmartWalletV3(payable(deployed));
         assertEq(w.guardians(0), GUARDIANS[0]);
         assertEq(w.guardians(1), GUARDIANS[1]);
         assertEq(w.guardians(2), GUARDIANS[2]);
@@ -97,7 +97,7 @@ contract BVCCSmartWalletFactoryV2Test is Test {
 
     function test_KillOnlyOwner() public {
         vm.prank(address(0xBAD));
-        vm.expectRevert(BVCCSmartWalletFactoryV2.NotOwner.selector);
+        vm.expectRevert(BVCCSmartWalletFactoryV3.NotOwner.selector);
         factory.kill();
     }
 
@@ -106,7 +106,7 @@ contract BVCCSmartWalletFactoryV2Test is Test {
         factory.kill();
         assertTrue(factory.killed());
 
-        vm.expectRevert(BVCCSmartWalletFactoryV2.FactoryKilledError.selector);
+        vm.expectRevert(BVCCSmartWalletFactoryV3.FactoryKilledError.selector);
         factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
     }
 
@@ -120,7 +120,7 @@ contract BVCCSmartWalletFactoryV2Test is Test {
 
     function test_KillEmitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit BVCCSmartWalletFactoryV2.FactoryKilled(OWNER);
+        emit BVCCSmartWalletFactoryV3.FactoryKilled(OWNER);
         vm.prank(OWNER);
         factory.kill();
     }

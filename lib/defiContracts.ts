@@ -46,7 +46,6 @@ const NAMED: Record<string, string> = {
   '0x000000000022d473030f116ddee9f6b43ac78ba3': 'Permit2 (Uniswap)',
   '0x66a9893cc07d91d95644aedd05d03f95e1dba8af': 'Uniswap Universal Router',
   '0xa51afafe0263b40edaef0df8781ea9aa03e381a3': 'Uniswap Universal Router',
-  '0x8b844f885672f333bc0042cb669255f93a4c1e6b': 'Uniswap Universal Router',
   '0x6ff5693b99212da76ad316178a184ab56d299b43': 'Uniswap Universal Router',
   '0x5e325eda8064b456f4781070c0738d849c824258': 'Uniswap Universal Router',
   '0xc36442b4a4522e871399cd717abdd847ab11fe88': 'Uniswap V3 Positions',

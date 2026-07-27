@@ -14,6 +14,15 @@ import { useNetwork } from '@/lib/NetworkContext'
 import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { policyCallsFor, presetProtocolSuggestions } from '@/lib/callPolicies'
+import {
+  composeFromCapabilities,
+  capabilitiesFromProtocols,
+  agentCapabilitiesFor,
+  type CapabilityId,
+} from '@/lib/agentCapabilities'
+import { CapabilityPicker } from '@/components/CapabilityPicker'
+import { ExplorerAddress } from '@/components/ExplorerAddress'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import { AgentAvatar, AgentAvatarPicker } from '@/components/AgentAvatar'
 import type { NetworkConfig } from '@/lib/networks'
@@ -32,6 +41,7 @@ const C = {
   error: '#fc8181',
   success: '#68d391',
   warn: '#f6ad55',
+  info: '#63b3ed',
 }
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
@@ -171,6 +181,15 @@ export default function AgentsPage() {
   const [fRecipients, setFRecipients] = useState<string[]>([])
   const [fRecipientInput, setFRecipientInput] = useState('')
   const [fExpiry, setFExpiry] = useState('')
+  // Selected capabilities. The picker composes protocols/tokens/recipients from
+  // these; the manual lists below hold only what the user typed by hand.
+  const [fCaps, setFCaps] = useState<CapabilityId[]>([])
+  // What the agent already has ON-CHAIN when the edit modal opens (lowercased).
+  // Suggestion chips use it to show green (already accepted on-chain) vs blue
+  // (staged in this form, not yet signed). Empty when authorizing a new agent.
+  const [onChainBaseline, setOnChainBaseline] = useState<{
+    tokens: Set<string>; protocols: Set<string>; recipients: Set<string>
+  }>({ tokens: new Set(), protocols: new Set(), recipients: new Set() })
 
   // ── Increase budget state ──────────────────────────────────────────────────
   const [fIncrease, setFIncrease] = useState('')
@@ -296,13 +315,27 @@ export default function AgentsPage() {
           totalBudget: (p.tokenTotalBudgets?.[i] ?? 0n) > 0n ? formatTokenAmount(p.tokenTotalBudgets[i], dec) : '',
         }
       }))
-      setFProtocols([...p.allowedProtocols])
-      setFRecipients([...p.allowedRecipients])
+      // Split the on-chain lists into "covered by a capability" and "manual". The
+      // picker owns the composed addresses; the raw lists show only the rest (e.g.
+      // a hand-added 1inch address), so nothing appears twice.
+      const caps = capabilitiesFromProtocols(network.chainId, [...p.allowedProtocols] as Address[])
+      const composed = composeFromCapabilities(network.chainId, caps)
+      const composedProto = new Set(composed.protocols.map(a => a.toLowerCase()))
+      const composedRecip = new Set(composed.recipients.map(a => a.toLowerCase()))
+      setFCaps(caps)
+      setFProtocols(p.allowedProtocols.filter(a => !composedProto.has(a.toLowerCase())))
+      setFRecipients(p.allowedRecipients.filter(a => !composedRecip.has(a.toLowerCase())))
       setFExpiry(p.expiry > 0n ? new Date(Number(p.expiry) * 1000).toISOString().slice(0, 16) : '')
+      setOnChainBaseline({
+        tokens: new Set(p.allowedTokens.map(a => a.toLowerCase())),
+        protocols: new Set(p.allowedProtocols.map(a => a.toLowerCase())),
+        recipients: new Set(p.allowedRecipients.map(a => a.toLowerCase())),
+      })
     } else {
       setFAgent(''); setFMaxPerTx(''); setFDailyLimit(''); setFTotalBudget('')
       setFPeriodBudget(''); setFPeriodDays('')
-      setFTokenLimits([]); setFProtocols([]); setFRecipients([]); setFExpiry('')
+      setFTokenLimits([]); setFProtocols([]); setFRecipients([]); setFExpiry(''); setFCaps([])
+      setOnChainBaseline({ tokens: new Set(), protocols: new Set(), recipients: new Set() })
     }
     setFTokenInput('')
     setFProtocolInput('')
@@ -319,8 +352,13 @@ export default function AgentsPage() {
   }
 
   // ── Send UserOp helper ─────────────────────────────────────────────────────
-  async function sendUserOp(innerCallData: Hex): Promise<string> {
+  // Accepts a single inner call or a batch — all items are self-calls on the wallet
+  // (owner functions require msg.sender == wallet). One Face ID signature covers the
+  // whole batch, so authorizeAgent + setCallPolicy(...) go together atomically.
+  async function sendUserOp(inner: Hex | Hex[]): Promise<string> {
     if (!walletAddress || !credentialId) throw new Error('No hay wallet activa')
+
+    const innerCalls = Array.isArray(inner) ? inner : [inner]
 
     const nonce = await publicClient.readContract({
       address: walletAddress as Address,
@@ -335,7 +373,7 @@ export default function AgentsPage() {
         { name: 'value', type: 'uint256' },
         { name: 'callData', type: 'bytes' },
       ]}],
-      [[{ target: walletAddress as Address, value: 0n, callData: innerCallData }]]
+      [innerCalls.map(callData => ({ target: walletAddress as Address, value: 0n, callData }))]
     )
 
     const callData = encodeFunctionData({
@@ -421,13 +459,45 @@ export default function AgentsPage() {
       const periodDuration = fPeriodDays ? BigInt(Math.round(parseFloat(fPeriodDays) * 86400)) : 0n
       const expiry = fExpiry ? BigInt(Math.floor(new Date(fExpiry).getTime() / 1000)) : 0n
 
+      // Compose what the selected capabilities entail, then merge with manual entries.
+      const composed = composeFromCapabilities(network.chainId, fCaps)
+      const lc = (a: string) => a.toLowerCase()
+
       const validTokenLimits = fTokenLimits.filter(t => isAddress(t.address))
+      const dec = (a: string) => getTokenDecimals(a, network.tokens.usdc ?? null)
       const validTokens = validTokenLimits.map(t => t.address as Address)
-      const tokenMaxAmounts = validTokenLimits.map(t => parseTokenAmount(t.maxPerTx, getTokenDecimals(t.address, network.tokens.usdc ?? null)))
-      const tokenDailyLimits = validTokenLimits.map(t => parseTokenAmount(t.dailyLimit, getTokenDecimals(t.address, network.tokens.usdc ?? null)))
-      const tokenTotalBudgets = validTokenLimits.map(t => parseTokenAmount(t.totalBudget, getTokenDecimals(t.address, network.tokens.usdc ?? null)))
-      const validProtocols = fProtocols.filter(p => isAddress(p)) as Address[]
-      const validRecipients = fRecipients.filter(r => isAddress(r)) as Address[]
+      const tokenMaxAmounts = validTokenLimits.map(t => parseTokenAmount(t.maxPerTx, dec(t.address)))
+      const tokenDailyLimits = validTokenLimits.map(t => parseTokenAmount(t.dailyLimit, dec(t.address)))
+      const tokenTotalBudgets = validTokenLimits.map(t => parseTokenAmount(t.totalBudget, dec(t.address)))
+      // Tokens a capability requires (e.g. WETH) that the user hasn't listed → add
+      // with unlimited limits so the flow works; the user can tighten them later.
+      const haveTokens = new Set(validTokens.map(lc))
+      for (const tk of composed.requiredTokens) {
+        if (!haveTokens.has(lc(tk))) {
+          validTokens.push(tk); tokenMaxAmounts.push(0n); tokenDailyLimits.push(0n); tokenTotalBudgets.push(0n)
+          haveTokens.add(lc(tk))
+        }
+      }
+
+      // Protocols = manual ∪ composed (deduped).
+      const manualProtocols = fProtocols.filter(p => isAddress(p)) as Address[]
+      const seenP = new Set<string>()
+      const validProtocols: Address[] = []
+      for (const p of [...manualProtocols, ...composed.protocols]) {
+        if (!seenP.has(lc(p))) { seenP.add(lc(p)); validProtocols.push(p) }
+      }
+
+      // Recipients: only meaningful when the whitelist is active. If the user added
+      // any destination, fold in the contracts the capabilities need (Pool, Permit2,
+      // routers — their approve is a Case-2b call). If empty, leave it empty (= any).
+      const manualRecipients = fRecipients.filter(r => isAddress(r)) as Address[]
+      let validRecipients: Address[] = []
+      if (manualRecipients.length > 0) {
+        const seenR = new Set<string>()
+        for (const r of [...manualRecipients, ...composed.recipients]) {
+          if (!seenR.has(lc(r))) { seenR.add(lc(r)); validRecipients.push(r) }
+        }
+      }
 
       const innerCallData = encodeFunctionData({
         abi: BVCC_AGENT_WALLET_ABI,
@@ -449,7 +519,12 @@ export default function AgentsPage() {
         }],
       })
 
-      const txHash = await sendUserOp(innerCallData)
+      // V3: bundle the required setCallPolicy calls for whitelisted protocols that have
+      // presets (SwapRouter02, Aave Pool). Without these, every Case-3 call reverts
+      // SelectorNotAllowed. One Face ID signature covers authorize + policies.
+      const policyCalls = policyCallsFor(network.chainId, validProtocols)
+
+      const txHash = await sendUserOp([innerCallData, ...policyCalls])
       setActionTxHash(txHash)
       setActionStatus('success')
       await loadAgents()
@@ -800,22 +875,34 @@ export default function AgentsPage() {
           </div>
         )}
 
-        {/* Protocols */}
+        {/* Plain-language capability line — what this agent can actually do */}
+        {(() => {
+          const caps = capabilitiesFromProtocols(network.chainId, [...p.allowedProtocols] as Address[])
+          if (caps.length === 0) return null
+          return (
+            <div style={{ marginBottom: '8px', fontSize: '11px', color: C.muted }}>
+              <span style={{ color: C.subtle }}>{t('agents.cap.canDo')} </span>
+              {caps.map(id => t(`agents.cap.chip.${id}`)).join(' · ')}
+            </div>
+          )
+        })()}
+
+        {/* Protocols (addresses, clickable to verify on the explorer) */}
         {p.allowedProtocols.length > 0 && (
-          <div style={{ marginBottom: '8px' }}>
+          <div style={{ marginBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'baseline' }}>
             <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.protocols')}</span>
             {p.allowedProtocols.map(pr => (
-              <span key={pr} style={{ fontSize: '11px', fontFamily: 'monospace', color: C.muted, marginRight: '8px' }}>{shortAddr(pr)}</span>
+              <ExplorerAddress key={pr} addr={pr} explorerBase={network.blockExplorer.url} tab="code" short />
             ))}
           </div>
         )}
 
         {/* Recipients whitelist */}
         {p.allowedRecipients.length > 0 && (
-          <div style={{ marginBottom: '8px' }}>
+          <div style={{ marginBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'baseline' }}>
             <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.ethRecipients')}</span>
             {p.allowedRecipients.map(r => (
-              <span key={r} style={{ fontSize: '11px', fontFamily: 'monospace', color: C.muted, marginRight: '8px' }}>{shortAddr(r)}</span>
+              <ExplorerAddress key={r} addr={r} explorerBase={network.blockExplorer.url} tab="code" short />
             ))}
           </div>
         )}
@@ -854,7 +941,7 @@ export default function AgentsPage() {
   }
 
   function AddressListInput({
-    items, onAdd, onRemove, input, setInput, placeholder, suggestions,
+    items, onAdd, onRemove, input, setInput, placeholder, suggestions, onChain, alsoStaged,
   }: {
     items: string[]
     onAdd: (v: string) => void
@@ -863,6 +950,10 @@ export default function AgentsPage() {
     setInput: (v: string) => void
     placeholder: string
     suggestions?: { label: string; address: string }[]
+    /** Addresses already accepted on-chain (lowercased) — shown green vs blue-staged. */
+    onChain?: Set<string>
+    /** Addresses staged via a selected capability (not in `items`) — count as staged. */
+    alsoStaged?: Set<string>
   }) {
     return (
       <div>
@@ -892,21 +983,32 @@ export default function AgentsPage() {
             +
           </button>
         </div>
-        {suggestions && suggestions.length > 0 && items.length === 0 && (
+        {suggestions && suggestions.length > 0 && (
+          // Green = already accepted on-chain; blue = staged in this form (not yet
+          // signed); gold = available, click to add.
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-            {suggestions.map(s => (
-              <button
-                key={s.address}
-                onClick={() => onAdd(s.address)}
-                style={{
-                  padding: '3px 10px', fontSize: '11px',
-                  backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`,
-                  borderRadius: '4px', color: C.gold, cursor: 'pointer',
-                }}
-              >
-                {s.label}
-              </button>
-            ))}
+            {suggestions.map(s => {
+              const key = s.address.toLowerCase()
+              const staged = items.some(it => it.toLowerCase() === key) || (alsoStaged?.has(key) ?? false)
+              const onchain = onChain?.has(key) ?? false
+              const color = staged ? (onchain ? C.success : C.info) : C.gold
+              const bg = staged ? (onchain ? 'rgba(104,211,145,0.12)' : 'rgba(99,179,237,0.12)') : C.goldDim
+              const border = staged ? (onchain ? C.success : C.info) : C.goldBorder
+              return (
+                <button
+                  key={s.address}
+                  onClick={staged ? undefined : () => onAdd(s.address)}
+                  title={onchain ? `${s.address} (accepted on-chain)` : s.address}
+                  style={{
+                    padding: '3px 10px', fontSize: '11px',
+                    backgroundColor: bg, border: `1px solid ${border}`,
+                    borderRadius: '4px', color, cursor: staged ? 'default' : 'pointer',
+                  }}
+                >
+                  {staged ? (onchain ? '✓ ' : '• ') : ''}{s.label}
+                </button>
+              )
+            })}
           </div>
         )}
         {items.map((item, i) => (
@@ -973,18 +1075,31 @@ export default function AgentsPage() {
           </button>
         </div>
 
-        {/* Quick-add suggestions */}
-        {knownTokens.length > 0 && fTokenLimits.length === 0 && (
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-            {knownTokens.map(s => (
-              <button key={s.address} onClick={() => addToken(s.address)} style={{
-                padding: '3px 10px', fontSize: '11px',
-                backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`,
-                borderRadius: '4px', color: C.gold, cursor: 'pointer',
-              }}>
-                {s.label}
-              </button>
-            ))}
+        {/* Quick-add: green = on-chain, blue = staged this form, gold = click to add. */}
+        {knownTokens.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+            {knownTokens.map(s => {
+              const key = s.address.toLowerCase()
+              const staged = fTokenLimits.some(t => t.address.toLowerCase() === key)
+              const onchain = onChainBaseline.tokens.has(key)
+              const color = staged ? (onchain ? C.success : C.info) : C.gold
+              const bg = staged ? (onchain ? 'rgba(104,211,145,0.12)' : 'rgba(99,179,237,0.12)') : C.goldDim
+              const border = staged ? (onchain ? C.success : C.info) : C.goldBorder
+              return (
+                <button
+                  key={s.address}
+                  onClick={staged ? undefined : () => addToken(s.address)}
+                  title={onchain ? `${s.address} (accepted on-chain)` : s.address}
+                  style={{
+                    padding: '3px 10px', fontSize: '11px',
+                    backgroundColor: bg, border: `1px solid ${border}`,
+                    borderRadius: '4px', color, cursor: staged ? 'default' : 'pointer',
+                  }}
+                >
+                  {staged ? (onchain ? '✓ ' : '• ') : ''}{s.label}
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -1064,9 +1179,22 @@ export default function AgentsPage() {
     display: 'block', marginBottom: '6px',
   }
 
-  const knownProtocolSuggestions = network.uniswap
-    ? [{ label: 'Uniswap SwapRouter', address: network.uniswap.swapRouter }]
-    : []
+  const knownProtocolSuggestions = (() => {
+    const list: { label: string; address: Address }[] = []
+    if (network.uniswap) list.push({ label: 'Uniswap SwapRouter', address: network.uniswap.swapRouter })
+    // V3 preset protocols (SwapRouter02 / Universal Router / Aave) — deduped by address.
+    for (const s of presetProtocolSuggestions(network.chainId)) {
+      if (!list.some(x => x.address.toLowerCase() === s.address.toLowerCase())) list.push(s)
+    }
+    return list
+  })()
+
+  // Protocols/recipients the selected capabilities compose (managed by the picker,
+  // not the manual lists). Used so a preset chip shows as staged (blue/green), not
+  // gold, when a capability already pulls it in.
+  const composedFromCaps = composeFromCapabilities(network.chainId, fCaps)
+  const composedProtoSet = new Set(composedFromCaps.protocols.map(a => a.toLowerCase()))
+  const composedRecipSet = new Set(composedFromCaps.recipients.map(a => a.toLowerCase()))
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -1268,13 +1396,33 @@ export default function AgentsPage() {
                     </div>
                   </div>
 
+                  {/* Capability picker — the guided way to compose config */}
+                  {agentCapabilitiesFor(network.chainId).length > 0 && (
+                    <CapabilityPicker
+                      chainId={network.chainId}
+                      explorerBase={network.blockExplorer.url}
+                      selected={fCaps}
+                      onChange={setFCaps}
+                    />
+                  )}
+
+                  {/* Manual / advanced — always available */}
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: '14px', marginTop: '2px' }}>
+                    <p style={{ fontSize: '11px', color: C.muted, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 4px' }}>
+                      {t('agents.cap.manualSectionTitle')}
+                    </p>
+                    <p style={{ margin: '0 0 12px', fontSize: '12px', color: C.subtle, lineHeight: 1.5 }}>
+                      {t('agents.cap.manualSectionHint')}
+                    </p>
+                  </div>
+
                   {/* Tokens */}
                   <div>
                     <label style={labelStyle}>{t('agents.allowedTokens')}</label>
                     <TokenLimitsInput />
                   </div>
 
-                  {/* Protocols */}
+                  {/* Protocols (extra, hand-added) */}
                   <div>
                     <label style={labelStyle}>{t('agents.allowedProtocols')}</label>
                     <AddressListInput
@@ -1285,6 +1433,8 @@ export default function AgentsPage() {
                       setInput={setFProtocolInput}
                       placeholder="0x... protocol address"
                       suggestions={knownProtocolSuggestions}
+                      onChain={onChainBaseline.protocols}
+                      alsoStaged={composedProtoSet}
                     />
                   </div>
 
@@ -1301,6 +1451,7 @@ export default function AgentsPage() {
                       input={fRecipientInput}
                       setInput={setFRecipientInput}
                       placeholder="0x... recipient address"
+                      onChain={onChainBaseline.recipients}
                     />
                   </div>
 

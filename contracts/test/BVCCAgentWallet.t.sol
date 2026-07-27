@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCAgentWalletV2} from "../src/BVCCAgentWallet.sol";
+import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 import {ERC7579Utils} from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -38,11 +38,11 @@ contract MockSwapTarget {
 // Mock reentrancy attacker
 // ---------------------------------------------------------------------------
 contract MockReentrant {
-    BVCCAgentWalletV2 public target;
+    BVCCAgentWalletV3 public target;
     bytes32 public mode;
     bytes public execData;
 
-    function setup(BVCCAgentWalletV2 _target, bytes32 _mode, bytes calldata _execData) external {
+    function setup(BVCCAgentWalletV3 _target, bytes32 _mode, bytes calldata _execData) external {
         target = _target;
         mode = _mode;
         execData = _execData;
@@ -60,7 +60,7 @@ contract MockReentrant {
 // ---------------------------------------------------------------------------
 // Test contract
 // ---------------------------------------------------------------------------
-contract BVCCAgentWalletV2Test is Test {
+contract BVCCAgentWalletV3Test is Test {
     using ERC7579Utils for *;
 
     address constant ENTRY_POINT   = 0x433709009B8330FDa32311DF1C2AFA402eD8D009;
@@ -71,14 +71,14 @@ contract BVCCAgentWalletV2Test is Test {
     uint256 constant FEE_DEN       = 1_000_000;
     address constant BVCC_FEE_WALLET = 0x3e3eb089169a7315a994947465ce5f5FC3A307D4;
 
-    BVCCAgentWalletV2 agentWallet;
+    BVCCAgentWalletV3 agentWallet;
     MockERC20       token;
     MockSwapTarget  swapTarget;
     address         agent1;
     address         agent2;
 
     function setUp() public {
-        agentWallet = new BVCCAgentWalletV2(P256_GX, P256_GY);
+        agentWallet = new BVCCAgentWalletV3(P256_GX, P256_GY);
         token       = new MockERC20();
         swapTarget  = new MockSwapTarget();
         agentWallet.setGuardians([address(10), address(11), address(12)]);
@@ -133,6 +133,17 @@ contract BVCCAgentWalletV2Test is Test {
             agent, maxPerTx, daily, totalBudget, periodBudget, periodDuration,
             tokens, tokenAmounts, protocols, recipients, expiry
         ));
+        // V3 default-deny: register the mock swap selector for every whitelisted
+        // protocol so existing Case 3 flows keep working under call policies.
+        for (uint256 i = 0; i < protocols.length; i++) {
+            _allowSelector(protocols[i], bytes4(keccak256("swap(address,uint256)")));
+        }
+    }
+
+    /// @dev Registers an allow-only call policy (no pins) for (target, selector).
+    function _allowSelector(address target, bytes4 selector) internal {
+        vm.prank(address(agentWallet));
+        agentWallet.setCallPolicy(target, selector, 1 << 255);
     }
 
     /// @dev Builds an AuthorizeParams struct, defaulting per-token daily/total caps
@@ -149,7 +160,7 @@ contract BVCCAgentWalletV2Test is Test {
         address[] memory protocols,
         address[] memory recipients,
         uint64 expiry
-    ) internal pure returns (BVCCAgentWalletV2.AuthorizeParams memory ap) {
+    ) internal pure returns (BVCCAgentWalletV3.AuthorizeParams memory ap) {
         ap.agent             = agent;
         ap.maxPerTxWei       = maxPerTx;
         ap.dailyLimitWei     = daily;
@@ -219,7 +230,7 @@ contract BVCCAgentWalletV2Test is Test {
         address[] memory protocols = new address[](0);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.OnlyWallet.selector);
+        vm.expectRevert(BVCCAgentWalletV3.OnlyWallet.selector);
         agentWallet.authorizeAgent(_ap(agent1, 0, 0, 0, 0, 0, tokens, amounts, protocols, new address[](0), 0));
     }
 
@@ -246,7 +257,7 @@ contract BVCCAgentWalletV2Test is Test {
             uint64(block.timestamp + 1 days)
         ));
 
-        BVCCAgentWalletV2.AgentPermission memory perm = agentWallet.getAgentPermission(agent1);
+        BVCCAgentWalletV3.AgentPermission memory perm = agentWallet.getAgentPermission(agent1);
         assertEq(perm.maxPerTxWei,    1 ether,                         "maxPerTxWei");
         assertEq(perm.dailyLimitWei,  5 ether,                         "dailyLimitWei");
         assertEq(perm.totalBudgetWei, 10 ether,                        "totalBudgetWei");
@@ -271,7 +282,7 @@ contract BVCCAgentWalletV2Test is Test {
         amounts[1] = 0;
 
         vm.prank(address(agentWallet));
-        vm.expectRevert(BVCCAgentWalletV2.ArrayLengthMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV3.ArrayLengthMismatch.selector);
         agentWallet.authorizeAgent(_ap(agent1, 0, 0, 0, 0, 0, tokens, amounts, protocols, new address[](0), 0));
     }
 
@@ -285,7 +296,7 @@ contract BVCCAgentWalletV2Test is Test {
         }
 
         vm.prank(address(agentWallet));
-        vm.expectRevert(BVCCAgentWalletV2.TooManyTokens.selector);
+        vm.expectRevert(BVCCAgentWalletV3.TooManyTokens.selector);
         agentWallet.authorizeAgent(_ap(agent1, 0, 0, 0, 0, 0, tokens, amounts, protocols, new address[](0), 0));
     }
 
@@ -318,7 +329,7 @@ contract BVCCAgentWalletV2Test is Test {
         _authorizeEthOnly(agent1, 0, 0, 0);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.OnlyWallet.selector);
+        vm.expectRevert(BVCCAgentWalletV3.OnlyWallet.selector);
         agentWallet.revokeAgent(agent1);
     }
 
@@ -328,7 +339,7 @@ contract BVCCAgentWalletV2Test is Test {
         vm.prank(address(agentWallet));
         agentWallet.revokeAgent(agent1);
 
-        BVCCAgentWalletV2.AgentPermission memory perm = agentWallet.getAgentPermission(agent1);
+        BVCCAgentWalletV3.AgentPermission memory perm = agentWallet.getAgentPermission(agent1);
         assertFalse(perm.active, "active should be false after revoke");
     }
 
@@ -340,7 +351,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         address recipient = makeAddr("recipient");
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.NotAuthorizedAgent.selector);
+        vm.expectRevert(BVCCAgentWalletV3.NotAuthorizedAgent.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.1 ether, ""));
     }
 
@@ -362,7 +373,7 @@ contract BVCCAgentWalletV2Test is Test {
         _authorizeEthOnly(agent1, 0, 0, 1 ether);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.OnlyWallet.selector);
+        vm.expectRevert(BVCCAgentWalletV3.OnlyWallet.selector);
         agentWallet.increaseBudget(agent1, 1 ether);
     }
 
@@ -370,7 +381,7 @@ contract BVCCAgentWalletV2Test is Test {
         _authorizeEthOnly(agent1, 0, 0, 1 ether);
 
         vm.prank(address(agentWallet));
-        vm.expectRevert(BVCCAgentWalletV2.ZeroAmount.selector);
+        vm.expectRevert(BVCCAgentWalletV3.ZeroAmount.selector);
         agentWallet.increaseBudget(agent1, 0);
     }
 
@@ -383,7 +394,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         // 0.2 ether would exceed budget
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.AgentBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentBudgetExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.2 ether, ""));
 
         // Increase budget by 1 ether
@@ -401,7 +412,7 @@ contract BVCCAgentWalletV2Test is Test {
         agentWallet.revokeAgent(agent1);
 
         vm.prank(address(agentWallet));
-        vm.expectRevert(BVCCAgentWalletV2.AgentNotActive.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentNotActive.selector);
         agentWallet.increaseBudget(agent1, 1 ether);
     }
 
@@ -494,7 +505,7 @@ contract BVCCAgentWalletV2Test is Test {
         _authorizeEthOnly(agent1, 0.5 ether, 0, 0);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.ExceedsPerTxLimit.selector);
+        vm.expectRevert(BVCCAgentWalletV3.ExceedsPerTxLimit.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 1 ether, ""));
     }
 
@@ -517,7 +528,7 @@ contract BVCCAgentWalletV2Test is Test {
         bytes memory cd = abi.encodeWithSignature("transfer(address,uint256)", recipient, 100);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.NoTokensWhitelisted.selector);
+        vm.expectRevert(BVCCAgentWalletV3.NoTokensWhitelisted.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(token), 0, cd));
     }
 
@@ -537,7 +548,7 @@ contract BVCCAgentWalletV2Test is Test {
         bytes memory cd = abi.encodeWithSignature("transfer(address,uint256)", recipient, 100);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.TokenNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV3.TokenNotAllowed.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(token), 0, cd));
     }
 
@@ -556,7 +567,7 @@ contract BVCCAgentWalletV2Test is Test {
         bytes memory cd = abi.encodeWithSignature("transfer(address,uint256)", recipient, 200 ether);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.ExceedsTokenMaxAmount.selector);
+        vm.expectRevert(BVCCAgentWalletV3.ExceedsTokenMaxAmount.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(token), 0, cd));
     }
 
@@ -594,7 +605,7 @@ contract BVCCAgentWalletV2Test is Test {
         uint128[] memory tb = new uint128[](1);
         tokens[0] = tk; mx[0] = maxPerTx; dl[0] = daily; tb[0] = total;
 
-        BVCCAgentWalletV2.AuthorizeParams memory ap;
+        BVCCAgentWalletV3.AuthorizeParams memory ap;
         ap.agent             = agent;
         ap.allowedTokens     = tokens;
         ap.tokenMaxAmounts   = mx;
@@ -618,7 +629,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         _agentExec(agent1, address(token), 0, _transfer(rcpt, 60 ether)); // ok
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.TokenDailyLimitExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.TokenDailyLimitExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(token), 0, _transfer(rcpt, 50 ether)));
     }
 
@@ -641,7 +652,7 @@ contract BVCCAgentWalletV2Test is Test {
         _agentExec(agent1, address(token), 0, _transfer(rcpt, 60 ether));
         vm.warp(block.timestamp + 2 days); // lifetime cap persists across days
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.TokenTotalBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.TokenTotalBudgetExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(token), 0, _transfer(rcpt, 50 ether)));
     }
 
@@ -654,7 +665,7 @@ contract BVCCAgentWalletV2Test is Test {
         // Re-authorize the same agent+token; per-token spent (60) must be preserved.
         _authorizeOneToken(agent1, address(token), 0, 0, 100 ether);
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.TokenTotalBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.TokenTotalBudgetExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(token), 0, _transfer(rcpt, 50 ether)));
     }
 
@@ -670,7 +681,7 @@ contract BVCCAgentWalletV2Test is Test {
             address(token), 0, _transfer(r2, 50 ether)
         );
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.TokenDailyLimitExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.TokenDailyLimitExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, execData);
     }
 
@@ -686,7 +697,7 @@ contract BVCCAgentWalletV2Test is Test {
     }
 
     function test_TokenLimits_ArrayLengthMismatch() public {
-        BVCCAgentWalletV2.AuthorizeParams memory ap;
+        BVCCAgentWalletV3.AuthorizeParams memory ap;
         ap.agent = agent1;
         ap.allowedTokens = new address[](1);
         ap.allowedTokens[0] = address(token);
@@ -697,7 +708,7 @@ contract BVCCAgentWalletV2Test is Test {
         ap.allowedRecipients = new address[](0);
 
         vm.prank(address(agentWallet));
-        vm.expectRevert(BVCCAgentWalletV2.ArrayLengthMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV3.ArrayLengthMismatch.selector);
         agentWallet.authorizeAgent(ap);
     }
 
@@ -713,7 +724,7 @@ contract BVCCAgentWalletV2Test is Test {
         );
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.NoProtocolsWhitelisted.selector);
+        vm.expectRevert(BVCCAgentWalletV3.NoProtocolsWhitelisted.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(swapTarget), 0, cd));
     }
 
@@ -732,7 +743,7 @@ contract BVCCAgentWalletV2Test is Test {
         );
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.ProtocolNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV3.ProtocolNotAllowed.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(swapTarget), 0, cd));
     }
 
@@ -741,7 +752,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         // Try to call address(agentWallet) as the exec target
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.AgentCannotCallWallet.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentCannotCallWallet.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(address(agentWallet), 0, ""));
     }
 
@@ -749,7 +760,7 @@ contract BVCCAgentWalletV2Test is Test {
         // agent2 was never authorized
         address recipient = makeAddr("recipient");
         vm.prank(agent2);
-        vm.expectRevert(BVCCAgentWalletV2.NotAuthorizedAgent.selector);
+        vm.expectRevert(BVCCAgentWalletV3.NotAuthorizedAgent.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.1 ether, ""));
     }
 
@@ -766,7 +777,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         // Second send: 0.4 ether — would push daily to 1.1 ether → reverts
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.DailyLimitExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.DailyLimitExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.4 ether, ""));
     }
 
@@ -807,7 +818,7 @@ contract BVCCAgentWalletV2Test is Test {
         // Batch: 0.6 + 0.6 = 1.2 ether > 1 ether daily limit
         bytes memory execData = _batch2(r1, 0.6 ether, "", r2, 0.6 ether, "");
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.DailyLimitExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.DailyLimitExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, execData);
     }
 
@@ -835,7 +846,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         // Try to spend 0.2 more — would exceed 1 ether budget
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.AgentBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentBudgetExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.2 ether, ""));
     }
 
@@ -860,7 +871,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         // Next send fails
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.AgentBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentBudgetExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.1 ether, ""));
 
         // Increase budget by 1 ether
@@ -885,7 +896,7 @@ contract BVCCAgentWalletV2Test is Test {
 
         // Only 0.2 ether remaining in budget
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.AgentBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentBudgetExceeded.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.5 ether, ""));
 
         // Must use increaseBudget to allow more spending
@@ -910,7 +921,7 @@ contract BVCCAgentWalletV2Test is Test {
         vm.warp(block.timestamp + 2 hours);
 
         vm.prank(agent1);
-        vm.expectRevert(BVCCAgentWalletV2.AgentPermissionsExpired.selector);
+        vm.expectRevert(BVCCAgentWalletV3.AgentPermissionsExpired.selector);
         agentWallet.executeAsAgent(BATCH_MODE, _batch(recipient, 0.1 ether, ""));
     }
 
@@ -975,6 +986,6 @@ contract BVCCAgentWalletV2Test is Test {
     // =========================================================================
 
     function test_WalletType_IsAgent_Basic() public view {
-        assertEq(agentWallet.walletType(), 1, "BVCCAgentWalletV2 should return type 1 (AGENT)");
+        assertEq(agentWallet.walletType(), 1, "BVCCAgentWalletV3 should return type 1 (AGENT)");
     }
 }

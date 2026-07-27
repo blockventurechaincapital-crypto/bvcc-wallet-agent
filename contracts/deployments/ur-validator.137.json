@@ -1,0 +1,8 @@
+{
+  "chainId": 137,
+  "registry": "0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2",
+  "routerCodehash": "0xcce7316a5fce11c6c4f929a17f94f9bb90c4bec70d84a264dbed476c92de9f95",
+  "universalRouter": "0x1095692A6237d83C6a72F3F5eFEdb9A670C49223",
+  "validator": "0xC1C584E4149eD2EFe20DA0155b1B8257232102fF",
+  "validatorCodehash": "0xda930397cae9c7d41da6f055b93bef2a76e9b4616ce7adc7b8ec46ae608962bf"
+}
