@@ -10,9 +10,12 @@ import {
   useWaitForTransactionReceipt,
 } from 'wagmi'
 import { QRCodeSVG } from 'qrcode.react'
-import { registerWebAuthn, saveCredential, hasCredential } from '@/lib/webauthn'
+import { registerWebAuthn, saveCredential, hasCredential, credentialIdToBytes } from '@/lib/webauthn'
 import { getWalletAddress, getAgentWalletAddress, getCredentialIdFromChain } from '@/lib/wallet'
-import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI } from '@/lib/abis'
+import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from '@/lib/abis'
+import { executeWithFaceId } from '@/lib/executeUserOp'
+import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { encodeFunctionData } from 'viem'
 import { useNetwork } from '@/lib/NetworkContext'
 import { NETWORKS } from '@/lib/networks'
 import MarketingLanding from '@/components/MarketingLanding'
@@ -53,9 +56,62 @@ export default function Home() {
   const { network, setNetworkByChainId } = useNetwork()
   const [walletExists, setWalletExists] = useState(false)
   const [step, setStep] = useState<Step>('landing')
+
+  // Deep link used by the outdated-wallet banner: land on the access screen instead of
+  // the marketing page, so "create a V4 wallet" does not bounce the user to the front door.
+  // Read from the browser rather than useSearchParams, which would force this page behind
+  // a Suspense boundary and break the static prerender.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('step') === 'access') setStep('access')
+
+    // Migration from an older generation, reusing the SAME passkey. The wallet address
+    // derives from the public key, so keeping the key means the new address is knowable
+    // in advance, identical on every network, and there is no second credential to back
+    // up. Everything downstream — deploy, then the signed setGuardians — is the ordinary
+    // creation path; only the key's origin differs, and no new passkey is registered.
+    if (params.get('migrate') === '1') {
+      (async () => {
+        try {
+          const stored = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || '{}')
+          const oldWallet: Address | null = stored?.walletAddress || localStorage.getItem('bvcc_active_wallet')
+          if (!oldWallet || !stored?.credentialId) throw new Error('No active wallet to migrate')
+
+          const { createPublicClient, http } = await import('viem')
+          const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+          const [qx, qy] = await client.readContract({
+            address: oldWallet as Address, abi: BVCC_WALLET_ABI, functionName: 'signer',
+          }) as readonly [`0x${string}`, `0x${string}`]
+
+          const wType = await client.readContract({
+            address: oldWallet as Address,
+            abi: [{ type: 'function', name: 'walletType', inputs: [], outputs: [{ type: 'uint8' }], stateMutability: 'view' }],
+            functionName: 'walletType',
+          }).catch(() => 0)
+
+          // Carry the existing guardians over so the user is not asked to invent them
+          // again; they can still edit them on the confirm screen before signing.
+          const g = await Promise.all([0n, 1n, 2n].map(i =>
+            client.readContract({ address: oldWallet as Address, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [i] })
+              .catch(() => null),
+          )) as (string | null)[]
+
+          setRegData({ pubKeyX: BigInt(qx), pubKeyY: BigInt(qy), credentialId: stored.credentialId })
+          setSelectedWalletType(wType === 1 ? 'agent' : 'standard')
+          if (g.every(Boolean)) setGuardians([g[0]!, g[1]!, g[2]!])
+          setStep(g.every(Boolean) ? 'confirm' : 'guardians')
+        } catch {
+          setStep('access')
+        }
+      })()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [regData, setRegData] = useState<RegistrationData | null>(null)
+  const [configuring, setConfiguring] = useState(false)
+  const submitUserOp = useSubmitUserOp()
   const [guardians, setGuardians] = useState<[string, string, string]>(['', '', ''])
   const [addressInput, setAddressInput] = useState('')
   const [addressFocused, setAddressInputFocused] = useState(false)
@@ -84,18 +140,48 @@ export default function Home() {
     if (connectedAddress && wcUri) setWcUri(null)
   }, [connectedAddress, wcUri])
 
-  // After tx confirmed: compute address, save credential, redirect
+  // After tx confirmed: compute address, save credential, then register guardians and
+  // the credential on-chain with the passkey. The wallet is deployed but unconfigured
+  // until this second, signed step lands — which is exactly what makes the deployment
+  // race harmless: whoever wins it cannot set the guardians.
   useEffect(() => {
     if (!isTxConfirmed || !regData) return
     const resolver = selectedWalletType === 'agent'
       ? getAgentWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
       : getWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
-    resolver.then(walletAddress => {
+    resolver.then(async walletAddress => {
       saveCredential(regData.credentialId, walletAddress)
       localStorage.setItem('bvcc_guardians', JSON.stringify(guardians))
-      router.push('/wallet')
+      try {
+        setConfiguring(true)
+        await registerRecovery(walletAddress, regData.credentialId)
+        router.push('/wallet')
+      } catch (err) {
+        // The wallet exists and is the user's; only the recovery setup failed. Send them
+        // in anyway and let the wallet prompt for it rather than trapping them here.
+        setConfiguring(false)
+        setError(err instanceof Error ? err.message : String(err))
+        localStorage.setItem('bvcc_pending_guardians', JSON.stringify(guardians))
+        router.push('/wallet')
+      }
     })
   }, [isTxConfirmed]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /// Registers guardians + credential in one passkey-signed self-call.
+  async function registerRecovery(walletAddress: Address, credentialId: string) {
+    const callData = encodeFunctionData({
+      abi: BVCC_WALLET_ABI,
+      functionName: 'setGuardians',
+      args: [guardians as [Address, Address, Address], credentialIdToBytes(credentialId)],
+    })
+    await executeWithFaceId({
+      network,
+      walletAddress,
+      credentialId,
+      calls: [{ target: walletAddress, value: 0n, callData }],
+      submitUserOp,
+    })
+  }
 
   async function handleCreateWallet() {
     setError(null)
@@ -151,7 +237,10 @@ export default function Home() {
 
   async function handleDeploy() {
     if (!regData) return
-    const args = [regData.pubKeyX, regData.pubKeyY, guardians as [Address, Address, Address], regData.credentialId] as const
+    // V4: the factory only deploys. Guardians and the credential are registered
+    // afterwards, in a passkey-signed self-call — a squatter who deploys someone else's
+    // address is left with a shell it cannot configure.
+    const args = [regData.pubKeyX, regData.pubKeyY] as const
 
     // Let MetaMask estimate the gas itself (its "network suggested" value). On
     // Arbitrum our own estimate for a ~21KB CREATE2 wallet deploy comes out too

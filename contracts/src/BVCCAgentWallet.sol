@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {BVCCSmartWalletV3} from "./BVCCWallet.sol";
+import {BVCCSmartWalletV4} from "./BVCCWallet.sol";
 import {IBVCCValidator} from "./IBVCCValidator.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 import {ERC7579Utils} from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
-contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
+contract BVCCAgentWalletV4 is BVCCSmartWalletV4, ReentrancyGuard, Pausable {
 
     uint256 public constant MAX_WHITELIST = 20;
 
@@ -44,11 +44,11 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
     error NoProtocolsWhitelisted();
     error NoTokensWhitelisted();
     error NotAuthorizedAgent();
-    error OnlyWallet();
     error PeriodBudgetExceeded();
     error ProtocolNotAllowed();
     error RecipientNotAllowed();
     error TokenBatchLimitExceeded();
+    error TokenCallWithValue();
     error TokenDailyLimitExceeded();
     error TokenTotalBudgetExceeded();
     error TokenNotAllowed();
@@ -56,6 +56,7 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
     error TooManyRecipients();
     error TooManyTokens();
     error UnknownAgent();
+    error ReentrantAgentExecute();
     error SelectorNotAllowed();
     error PinnedArgMismatch();
     error CalldataTooShort();
@@ -147,7 +148,7 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
         uint128 totalSpentWei
     );
 
-    constructor(bytes32 qx, bytes32 qy) BVCCSmartWalletV3(qx, qy) {}
+    constructor(bytes32 qx, bytes32 qy) BVCCSmartWalletV4(qx, qy) {}
 
     /**
      * @notice Authorize an AI agent with specific spend permissions.
@@ -290,6 +291,12 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
         address agent = msg.sender;
         AgentPermission storage perm = _permissions[agent];
 
+        // Layer 1 — the "agent is an EOA" invariant is enforced on every execution, not
+        // only at authorization: an address can gain code afterwards (EIP-7702 delegation
+        // signed with its own key, or a CREATE2 deployment to a pre-computed address).
+        // Deliberately strict: an agent that adopts a 7702 delegation stops working until
+        // it is removed.
+        require(agent.code.length == 0, AgentMustBeEOA());
         require(perm.active, NotAuthorizedAgent());
         require(
             perm.expiry == 0 || block.timestamp < uint256(perm.expiry),
@@ -446,6 +453,11 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
 
         } else if (_isDirectTransfer(exec.callData)) {
             // ── Case 2: ERC-20 transfer(to, amount) ────────────────────────
+            // A token call must not carry ETH. The parent execute() would run this as
+            // case 2 and drop the value on the floor, yet the agent would still charge it
+            // to its ETH budget; on approve (below) the parent forwards it to the token
+            // address instead, which escapes the recipient whitelist entirely.
+            require(exec.value == 0, TokenCallWithValue());
             (address to, uint256 amount) = _decodeTransfer(exec.callData);
             _checkTokenWhitelistAndAmount(perm, exec.target, amount);
             _checkRecipient(perm, to);
@@ -454,6 +466,7 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
             // ── Case 2b: ERC-20 approve(spender, amount) ───────────────────
             // Same calldata layout as transfer. The spender is gated by the recipient
             // whitelist so an agent cannot approve an unlisted address to pull funds.
+            require(exec.value == 0, TokenCallWithValue());
             (address spender, uint256 amount) = _decodeTransfer(exec.callData);
             _checkTokenWhitelistAndAmount(perm, exec.target, amount);
             _checkRecipient(perm, spender);
@@ -566,6 +579,24 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
     }
 
     /**
+     * @notice Reject any EXTERNAL execute() while an agent batch is in flight.
+     * @dev Closes the cross-function reentrancy on _currentAgent: that flag stays set for
+     *      the duration of super.execute(), and _erc7821AuthorizedExecutor grants the
+     *      owner-level path to whoever matches it. An agent address that gains code after
+     *      authorization (EIP-7702 delegation signed with its own key, or a CREATE2
+     *      deployment) could otherwise be handed control mid-batch and re-enter here,
+     *      bypassing every cap, the recipient whitelist and the call policies.
+     *      executeAsAgent reaches the parent through super.execute(), which resolves
+     *      statically and therefore skips this override — the legitimate path is unaffected.
+     *      Guarding here rather than re-checking code.length keeps the fix independent of
+     *      how the agent obtained code, and of when it obtained it.
+     */
+    function execute(bytes32 mode, bytes calldata executionData) public payable override {
+        require(_currentAgent == address(0), ReentrantAgentExecute());
+        super.execute(mode, executionData);
+    }
+
+    /**
      * @dev Override to allow the current agent to call execute() during executeAsAgent().
      *      _currentAgent is set immediately before super.execute() and cleared after.
      *      The caller check (caller == _currentAgent) is tight — only the exact agent EOA
@@ -578,6 +609,14 @@ contract BVCCAgentWalletV3 is BVCCSmartWalletV3, ReentrancyGuard, Pausable {
     ) internal view override returns (bool) {
         if (_currentAgent != address(0) && caller == _currentAgent) return true;
         return super._erc7821AuthorizedExecutor(caller, mode, data);
+    }
+
+    /// @dev Recovery rotates the owner; agents do not follow automatically. Pausing them
+    ///      makes the new owner review the agent list before anything can spend again.
+    ///      Pause rather than revoke: constant gas whatever the list length, reversible,
+    ///      and it keeps each agent's configuration for the owner to judge.
+    function _afterRecovery() internal override {
+        if (!paused()) _pause();
     }
 
     /// @notice 1500 / 1_000_000 = 0.15% fee for agent wallets.

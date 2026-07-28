@@ -20,6 +20,17 @@ function toBase64url(buffer: ArrayBuffer | Uint8Array): string {
 }
 
 /** Convierte string base64url a Uint8Array */
+/**
+ * The credential id as raw bytes. This is the canonical form: V4 wallets store
+ * keccak256 of exactly these bytes and emit them in CredentialSet, so a client holding a
+ * passkey rawId can hash it and find the wallet it belongs to. The app keeps the
+ * base64url text everywhere else because that is what WebAuthn hands back.
+ */
+export function credentialIdToBytes(credentialId: string): `0x${string}` {
+  const raw = fromBase64url(credentialId)
+  return ('0x' + Array.from(raw).map(b => b.toString(16).padStart(2, '0')).join('')) as `0x${string}`
+}
+
 function fromBase64url(str: string): Uint8Array {
   const padded = str.replace(/-/g, '+').replace(/_/g, '/').padEnd(
     str.length + ((4 - (str.length % 4)) % 4),

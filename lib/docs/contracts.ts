@@ -6,7 +6,7 @@ function revokeAgent(address agent) external;                 // active = false,
 function increaseBudget(address agent, uint128 additionalWei) external;
 function pauseAgents() external;                              // emergency stop, blocks executeAsAgent
 function unpauseAgents() external;
-function setCallPolicy(address target, bytes4 selector, uint256 policy) external; // V3 — per-selector Case-3 policy`
+function setCallPolicy(address target, bytes4 selector, uint256 policy) external; // per-selector Case-3 policy`
 
 const CODE_AGENT_FN =
   'function executeAsAgent(bytes32 mode, bytes calldata executionData) external; // nonReentrant, whenNotPaused'
@@ -27,8 +27,8 @@ function isDeployed(address wallet) external view returns (bool);
 function kill() external; // owner-only, one-way: permanently blocks NEW wallet creation`
 
 const ADDR_ROWS = [
-  ['`BVCCSmartWalletFactoryV3`', '`0xD42F61AA856A4f47885Ecd2D0ce119411d53C192`'],
-  ['`BVCCAgentWalletFactoryV3`', '`0xd866a7563cDaC9F71423be3332b62c329C676064`'],
+  ['`BVCCSmartWalletFactoryV4`', '`0xfd105197109244483b5f870501326E6faec9F93c`'],
+  ['`BVCCAgentWalletFactoryV4`', '`0xf3A61F9d64d45362E149A111289546523BCd26a6`'],
   ['`BVCCValidatorRegistry`', '`0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2`'],
   ['`BVCCHookRegistry`', '`0x551C6e7ABdA04a110790888e711198f25621b066`'],
   ['EntryPoint (OpenZeppelin v0.9)', '`0x433709009B8330FDa32311DF1C2AFA402eD8D009`'],
@@ -38,7 +38,7 @@ export const contracts: LocalizedDoc = {
   en: {
     title: 'Contract Reference',
     intro:
-      'Solidity sources live in the `contracts/` folder of the monorepo. Built with Foundry + OpenZeppelin; the V3 line uses a frozen toolchain (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) so the CREATE2 addresses stay deterministic.',
+      'Solidity sources live in the `contracts/` folder of the monorepo. Built with Foundry + OpenZeppelin; the V4 line uses a frozen toolchain (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) so the CREATE2 addresses stay deterministic.',
     blocks: [
       { type: 'h2', text: 'Deployed addresses' },
       { type: 'p', text: 'Deterministic CREATE2 — the factories and both registries have the same address on every network:' },
@@ -48,7 +48,7 @@ export const contracts: LocalizedDoc = {
         text: 'Live on Arbitrum One, Base, BNB Chain, Ethereum, Polygon and Arbitrum Sepolia (testnet). The per-chain validators (`BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`) are bound to each chain’s router / position manager, so their addresses differ per network — see the monorepo’s `contracts/deployments/`. Previous V2 factories (`0x230b…BdEf1` / `0x8D9e…054c`) are deprecated.',
       },
 
-      { type: 'h2', text: 'BVCCSmartWalletV3 — personal wallet (walletType 0)' },
+      { type: 'h2', text: 'BVCCSmartWalletV4 — personal wallet (walletType 0)' },
       { type: 'p', text: 'One contract per user, deployed by the factory. No proxies, no upgradability.' },
       {
         type: 'list',
@@ -60,10 +60,10 @@ export const contracts: LocalizedDoc = {
         ],
       },
 
-      { type: 'h2', text: 'BVCCAgentWalletV3 — AI agent wallet (walletType 1)' },
+      { type: 'h2', text: 'BVCCAgentWalletV4 — AI agent wallet (walletType 1)' },
       {
         type: 'p',
-        text: 'Extends `BVCCSmartWalletV3`; adds delegated execution for authorized agent EOAs. Fee is 0.15%. On top of the whitelists below, V3 adds per-selector call policies for DeFi calls (see Call policies).',
+        text: 'Extends `BVCCSmartWalletV4`; adds delegated execution for authorized agent EOAs. Fee is 0.15%. On top of the whitelists below, V3 introduced per-selector call policies for DeFi calls (see Call policies).',
       },
 
       { type: 'h3', text: 'AuthorizeParams (input to authorizeAgent)' },
@@ -99,7 +99,7 @@ export const contracts: LocalizedDoc = {
       { type: 'code', lang: 'solidity', code: CODE_AGENT_FN },
       { type: 'p', text: 'See the Agent Integration Guide for call encoding, validation order and error reference.' },
 
-      { type: 'h3', text: 'Call policies (V3)' },
+      { type: 'h3', text: 'Call policies' },
       {
         type: 'p',
         text: 'For DeFi calls (case 3), whitelisting a protocol in `allowedProtocols` is necessary but no longer sufficient: the call’s selector must also have a policy registered by the owner, or it reverts with `SelectorNotAllowed`. A policy is a packed `uint256`:',
@@ -126,15 +126,15 @@ export const contracts: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'Deterministic address: salt = `keccak256(abi.encode(pubKeyX, pubKeyY))` — derived only from the passkey’s P-256 public key. Same key → same wallet address on every network. Guardians don’t affect the address (set post-deploy via `setGuardians`, callable once).',
+          'Deterministic address: salt = `keccak256(abi.encode(pubKeyX, pubKeyY))` — derived only from the passkey’s P-256 public key. Same key → same wallet address on every network. Guardians don’t affect the address: the factory only deploys, and the owner registers them afterwards with `setGuardians`, callable only by the wallet itself (a passkey-signed self-call). Whoever deploys an address therefore cannot choose who can rotate its owner. The set is replaceable by the owner, except while a recovery is in flight.',
           'Counterfactual: `getWalletAddress` is a view — you can receive funds at the address before deploying.',
           'Idempotent: `createWallet` returns the existing wallet if already deployed.',
           'Kill switch: `kill()` stops new creations only; existing wallets are independent contracts and keep working with their funds.',
-          'V3 addresses differ from V2: the wallet bytecode changed, so the same passkey resolves to a different address. V2 users recreate their wallet and move funds (same playbook as V1 → V2).',
+          'V4 addresses differ from V3: the wallet bytecode changed, so the same passkey resolves to a different address. V3 users recreate their wallet and move funds (same playbook as every generation before). The app shows a banner on wallets that are behind.',
         ],
       },
 
-      { type: 'h2', text: 'Registries & validators (V3)' },
+      { type: 'h2', text: 'Registries & validators' },
       {
         type: 'list',
         items: [
@@ -149,7 +149,7 @@ export const contracts: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'Internal security review (bilingual report in the monorepo’s `audits/` folder, covering the V2 line): HIGH finding (approve cap-bypass) fixed; Slither clean of real findings. The V3 suite is 264 Foundry tests (unit, fork & fuzz).',
+          'Internal security review, bilingual report in the monorepo’s `audits/` folder and linked from these docs. Four review rounds so far: seven high-severity findings, all fixed and shipped in V4 — including a cross-function reentrancy that let a compromised agent bypass every limit, and guardian squatting through the factory. Two issues stay open by decision and are documented with their mitigations. The V4 suite is 303 Foundry tests (unit, fork & fuzz). No external audit yet.',
           'V2 (June 2026) fixed a gas-griefing edge on Arbitrum: balance probes are capped at 100k gas (`PROBE_GAS_CAP`) so calldata that happens to contain a precompile address can’t burn the transaction’s gas. V3 keeps this fix.',
           'V3 (July 2026) closes an agent fund-exfiltration path: a stolen agent key could previously name its own address as the recipient/`to` of a swap or `Pool.withdraw` and move funds without touching the ETH/token budget. V3 makes case-3 calls default-deny per selector and pins the recipient to the wallet (or validates it on-chain). The owner’s biometric path is unaffected.',
         ],
@@ -161,7 +161,7 @@ export const contracts: LocalizedDoc = {
   es: {
     title: 'Referencia de contratos',
     intro:
-      'El código Solidity vive en la carpeta `contracts/` del monorepo. Compilado con Foundry + OpenZeppelin; la línea V3 usa un toolchain congelado (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) para que las direcciones CREATE2 sean deterministas.',
+      'El código Solidity vive en la carpeta `contracts/` del monorepo. Compilado con Foundry + OpenZeppelin; la línea V4 usa un toolchain congelado (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) para que las direcciones CREATE2 sean deterministas.',
     blocks: [
       { type: 'h2', text: 'Direcciones desplegadas' },
       { type: 'p', text: 'CREATE2 determinista — las factories y ambos registries tienen la misma dirección en todas las redes:' },
@@ -171,7 +171,7 @@ export const contracts: LocalizedDoc = {
         text: 'En vivo en Arbitrum One, Base, BNB Chain, Ethereum, Polygon y Arbitrum Sepolia (testnet). Los validators por red (`BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`) van ligados al router / position manager de cada cadena, así que su dirección difiere por red — ver `contracts/deployments/` del monorepo. Las factories V2 anteriores (`0x230b…BdEf1` / `0x8D9e…054c`) quedan obsoletas.',
       },
 
-      { type: 'h2', text: 'BVCCSmartWalletV3 — wallet personal (walletType 0)' },
+      { type: 'h2', text: 'BVCCSmartWalletV4 — wallet personal (walletType 0)' },
       { type: 'p', text: 'Un contrato por usuario, desplegado por la factory. Sin proxies, sin upgradability.' },
       {
         type: 'list',
@@ -183,10 +183,10 @@ export const contracts: LocalizedDoc = {
         ],
       },
 
-      { type: 'h2', text: 'BVCCAgentWalletV3 — wallet de agente IA (walletType 1)' },
+      { type: 'h2', text: 'BVCCAgentWalletV4 — wallet de agente IA (walletType 1)' },
       {
         type: 'p',
-        text: 'Extiende `BVCCSmartWalletV3`; añade ejecución delegada para EOAs de agente autorizadas. La comisión es 0,15%. Además de las whitelists de abajo, V3 añade call policies por selector para las llamadas DeFi (ver Call policies).',
+        text: 'Extiende `BVCCSmartWalletV4`; añade ejecución delegada para EOAs de agente autorizadas. La comisión es 0,15%. Además de las whitelists de abajo, V3 añade call policies por selector para las llamadas DeFi (ver Call policies).',
       },
 
       { type: 'h3', text: 'AuthorizeParams (input de authorizeAgent)' },
@@ -222,7 +222,7 @@ export const contracts: LocalizedDoc = {
       { type: 'code', lang: 'solidity', code: CODE_AGENT_FN },
       { type: 'p', text: 'Mira la guía de integración de agentes para el encoding de llamadas, el orden de validación y la referencia de errores.' },
 
-      { type: 'h3', text: 'Call policies (V3)' },
+      { type: 'h3', text: 'Call policies' },
       {
         type: 'p',
         text: 'Para las llamadas DeFi (caso 3), tener el protocolo en `allowedProtocols` es necesario pero ya no basta: el selector de la llamada también debe tener una policy registrada por el dueño, o revierte con `SelectorNotAllowed`. Una policy es un `uint256` empaquetado:',
@@ -249,7 +249,7 @@ export const contracts: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'Dirección determinista: salt = `keccak256(abi.encode(pubKeyX, pubKeyY))` — derivada solo de la clave pública P-256 de la passkey. Misma clave → misma dirección de wallet en todas las redes. Los guardians no afectan a la dirección (se fijan post-deploy vía `setGuardians`, llamable una vez).',
+          'Dirección determinista: salt = `keccak256(abi.encode(pubKeyX, pubKeyY))` — derivada solo de la clave pública P-256 de la passkey. Misma clave → misma dirección de wallet en todas las redes. Los guardians no afectan a la dirección: la factory solo despliega, y el propietario los registra después con `setGuardians`, que solo puede llamar la propia wallet (auto-llamada firmada con la passkey). Quien despliegue una dirección no puede, por tanto, elegir quién puede rotar a su dueño. El conjunto es reemplazable por el propietario, salvo con una recuperación en vuelo.',
           'Counterfactual: `getWalletAddress` es una view — puedes recibir fondos en la dirección antes de desplegarla.',
           'Idempotente: `createWallet` devuelve la wallet existente si ya está desplegada.',
           'Kill switch: `kill()` solo bloquea creaciones nuevas; las wallets existentes son contratos independientes y siguen funcionando con sus fondos.',
@@ -272,7 +272,7 @@ export const contracts: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'Security review interna (informe bilingüe en la carpeta `audits/` del monorepo, sobre la línea V2): finding HIGH (approve cap-bypass) corregido; Slither limpio de hallazgos reales. La suite V3 son 264 tests de Foundry (unit, fork y fuzz).',
+          'Security review interna, informe bilingüe en la carpeta `audits/` del monorepo y enlazado desde esta documentación. Cuatro rondas hasta ahora: siete hallazgos de severidad alta, todos corregidos y publicados en V4 — entre ellos una reentrada cruzada que permitía a un agente comprometido saltarse todos los límites, y la apropiación de guardianes vía la factory. Dos quedan abiertos por decisión, documentados con sus mitigaciones. La suite V4 son 303 tests de Foundry (unit, fork y fuzz). Sin auditoría externa todavía.',
           'La V2 (junio 2026) corrigió un caso de gas-griefing en Arbitrum: las probes de balance van capadas a 100k de gas (`PROBE_GAS_CAP`) para que un calldata que casualmente contenga la dirección de un precompile no pueda quemar el gas de la transacción. V3 mantiene este fix.',
           'La V3 (julio 2026) cierra una vía de exfiltración de fondos del agente: una clave de agente robada podía antes poner su propia dirección como recipient/`to` de un swap o `Pool.withdraw` y mover fondos sin tocar el presupuesto de ETH/token. V3 hace las llamadas del caso 3 default-deny por selector y ancla el destinatario a la wallet (o lo valida on-chain). El camino biométrico del dueño no se ve afectado.',
         ],

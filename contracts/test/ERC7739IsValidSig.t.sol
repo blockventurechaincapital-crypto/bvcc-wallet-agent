@@ -2,8 +2,8 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
-import {BVCCSmartWalletV3} from "../src/BVCCWallet.sol";
-import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
+import {BVCCSmartWalletV4} from "../src/BVCCWallet.sol";
+import {BVCCAgentWalletV4} from "../src/BVCCAgentWallet.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {ERC7739Utils} from "@openzeppelin/contracts/utils/cryptography/draft-ERC7739Utils.sol";
@@ -22,13 +22,13 @@ contract ERC7739IsValidSigTest is Test {
     bytes4 constant MAGIC = 0x1626ba7e;
     uint256 constant PK = 0xA11CE;
 
-    BVCCSmartWalletV3 wallet;
-    BVCCAgentWalletV3 agentWallet;
+    BVCCSmartWalletV4 wallet;
+    BVCCAgentWalletV4 agentWallet;
 
     function setUp() public {
         (uint256 qx, uint256 qy) = vm.publicKeyP256(PK);
-        wallet = new BVCCSmartWalletV3(bytes32(qx), bytes32(qy));
-        agentWallet = new BVCCAgentWalletV3(bytes32(qx), bytes32(qy));
+        wallet = new BVCCSmartWalletV4(bytes32(qx), bytes32(qy));
+        agentWallet = new BVCCAgentWalletV4(bytes32(qx), bytes32(qy));
     }
 
     function test_isValidSignature_permitSingle_smartWallet() public view {

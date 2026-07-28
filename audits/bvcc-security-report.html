@@ -44,7 +44,9 @@
   .page{padding:18mm 22mm}
   h2{font-size:15pt; color:var(--brand); margin:0 0 4px; padding-bottom:6px; border-bottom:2px solid var(--brand2)}
   h2 .n{color:var(--brand2); font-weight:700; margin-right:8px}
+  h3 .n, h4 .n{color:var(--brand2); font-weight:700; margin-right:7px}
   h3{font-size:11.5pt; color:var(--ink); margin:18px 0 5px}
+  h4{font-size:10pt; color:var(--brand); margin:12px 0 3px; letter-spacing:.01em}
   p{margin:6px 0}
   .lead{color:#334155; font-size:11pt}
   section{margin-bottom:20px}
@@ -89,11 +91,11 @@
   <div class="meta">
     <table>
       <tr><td class="k">Subject</td><td>BVCC Agent Wallet (ERC-4337 / ERC-7579 smart account)</td></tr>
-      <tr><td class="k">Network</td><td>Arbitrum Sepolia (421614) · V2 factories also on Arbitrum One (42161) &amp; BNB Chain (56)</td></tr>
+      <tr><td class="k">Network</td><td>Arbitrum Sepolia (421614) &amp; Arbitrum One (42161) · V2/V3 factories also on Ethereum, Base, BNB Chain &amp; Polygon</td></tr>
       <tr><td class="k">Patched wallet</td><td class="mono">0x1ED261BA084c4E6117daf289f3ca233BBA3cF0C3</td></tr>
       <tr><td class="k">Engagement</td><td>Internal security testing &amp; remediation verification</td></tr>
-      <tr><td class="k">Dates</td><td>2026-06-06 → 2026-06-11</td></tr>
-      <tr><td class="k">Status</td><td><span class="chip high">2 HIGH found</span> <span class="chip fixed">Fixed &amp; redeployed</span> <span class="chip pass">11/11 tests pass</span> <span class="chip fixed">Recovery verified</span> <span class="chip fixed">V2 multichain</span></td></tr>
+      <tr><td class="k">Dates</td><td>2026-06-06 → 2026-07-28 (V1 · V2 · V3 · V4 + external review)</td></tr>
+      <tr><td class="k">Status</td><td><span class="chip high">7 HIGH found</span> <span class="chip fixed">3 fixed &amp; deployed</span> <span class="chip fixed">4 fixed, pending V4</span> <span class="chip high">1 OPEN</span> <span class="chip pass">303/303 tests</span></td></tr>
     </table>
   </div>
 
@@ -112,13 +114,15 @@
   Work covered static analysis, a high-severity finding with its remediation, a redeploy of the
   patched contracts, and a full re-verification of the agent permission system on the patched bytecode.
   A follow-up V2 round fixed a mainnet gas-griefing issue in the fee-snapshot logic and concluded with
-  a deterministic multichain deployment (Arbitrum One, BNB Chain, Arbitrum Sepolia — see §9).</p>
+  a deterministic multichain deployment (see §9). A third round, V3, rebuilt the agent's DeFi path around
+  per-selector call policies and an on-chain validator registry, and was verified on Arbitrum One mainnet
+  (see §10–§12).</p>
 
   <div class="kpis">
-    <div class="kpi"><div class="v">2</div><div class="l">High findings (fixed)</div></div>
-    <div class="kpi"><div class="v">131/131</div><div class="l">Unit tests (forge)</div></div>
-    <div class="kpi"><div class="v">11/11</div><div class="l">On-chain agent tests</div></div>
-    <div class="kpi"><div class="v">0</div><div class="l">Open issues</div></div>
+    <div class="kpi"><div class="v">7</div><div class="l">High findings</div></div>
+    <div class="kpi"><div class="v">303</div><div class="l">Tests, all passing</div></div>
+    <div class="kpi"><div class="v">7</div><div class="l">Fixes awaiting V4</div></div>
+    <div class="kpi"><div class="v">1</div><div class="l">Open high finding</div></div>
   </div>
 
   <h3>Key outcomes</h3>
@@ -130,8 +134,42 @@
     calldata scan burned all forwarded gas, inflating gas estimates to ~32M and breaking swaps. Every
     <code>balanceOf</code> probe is now gas-capped (<code>PROBE_GAS_CAP = 100k</code>); estimates return
     to ~400k for a real swap (see §9).</li>
-    <li><b>Static analysis clean.</b> Slither 0.11.3 produced no actionable findings; a defensive
-    zero-address check was added to both factory constructors.</li>
+    <li><b>Agent fund-exfiltration closed (V3).</b> A stolen agent key could route a swap or an Aave
+    <code>withdraw</code> to its own address without touching its budget. V3 makes agent DeFi calls
+    default-deny per selector and pins the recipient to the wallet, or validates it on-chain through a
+    validator registry whose governance is immediate to deny and timelocked to allow. Verified by an
+    adversarial mainnet test that reverts before executing (see §10–§12).</li>
+    <li><b>Two further bypasses caught before release.</b> A command-byte mask in the Universal Router
+    validator would have accepted a cross-chain bridge deposit as a swap; and Uniswap v3's
+    <code>increaseLiquidity</code>, which carries no owner check, was deliberately excluded from the
+    whitelist rather than pinned. Both are documented in §10 and §11.</li>
+    <li><b>Cross-function reentrancy — fixed in source, awaiting deployment.</b> Because the "agent is an
+    EOA" check ran only at authorization time, an agent address that later gained code — an EIP-7702
+    delegation signed with the agent's own key, or a CREATE2 deployment — could re-enter the owner-level
+    <code>execute()</code> and bypass every limit at once. A PoC drained 49.925 ETH against a 0.003 ETH
+    lifetime budget. It affects <b>V1, V2 and V3 alike</b>, confirmed by draining a wallet created from the
+    live V2 factory on a mainnet fork. Two layers now fix it, chosen by measuring three candidates against
+    three attack shapes rather than by argument (§12.1).</li>
+    <li><b>Guardian squatting — fixed in source.</b> An external reviewer found that a wallet's address
+    derives from the passkey alone while its guardians were chosen by whoever called the permissionless
+    <code>createWallet</code> first, permanently. A full takeover was reproduced: squat the address, wait
+    out the recovery timelock, rotate the owner. The factory no longer chooses guardians, and setting them
+    now requires the owner's passkey (§13.1).</li>
+    <li><b>Token budgets do not bind DeFi spending — open, and worse than first written.</b> Where a
+    standing allowance exists, an agent can move a token through a protocol call without touching any
+    counter, and because no validator inspects amounts or prices, it can swap a valuable asset into a
+    worthless one through a pool it controls. The recipient pin sends the worthless output home; the value
+    stays with the attacker. A staged mitigation plan is set out in §13.2.</li>
+    <li><b>Static analysis across all three rounds.</b> Slither 0.11.3 was run before the V1 redeploy, after
+    the V2 gas fix and again over the V3 tree. The V1 run prompted a defensive zero-address check in both
+    factory constructors; the V3 run produced the reentrancy finding plus two false positives (§12).</li>
+    <li><b>Three further issues from the external review</b>, all reproduced against the code: token
+    budgets do not bind case-3 DeFi spending when a prior allowance exists, revoking an agent does not
+    retract its allowances, and <code>approve</code> can carry ETH past the recipient whitelist (§13).</li>
+    <li><b>Recovery and the signature path were then attacked directly</b> — the two areas that had only
+    ever been tested for correct behaviour. The signature path held against all ten attacks, including
+    replay across chains and between the owner's own two wallets. Recovery yielded two more fixes: it did
+    not revoke agents, and guardians could never be rotated (§14).</li>
     <li><b>Patched contracts redeployed</b> to Arbitrum Sepolia with the deployer key holding no
     privileges (control retained by a separate admin address).</li>
     <li><b>Full agent-permission battery passes</b> on the patched wallet: per-transaction, daily,
@@ -139,8 +177,13 @@
     enforced for both native ETH and ERC-20 tokens.</li>
   </ul>
 
-  <div class="callout ok"><b>Overall assessment.</b> The agent permission model is sound and, after
-  remediation, enforces every configured constraint. No open issues remain at the time of writing.</div>
+  <div class="callout warn"><b>Overall assessment.</b> The agent permission model is sound in design and,
+  after three rounds of remediation, enforces every configured constraint on the paths it checks. Two
+  high-severity findings are outstanding: the cross-function reentrancy of §12.1, fixed in source but not
+  yet deployed, and the guardian squatting of §13.1, still open. Both need a V4 factory generation and
+  should ship together. Operational mitigations exist for both today, without a contract change: give
+  agents a recipient whitelist that excludes their own address, and verify a wallet's guardians on a
+  network before funding it there.</div>
 </section>
 
 <section>
@@ -150,13 +193,21 @@
     <li><code>BVCCAgentWallet.sol</code> — agent permission logic (<code>executeAsAgent</code>, per-token &amp; ETH caps, pause, expiry).</li>
     <li><code>BVCCWallet.sol</code> — base smart account (execution, fees, guardian recovery).</li>
     <li><code>BVCCAgentWalletFactory.sol</code> / <code>BVCCWalletFactory.sol</code> — CREATE2 factories.</li>
+    <li><b>V3 additions:</b> the call-policy layer inside <code>executeAsAgent</code>,
+    <code>BVCCValidatorRegistry.sol</code>, <code>BVCCUniversalRouterValidator.sol</code> and the
+    <code>IBVCCValidator</code> interface, plus the policy presets the frontend registers.</li>
   </ul>
   <h3>Methodology</h3>
   <ul class="tight">
-    <li><b>Static analysis</b> — Slither 0.11.3 over both source repositories.</li>
-    <li><b>Unit testing</b> — Foundry (<code>forge test</code>), including regression tests for the finding.</li>
+    <li><b>Static analysis</b> — Slither 0.11.3 over both source repositories: before the V1 redeploy
+    (§3), again after the V2 gas hardening, and again over the V3 tree (§12).</li>
+    <li><b>Unit testing</b> — Foundry (<code>forge test</code>), including regression tests for each finding.</li>
+    <li><b>Fuzz &amp; fork testing (V3)</b> — the router validator is fuzzed against a model of the real
+    router over its whole command space; Aave is exercised on a mainnet fork.</li>
     <li><b>On-chain testing</b> — the agent EOA drives <code>executeAsAgent</code> directly; reverts are
-    confirmed by simulation (<code>eth_call</code>) against live state, valid cases as real transactions.</li>
+    confirmed by simulation (<code>eth_call</code>) against live state, valid cases as real transactions.
+    V3 was additionally exercised on Arbitrum One mainnet, including the adversarial variant of a real
+    swap.</li>
   </ul>
   <h3>Agent execution model</h3>
   <p>The agent calls <code>executeAsAgent(bytes32 mode, bytes executionData)</code> as an ordinary EOA
@@ -400,16 +451,747 @@
   through the V2 factories.</p>
 </section>
 
+</div>
+
+<div class="page section-break">
 <section>
-  <h2><span class="n">10</span>Conclusion</h2>
-  <p>The BVCC Agent Wallet enforces a comprehensive, layered permission model. One high-severity bypass
-  was identified, reproduced on-chain, remediated, redeployed, and re-verified. Static analysis surfaced
-  no further actionable issues. The complete on-chain test battery passes on the patched bytecode, and no
-  issues remain open. Guardian recovery was additionally executed and verified end-to-end — ownership
-  rotation to a new passkey plus on-chain rejection of the old key (see §8). A follow-up V2 round fixed a
-  mainnet gas-griefing issue in the fee snapshot, was verified by tests and a clean Slither re-run, and
-  concluded with the deterministic deployment of the V2 factories to Arbitrum One, BNB Chain and Arbitrum
-  Sepolia (see §9).</p>
+  <h2><span class="n">10</span>V3 — Call-Policy Security Model</h2>
+  <p><span class="badge b-high">HIGH (agent fund exfiltration)</span> &nbsp; <span class="badge b-pass">FIXED — V3 DEPLOYED 2026-07</span></p>
+
+  <h3>Description</h3>
+  <p>Through V2 an agent's budget was charged whenever value left the wallet along a path the wallet could
+  see: a native transfer, an ERC-20 <code>transfer</code>, or an <code>approve</code>. A protocol call
+  (case 3) was permitted as soon as its target appeared in <code>allowedProtocols</code>. That is not
+  enough, because several DeFi entry points take the destination as an argument:</p>
+  <ul class="tight">
+    <li>Aave's <code>Pool.withdraw(asset, amount, to)</code> sends the supplied position straight to
+    <code>to</code> — no <code>approve</code>, no <code>transfer</code>, so the budget never saw it.</li>
+    <li>Swap and LP calls (<code>exactInputSingle</code>, Universal Router <code>execute</code>,
+    <code>mint</code>) carry a <code>recipient</code> argument the agent chose freely.</li>
+  </ul>
+  <p>A stolen or misbehaving agent key could therefore name its own address as the destination and drain
+  everything the wallet had supplied or approved to a whitelisted protocol, <b>without consuming a single
+  wei of its budget</b>. Severity is HIGH: the loss is bounded only by the wallet's DeFi exposure, and the
+  on-chain accounting shows nothing.</p>
+
+  <h3>Remediation (V3) — per-selector call policies</h3>
+  <p>Case-3 calls are now <b>default-deny per selector</b>. Whitelisting the protocol is no longer
+  sufficient: the owner must also register a policy that says <i>where the money is allowed to go</i>.
+  Policies are written with <code>setCallPolicy(target, selector, policy)</code>, callable only by the
+  wallet itself — in practice the owner's passkey, bundled into the same signature that authorizes the
+  agent. The policy is one <code>uint256</code> word:</p>
+
+  <table class="data">
+    <tr><th>Bits</th><th>Field</th><th>Meaning</th></tr>
+    <tr><td class="mono">255</td><td><code>POLICY_ALLOWED</code></td><td>Selector is permitted. Absent → <code>SelectorNotAllowed</code></td></tr>
+    <tr><td class="mono">254</td><td><code>POLICY_DEEP</code></td><td>Route the call to the on-chain validator registry (see §11)</td></tr>
+    <tr><td class="mono">223..192</td><td><code>PIN_WALLET</code> (32-bit bitmap)</td><td>Calldata word <i>i</i> must equal <code>address(this)</code></td></tr>
+    <tr><td class="mono">191..160</td><td><code>PIN_PROTOCOL</code> (32-bit bitmap)</td><td>Calldata word <i>i</i> must be an address in <code>allowedProtocols</code></td></tr>
+  </table>
+
+  <p>Enforcement inside <code>executeAsAgent</code> runs before any external call:
+  (1) the selector is read from the calldata (<code>&lt; 4</code> bytes → <code>CalldataTooShort</code>);
+  (2) the policy must carry <code>POLICY_ALLOWED</code>;
+  (3) every pinned word is compared <b>full-width</b>, which also rejects dirty high bits, and a word read
+  past the end of the calldata yields zero and therefore fails — the check is fail-closed by construction;
+  (4) if <code>POLICY_DEEP</code> is set, the registry must return <code>true</code>.
+  Four custom errors were added: <code>SelectorNotAllowed</code>, <code>PinnedArgMismatch</code>,
+  <code>CalldataTooShort</code> and <code>PolicyValidationFailed</code>. One related default also changed:
+  an empty <code>allowedProtocols</code> list now reverts <code>NoProtocolsWhitelisted</code> instead of
+  meaning "any protocol".</p>
+
+  <div class="callout ok"><b>The owner is never subject to call policies.</b> They apply only to agents.
+  A human signing with their passkey keeps using any dApp normally — V3 narrows the delegated path, not
+  the owner's.</div>
+
+  <h3>Registered policies (Arbitrum One shown; the same shapes are used on the other five networks)</h3>
+  <table class="data">
+    <tr><th>Protocol</th><th>Selectors</th><th>Anchor</th></tr>
+    <tr><td>Uniswap SwapRouter02</td><td><code>exactInputSingle</code> · <code>exactOutputSingle</code></td><td>PIN_WALLET word 3</td></tr>
+    <tr><td>Uniswap SwapRouter02</td><td><code>exactInput</code> · <code>exactOutput</code> (multi-hop)</td><td>PIN_WALLET word 2</td></tr>
+    <tr><td>Aave v3 Pool</td><td><code>supply</code> · <code>withdraw</code> · <code>borrow</code> · <code>repay</code></td><td>PIN_WALLET word 2 / 2 / 4 / 3</td></tr>
+    <tr><td>Aave v3 Pool</td><td><code>repayWithATokens</code> · <code>setUserUseReserveAsCollateral</code> · <code>setUserEMode</code></td><td>Allowed, no pin — no destination argument exists</td></tr>
+    <tr><td>Permit2</td><td><code>approve(address,address,uint160,uint48)</code></td><td>PIN_PROTOCOL word 1 (the spender)</td></tr>
+    <tr><td>Uniswap Universal Router</td><td><code>execute(bytes,bytes[],uint256)</code></td><td>DEEP → validator registry</td></tr>
+    <tr><td>Uniswap v3 NFPM</td><td><code>mint</code> · <code>collect</code></td><td>PIN_WALLET word 9 / 1</td></tr>
+    <tr><td>Uniswap v3 NFPM</td><td><code>decreaseLiquidity</code> · <code>burn</code></td><td>Allowed, no pin — the NFPM gates these on <code>tokenId</code> ownership</td></tr>
+    <tr><td>WETH</td><td><code>deposit</code> · <code>withdraw</code></td><td>Allowed, no pin — both credit/pay <code>msg.sender</code></td></tr>
+  </table>
+
+  <div class="callout warn"><b>Two calldata traps found while writing the presets.</b>
+  <ul class="tight">
+    <li><b>Offset slide.</b> The multi-hop <code>exactInput</code> struct carries a <code>bytes path</code>,
+    which makes the tuple dynamic and slides an offset word in front of it: the recipient sits at word 2,
+    not word 3 as in the <code>*Single</code> variants. Pinning word 3 there would have pinned
+    <code>amountIn</code> and left the destination free. Every offset was re-derived by encoding real
+    calldata.</li>
+    <li><b><code>increaseLiquidity</code> is deliberately not whitelisted.</b> Unlike
+    <code>decreaseLiquidity</code>, <code>collect</code> and <code>burn</code>, the v3 NFPM applies no
+    owner check to it — only a deadline check. An agent could therefore have pushed the wallet's
+    NFPM-approved tokens into an attacker-owned <code>tokenId</code>, a recipient bypass that no bitmap pin
+    can express because word 0 is a <code>tokenId</code>, not an address. Agents add liquidity by minting a
+    fresh position with the recipient pinned to the wallet; re-enabling <code>increaseLiquidity</code>
+    would require a deep validator that checks <code>ownerOf(tokenId) == wallet</code>.</li>
+  </ul></div>
+
+  <h3>What each layer covers</h3>
+  <table class="data">
+    <tr><th>Case</th><th>Operation</th><th>Governed by</th></tr>
+    <tr><td>1</td><td>Native ETH transfer</td><td><code>allowedRecipients</code> + native limits</td></tr>
+    <tr><td>2</td><td><code>transfer(to, amount)</code></td><td><code>allowedRecipients</code> + token limits</td></tr>
+    <tr><td>2b</td><td><code>approve(spender, amount)</code></td><td><code>allowedRecipients</code> + token limits</td></tr>
+    <tr><td>3</td><td>DeFi / protocol call</td><td><code>allowedProtocols</code> + <b>call policies</b></td></tr>
+  </table>
+
+  <div class="callout warn"><b>Scope note.</b> V3 closes fund exfiltration through swaps, LP and protocol
+  withdrawals: case 3 is now safe by construction, whatever the owner configures. It does not turn a
+  compromised agent into a no-op — a direct <code>transfer</code> or <code>approve</code> (case 2/2b)
+  remains governed by the recipient whitelist and the per-token limits, and those are the owner's choice.
+  Simulated on mainnet against the test agent, with an empty recipient list and limits left at zero, a
+  direct <code>USDC.transfer</code> to an attacker passes; with recipients and limits configured it reverts
+  <code>RecipientNotAllowed</code>. The on-chain limits are the security model.</div>
+</section>
+</div>
+
+<div class="page section-break">
+<section>
+  <h2><span class="n">11</span>Validator Registry &amp; Deep Validation</h2>
+
+  <h3>Why a second mechanism</h3>
+  <p>A bitmap pin only reaches a word at a fixed offset. In the Universal Router's
+  <code>execute(bytes commands, bytes[] inputs, uint256 deadline)</code> — and in Uniswap v4's
+  <code>modifyLiquidities</code> — the recipient is buried inside variable-length data, so no fixed offset
+  exists. Those selectors carry the <code>DEEP</code> bit instead, which defers the decision to a
+  stateless on-chain validator.</p>
+
+  <h3>Design</h3>
+  <ul class="tight">
+    <li><b>Fixed dispatch address.</b> <code>BVCCValidatorRegistry</code> is compiled into the wallet as a
+    constant (<code>0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2</code>). Because the policy word carries only
+    a flag and never an address, an owner cannot be tricked into pointing a policy at an attacker's
+    validator. A dedicated test (<code>Create2Consistency.t.sol</code>) fails the build if that constant
+    ever drifts from the registry's CREATE2 address.</li>
+    <li><b>Fail-closed dispatch.</b> No validator registered for the target → <code>false</code>. A
+    validator that reverts, or that has no code, denies as well. Only an explicit <code>true</code> lets the
+    call through; anything else reverts <code>PolicyValidationFailed</code>.</li>
+    <li><b>Stateless validators.</b> Validators are <code>view</code> contracts reached by
+    <code>staticcall</code>. They never hold funds, never receive approvals and cannot mutate state — they
+    answer yes or no.</li>
+    <li><b>Dual consent.</b> Enabling a complex protocol takes two independent steps: BVCC registers the
+    validator in the registry, and the owner registers the <code>ALLOWED|DEEP</code> policy with their
+    passkey. Either one missing means the call is denied.</li>
+  </ul>
+
+  <h3>Asymmetric governance</h3>
+  <table class="data">
+    <tr><th>Direction</th><th>Function</th><th>Delay</th></tr>
+    <tr><td>Allow — register or replace a validator</td><td><code>proposeValidator</code> → <code>activateValidator</code></td><td><b>48 h timelock</b> + <code>ValidatorProposed</code> event</td></tr>
+    <tr><td>Deny — cancel a pending proposal</td><td><code>cancelProposal</code></td><td>Immediate</td></tr>
+    <tr><td>Deny — disable an active validator</td><td><code>freezeValidator</code></td><td>Immediate</td></tr>
+  </table>
+  <p>The delay runs only in the permissive direction, so a malicious or mistaken proposal is public for two
+  days before it can take effect and owners can react (pause or revoke their agents). The worst case with a
+  stolen admin key is therefore denial of service, or — after 48 publicly visible hours — a degradation to
+  V2-level protection on one protocol. It is never a direct path to funds: the registry moves nothing.</p>
+
+  <h3>The Universal Router validator</h3>
+  <ul class="tight">
+    <li><b>Bound to one router.</b> The router address is an immutable constructor argument; a call with
+    any other target returns <code>false</code>. A new router needs its own validator and its own 48-hour
+    governance cycle.</li>
+    <li><b>Exact command-byte matching</b> over <code>{0x00 V3_SWAP_EXACT_IN, 0x01 V3_SWAP_EXACT_OUT,
+    0x10 V4_SWAP}</code>. Every other byte is denied, including allow-revert variants and unknown
+    commands.</li>
+    <li><b>Every recipient is checked</b>, including the v4 <code>TAKE</code> action
+    (<code>{0x07 SWAP, 0x0b SETTLE, 0x0e TAKE}</code>): it must be the wallet or the
+    <code>MSG_SENDER</code> sentinel. <code>SWEEP</code>, <code>TRANSFER</code>, <code>PAY_PORTION</code>,
+    <code>WRAP</code> and <code>UNWRAP</code> are denied outright.</li>
+    <li><b>Malformed input denies.</b> Undecodable calldata reverts inside the validator, which the
+    registry treats as a denial; an empty <code>commands</code> string is rejected explicitly.</li>
+    <li><b>Scope.</b> Token→token swaps. Native legs relying on the router's <code>ADDRESS_THIS</code>
+    are deliberately out of scope; native swaps are executed as BVCC's own batches through WETH, so the
+    router never holds wallet funds mid-flight.</li>
+  </ul>
+
+  <div class="callout warn"><b>Critical bug caught during review — the command mask.</b> The first version
+  of the validator masked command bytes with <code>&amp; 0x3f</code>. The real router masks with
+  <code>&amp; 0x7f</code> (bit <code>0x80</code> is <code>FLAG_ALLOW_REVERT</code>), which means
+  <code>0x40</code> is <b>not</b> an alias of <code>0x00</code> — it is
+  <code>ACROSS_V4_DEPOSIT_V3</code>, a cross-chain bridge deposit. Under the wrong mask the validator would
+  have accepted it as a v3 swap while the router bridged the wallet's funds to an attacker on another
+  chain: precisely the exfiltration class V3 exists to prevent. The fix replaced masking with exact
+  matching, bound the validator to a single router and rejected empty command strings. The behaviour is now
+  fuzzed across all 256 command bytes against a model of the router, and was re-confirmed on mainnet after
+  deployment (see §12).</div>
+
+  <h3>Aave needs no validator</h3>
+  <p>Aave's destination arguments (<code>onBehalfOf</code>, <code>to</code>) sit at fixed offsets, so they
+  are handled by bitmap pins inside the wallet itself. No Aave policy carries the <code>DEEP</code> bit,
+  the registry is never consulted for Aave, and no timelock is involved. Only operations whose safety
+  cannot be phrased as "word <i>N</i> must be the wallet" — flash loans, multicall, adapter routes — would
+  require a validator, and those remain out of scope.</p>
+</section>
+</div>
+
+<div class="page section-break">
+<section>
+  <h2><span class="n">12</span>V3 — Verification &amp; Deployment</h2>
+
+  <h3>Test battery — <code>forge test</code>: 264 passed, 0 failed</h3>
+  <table class="data">
+    <tr><th>Suite</th><th>Tests</th><th>Focus</th></tr>
+    <tr><td><code>BVCCAgentWallet.t.sol</code></td><td>50</td><td>Agent permission core: limits, budgets, expiry, pause, batches</td></tr>
+    <tr><td><code>UniversalRouterValidator.t.sol</code></td><td>42</td><td>Router corpus, attacker recipients, fuzz over all 256 command bytes</td></tr>
+    <tr><td><code>BVCCAgentWalletAdvanced.t.sol</code></td><td>40</td><td>Fee accounting, <code>approve</code> regression tests, edge cases</td></tr>
+    <tr><td><code>CallPolicyAdversarial.t.sol</code></td><td>34</td><td>Policy bypass attempts, registry governance, malformed calldata</td></tr>
+    <tr><td><code>BVCCPositionManagerValidator.t.sol</code></td><td>26</td><td>Uniswap v4 LP calldata validation</td></tr>
+    <tr><td><code>BVCCWallet.t.sol</code></td><td>23</td><td>Base smart account: execution, fees, guardian recovery</td></tr>
+    <tr><td><code>BVCCWalletFactory.t.sol</code> · <code>BVCCAgentWalletFactory.t.sol</code></td><td>18</td><td>CREATE2 factories, deterministic addresses, kill switch</td></tr>
+    <tr><td><code>BVCCHookRegistry.t.sol</code></td><td>11</td><td>Hook approval registry and its timelock</td></tr>
+    <tr><td><code>AaveIntegration.t.sol</code></td><td>10</td><td>Forked-mainnet Aave cycle and adversarial variants</td></tr>
+    <tr><td><code>BVCCPMValidatorSdkVectors.t.sol</code> · <code>ERC7739*.t.sol</code> · <code>Create2Consistency.t.sol</code> · <code>GasBench.t.sol</code></td><td>10</td><td>SDK golden vectors, ERC-7739 signatures, address freeze guard, gas</td></tr>
+  </table>
+
+  <p><b>Adversarial policy tests</b> (<code>CallPolicyAdversarial.t.sol</code>): Aave
+  <code>withdraw</code>/<code>supply</code>/<code>borrow</code>/<code>repay</code> with an external
+  <code>to</code> or <code>onBehalfOf</code> revert <code>PinnedArgMismatch</code>; an unregistered
+  selector reverts <code>SelectorNotAllowed</code>; <code>PIN_PROTOCOL</code> rejects a spender that is not
+  whitelisted; a DEEP call denies when the validator returns false, reverts, has no code or is not
+  registered, and passes only on <code>true</code>; the 48-hour timelock, freeze and cancel paths behave as
+  specified; <code>policy = 0</code> revokes; short calldata, out-of-range pins and dirty high bits are all
+  rejected; and a batch containing one bad item reverts as a whole.</p>
+
+  <p><b>Aave on a mainnet fork</b> (<code>AaveIntegration.t.sol</code>): a full
+  supply → borrow → repay → withdraw cycle, with the 0.15% agent fee charged exactly on
+  <code>withdraw</code> and <code>borrow</code> and not at all on <code>supply</code> and
+  <code>repay</code>; budget consumption verified through the <code>approve</code> path; an external
+  beneficiary on any of the four calls reverts; <code>flashLoanSimple</code> and an unregistered
+  <code>setUserEMode</code> revert; a Pool missing from <code>allowedRecipients</code> reverts; and the
+  approve+supply batch rolls back atomically on failure.</p>
+
+  <h3>Static analysis — Slither re-run on V3</h3>
+  <p>Slither 0.11.3 was re-run over the V3 tree on 2026-07-27 (<code>slither . --exclude-dependencies</code>,
+  65 contracts, 100 detectors): <b>54 results — 3 High, 29 Low, 22 Informational</b>. Every High-impact
+  result was traced back to the source before being accepted or dismissed. One of them is real: the
+  <code>reentrancy-eth</code> result is a confirmed HIGH finding, reproduced with a proof-of-concept test
+  and still open at the time of writing (§12.1).</p>
+  <div class="callout"><b>Read this run, not the V2 one.</b> The V2 pass reported "0 results", but only
+  because the analyzer could not lower OpenZeppelin's transient-storage <code>ReentrancyGuard</code> to IR
+  and bailed out (§3). That zero was the tool giving up, not a clean bill of health. The V3 tree analyzes
+  end to end — the detectors do reach <code>executeAsAgent</code>, as the reentrancy result below shows —
+  so this is the static-analysis datapoint that carries weight, and its result classes line up with the 39
+  results of the V1 run.</div>
+  <table class="data">
+    <tr><th>Detector</th><th>Target</th><th>Verdict</th></tr>
+    <tr><td><code>reentrancy-eth</code><br><span class="foot-note">confidence: medium</span></td><td><code>executeAsAgent</code> writes <code>_currentAgent = 0</code> after <code>super.execute()</code></td><td><span class="badge b-high">CONFIRMED — HIGH</span> — reproduced with a PoC test (§12.1)</td></tr>
+    <tr><td><code>uninitialized-state</code> ×2<br><span class="foot-note">confidence: high</span></td><td><code>_tokenTotalSpent</code>, <code>_tokenDailySpent</code></td><td><span class="badge b-info">False positive</span> — both are <code>mapping</code>s, which have no initializer and default to zero</td></tr>
+  </table>
+  <h3><span class="n">12.1</span>Finding — cross-function reentrancy via <code>_currentAgent</code></h3>
+  <p><span class="badge b-high">HIGH</span> &nbsp; <span class="badge b-pass">FIXED IN SOURCE</span> &nbsp; <span class="badge b-info">AWAITING V4 DEPLOYMENT</span></p>
+  <p>This result was initially dismissed on the grounds that an agent is an EOA and cannot be handed
+  control mid-transaction. That reasoning does not hold, and the finding is confirmed.</p>
+
+  <h4>Mechanism</h4>
+  <p><code>executeAsAgent</code> sets <code>_currentAgent = agent</code> around its call to
+  <code>super.execute()</code>, and <code>_erc7821AuthorizedExecutor</code> grants the owner-level
+  <code>execute()</code> path to any caller satisfying <code>caller == _currentAgent</code>. The parent
+  <code>execute()</code> carries no reentrancy guard — <code>nonReentrant</code> sits on
+  <code>executeAsAgent</code> only — and applies no agent limits, because the limit checks live in
+  <code>executeAsAgent</code>. The EOA assumption rests on <code>AgentMustBeEOA</code>
+  (<code>agent.code.length == 0</code>), which was enforced <b>only at authorization time</b> and never
+  re-checked when the agent executed. An address can gain code afterwards: through an EIP-7702 delegation,
+  signed with the agent's own key — the very key the threat model assumes an attacker may hold — or by
+  deploying to a pre-computed CREATE2 address that was code-less when it was authorized.</p>
+
+  <div class="callout warn"><b>Scope: V1, V2 and V3 alike.</b> This is not a V3 regression. The four
+  ingredients — the flag, the executor override, the authorization-time-only EOA check and the unguarded
+  parent <code>execute()</code> — are present verbatim in all three generations; only the line numbers
+  moved. It was confirmed against deployed code rather than source: on an Arbitrum One fork, a wallet
+  created from the <b>live V2 factory</b> (<span class="mono">0x8D9e2402…</span>) was drained by the same
+  attack (<code>test/LegacyV2ReentrancyFork.t.sol</code>).</div>
+
+  <h4>Reproduction</h4>
+  <p><code>test/AgentReentrancyPoC.t.sol</code>. An agent is authorized while code-less with caps of
+  0.001 / 0.002 / 0.003 ETH (per-tx / daily / lifetime). Code is then placed at the agent address,
+  modelling the delegation. The agent submits a batch whose only item is a <b>1 wei</b> transfer to itself
+  — inside every cap — which hands it control; from there it calls <code>execute()</code> back into the
+  wallet and moves <b>49.925 ETH</b> out of a 100 ETH balance. The 0.075 ETH difference is the wallet's own
+  0.15% fee, which confirms the drain travelled the owner-level path.</p>
+
+  <h4>Blast radius</h4>
+  <p>Every agent constraint is bypassed at once — per-transaction, daily, period and lifetime budgets, the
+  recipient whitelist and the V3 call policies. It converts a bounded agent into owner-equivalent control
+  of the wallet, a strictly larger hole than the exfiltration vector V3 was built to close. It does not
+  affect the biometric owner's own path, and it does not let a third party who lacks the agent key do
+  anything.</p>
+
+  <h4>Remediation — two layers</h4>
+  <p>Three candidate fixes were implemented and measured against three attack shapes rather than argued
+  about. S1 sends 1 wei to the agent directly; S2 leaves the agent code-less on entry and has the batch
+  itself deploy code to that address through a whitelisted helper (no EIP-7702 involved); S3 never names
+  the agent at all, routing value to it through a whitelisted intermediary.</p>
+  <table class="data">
+    <tr><th>Candidate</th><th>S1 direct</th><th>S2 CREATE2 mid-batch</th><th>S3 indirect</th><th>Factory size</th></tr>
+    <tr><td>None (pre-fix)</td><td>drained</td><td>drained</td><td>drained</td><td class="mono">24,283</td></tr>
+    <tr><td>B — re-check <code>code.length</code></td><td>blocked</td><td><b>drained</b></td><td>blocked</td><td class="mono">24,294</td></tr>
+    <tr><td>C — batch may not target the agent</td><td>blocked</td><td>blocked</td><td><b>drained</b></td><td class="mono">24,312</td></tr>
+    <tr><td>A — guard on external <code>execute()</code></td><td>blocked</td><td>blocked</td><td>blocked</td><td class="mono">24,317</td></tr>
+    <tr><td><b>A + B (shipped)</b></td><td>blocked</td><td>blocked</td><td>blocked</td><td class="mono">24,328</td></tr>
+  </table>
+  <p>The two rejected candidates failed for instructive reasons. <b>B alone</b> is another
+  point-in-time check — the same class of assumption that caused the bug — and S2 walks straight past it by
+  making the code appear <i>during</i> the batch. <b>C alone</b> only closes the one door the first
+  proof-of-concept happened to use; S3 reaches the agent through a legitimate protocol instead.</p>
+  <p>What ships is both layers. <b>Layer 1</b> re-checks the EOA invariant on every execution, so it is
+  enforced continuously rather than once. <b>Layer 2</b> overrides <code>execute()</code> in the agent
+  wallet to reject any external entry while an agent batch is in flight
+  (<code>ReentrantAgentExecute</code>); <code>executeAsAgent</code> reaches the parent through
+  <code>super.execute()</code>, which resolves statically and therefore skips the override, so the
+  legitimate path is untouched. Layer 2 is the one that does not care <i>how</i> or <i>when</i> the agent
+  obtained code — it closes the window itself. Each layer has its own regression test, and layer 2 is
+  proven independently through the S2 shape, where layer 1 passes cleanly and the drain is stopped anyway.</p>
+  <p>Cost: the agent factory grows 45 bytes to 24,328, leaving 248 bytes of EIP-170 headroom, and
+  <code>executeAsAgent</code> case 3 rises from 64,758 to 64,903 gas — 145 gas, 0.2%, because the agent
+  address is already warm as the transaction sender. One deliberate behavioural consequence: an agent that
+  adopts an EIP-7702 delegation for unrelated reasons stops working until it is removed. That is the
+  contract's own stated invariant, now enforced.</p>
+
+  <div class="callout warn"><b>Not yet deployed.</b> The fix changes the wallet bytecode and therefore the
+  CREATE2 addresses; <code>Create2Consistency.t.sol</code> fails by design as the mechanical proof. Every
+  wallet live on the six networks still runs vulnerable bytecode until a V4 factory generation ships.
+  <b>The mitigation available today, without redeploying:</b> authorize agents with a non-empty
+  <code>allowedRecipients</code> that does not contain the agent's own address, which removes the batch's
+  ability to hand control back to it (<code>test_RecipientWhitelist_BlocksTheEntry</code>). Wallets left on
+  the permissive default — an empty recipient list, meaning any destination — are the exposed
+  configuration. Pausing or revoking the agent also closes it immediately.</div>
+  <p>Among the Low results, 20 <code>calls-loop</code> and 4 <code>timestamp</code> are inherent to batch
+  execution and to day-indexed limits; <code>return-bomb</code> on <code>_tryBalanceOf</code> is bounded by
+  the same <code>PROBE_GAS_CAP</code> introduced in V2, which also caps how much return data a hostile
+  token can afford to produce. One result is a genuine, if inert, gap:</p>
+  <div class="callout warn"><b>Accepted nit — no zero-check in the validator constructors.</b> Neither
+  <code>BVCCUniversalRouterValidator</code> nor <code>BVCCPositionManagerValidator</code> rejects a zero
+  address for the protocol it binds to, unlike the factory constructors hardened in V1
+  (<code>ZeroOwner</code>). A validator bound to the zero address would deny every call — fail-closed, so
+  the deployed behaviour is safe — and the six deployed instances carry the correct constructor arguments,
+  recorded with their codehashes in <code>contracts/deployments/</code> and verified on the explorers.
+  Adding the check would change the bytecode, and therefore the CREATE2 addresses, forcing a redeploy and a
+  fresh 48-hour governance cycle per network. It is recorded here for the next bytecode revision rather
+  than acted on now.</div>
+  <p class="foot-note">The Informational results are the same classes as in the V1 and V2 runs: inline
+  assembly, low-level calls, naming conventions on immutables, pragma spread across the OpenZeppelin tree,
+  and the <code>_feeNumerator()</code> "dead code" report — a known false positive: the function is reached
+  through virtual dispatch and sets the 0.15% agent fee.</p>
+
+  <div class="callout"><b>Re-run after the V4 fixes: 53 results — 3 High, 27 Low, 23 Informational.</b>
+  The three High results are unchanged, and all three are now false positives: the two
+  <code>uninitialized-state</code> reports are mappings, and <code>reentrancy-eth</code> still sees the
+  flag written after the external call even though §12.1 closed the window — it now lists
+  <code>execute()</code> among the reachable functions, which is precisely where the guard sits. A second
+  <code>dead-code</code> report appeared for <code>_afterRecovery()</code>, the recovery hook of §14.2: the
+  same false positive as <code>_feeNumerator()</code>, an empty virtual overridden in the child. Neither
+  is to be removed. Nothing new was introduced by the fixes.
+  <b>Static analysis is a pattern detector, not a verdict</b>: this count did not move while the
+  reentrancy was exploitable for three generations, and it did not move when the fix closed it.</div>
+
+  <h3>On-chain verification — Arbitrum One (mainnet)</h3>
+  <p>Test wallet <span class="mono addr">0x605A4C65dBa64bd26d9F7701e1e4Cda48c594A5c</span>, agent
+  <span class="mono addr">0x38529C66F3cf22453D66B9E2A20FdF2676544aB4</span>.</p>
+  <table class="data">
+    <tr><th>Date</th><th>Operation</th><th>Result</th></tr>
+    <tr><td>2026-07-16</td><td>Agent swap USDC→WETH through SwapRouter02, driven by the MCP server<br><span class="mono addr">0x4768603d38b03f9823d5d25e53fb03970b8e4d294ebee791d0ae9ef92e71a8ae</span></td><td><span class="badge b-pass">OK</span> USDC debited exactly, WETH to the wallet, fee 0.15% exact</td></tr>
+    <tr><td>2026-07-20</td><td>Agent swap through the Universal Router — an atomic 3-call batch crossing three different layers<br><span class="mono addr">0x6f831b37ae5db240256bf6bf99c8ce418edb75a1c38e37d6ed3e2c3a052a3bc0</span></td><td><span class="badge b-pass">OK</span> gas 419,124 · USDC −0.100000 · fee 0.000000078468831120 WETH = 0.15% exact · every recipient the wallet</td></tr>
+    <tr><td>2026-07-20</td><td>Same swap with <code>recipient</code> = attacker (simulated, no funds moved)</td><td><span class="badge b-rev">DENIED</span> reverts before executing</td></tr>
+  </table>
+  <p>The three calls of that batch each traverse a different guard: <code>USDC.approve(Permit2)</code> is
+  case 2b and is checked against <code>allowedRecipients</code>; <code>Permit2.approve</code> is case 3 with
+  <code>PIN_PROTOCOL</code> on the spender; <code>UniversalRouter.execute</code> is case 3 with
+  <code>DEEP</code> and is decided by the validator.</p>
+
+  <p><b>Gate behaviour, measured before and after the validator's 48-hour activation:</b></p>
+  <table class="data">
+    <tr><th><code>registry.validate(...)</code></th><th>Before activation</th><th>After activation</th></tr>
+    <tr><td>Legitimate swap (recipient = wallet)</td><td>false</td><td><b>true</b></td></tr>
+    <tr><td>Theft attempt (recipient = attacker)</td><td>false</td><td>false</td></tr>
+    <tr><td>Command <code>0x40</code> (cross-chain bridge)</td><td>false</td><td>false</td></tr>
+    <tr><td>Target ≠ the bound router</td><td>false</td><td>false</td></tr>
+  </table>
+  <p>The mask fix is therefore confirmed on mainnet, not only in tests, and the fail-closed property is
+  visible in the "before" column: until the validator was active, even the legitimate swap was denied.</p>
+
+  <h3>Gas</h3>
+  <table class="data">
+    <tr><th>Operation</th><th>Gas</th></tr>
+    <tr><td><code>createWallet</code></td><td class="mono">4,548,977</td></tr>
+    <tr><td><code>authorizeAgent</code></td><td class="mono">166,803</td></tr>
+    <tr><td><code>setCallPolicy</code></td><td class="mono">25,912</td></tr>
+    <tr><td><code>executeAsAgent</code> (case 3, policy checked)</td><td class="mono">64,758</td></tr>
+  </table>
+
+  <h3>V3 deployment — deterministic CREATE2</h3>
+  <table class="data">
+    <tr><th>Contract</th><th>Address (identical on all six networks)</th></tr>
+    <tr><td>SmartWalletFactory V3</td><td class="mono addr">0xD42F61AA856A4f47885Ecd2D0ce119411d53C192</td></tr>
+    <tr><td>AgentWalletFactory V3</td><td class="mono addr">0xd866a7563cDaC9F71423be3332b62c329C676064</td></tr>
+    <tr><td>ValidatorRegistry</td><td class="mono addr">0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2</td></tr>
+    <tr><td>HookRegistry</td><td class="mono addr">0x551C6e7ABdA04a110790888e711198f25621b066</td></tr>
+  </table>
+  <p>Networks: Arbitrum One (42161), Ethereum (1), BNB Chain (56), Base (8453), Polygon (137) and Arbitrum
+  Sepolia (421614). All four contracts were re-checked on 2026-07-27 through the explorers' API: present,
+  byte-identical and source-verified on all six chains.</p>
+
+  <p>Universal Router validators are bound to one router each, so their addresses differ per network:</p>
+  <table class="data">
+    <tr><th>Network</th><th>UR validator</th><th>Registry status</th></tr>
+    <tr><td>Arbitrum One</td><td class="mono addr">0xD1522594e185C882bfDEc6FFD4DE8a53F69AF0Ca</td><td><span class="badge b-pass">Active</span></td></tr>
+    <tr><td>Ethereum</td><td class="mono addr">0x3615a0Fc0663C0201B543deC9816d5Ef30a82ffb</td><td><span class="badge b-pass">Active</span></td></tr>
+    <tr><td>BNB Chain</td><td class="mono addr">0x6945f861e0D7FCD566739000f3fDC1D44896D815</td><td><span class="badge b-pass">Active</span></td></tr>
+    <tr><td>Base</td><td class="mono addr">0x4A2Fc73AAdEfC84513defaa0c444d2150AC6A6D8</td><td><span class="badge b-pass">Active</span></td></tr>
+    <tr><td>Polygon</td><td class="mono addr">0xC1C584E4149eD2EFe20DA0155b1B8257232102fF</td><td><span class="badge b-pass">Active</span></td></tr>
+    <tr><td>Arbitrum Sepolia</td><td class="mono addr">0x87550034627966e32d82E3b8AdB3f19c62E8d86E</td><td><span class="badge b-info">Deployed, not activated</span></td></tr>
+  </table>
+  <p class="foot-note">Status read directly from <code>validators(router)</code> on each chain on
+  2026-07-27. A deployed-but-unactivated validator is inert in the safe direction: the corresponding DEEP
+  calls fail closed. Per-chain provenance manifests (addresses plus router and validator codehashes) live in
+  <code>contracts/deployments/</code>. The Uniswap v4 <code>PositionManager</code> validators and the hook
+  registry are deployed on all six networks but not yet activated in the registry, and are outside the
+  scope of this report.</p>
+
+  <h3>Build freeze</h3>
+  <p>Deterministic CREATE2 addresses require a frozen build: solc <b>0.8.36</b>, <code>via_ir</code>,
+  <code>optimizer_runs = 50</code>, EVM <code>cancun</code>. That compiler was chosen deliberately to stay
+  clear of the 0.8.28–0.8.33 via-IR pipeline bug. The agent factory's runtime size is <b>24,283 bytes</b>,
+  leaving 293 bytes of headroom under the EIP-170 limit — any future addition must be measured against it.</p>
+
+  <h3>Off-chain layer — SDK and MCP 0.2.0</h3>
+  <p>The client libraries were made policy-aware so that the on-chain guard is not discovered only at
+  broadcast time. <code>getCapabilities</code> now gates a swap on the registered policies <i>and</i> the
+  validator registry rather than on the permission struct alone, and reports the wallet version plus any
+  missing policies; the four V3 errors decode into actionable messages, distinguishing "no validator active"
+  (do not retry) from "the validator rejected this calldata" (fixable). <code>setCallPolicy</code> is
+  deliberately <b>not</b> exposed by the SDK: policies are written by the owner's passkey, never by an
+  agent's key. Aave lending and its planners ship through the same catalog, with the beneficiary always
+  pinned to the wallet.</p>
+
+  <h3>Migration</h3>
+  <p>V3 wallet bytecode differs from V2, so the CREATE2 addresses differ: existing users create a new
+  wallet and move their funds, exactly as in the V1→V2 migration, after which the V2 factories are killed.
+  Future capabilities — registering further validators, adding protocol presets — are bytecode-neutral and
+  will not force another migration.</p>
+</section>
+</div>
+
+<div class="page section-break">
+<section>
+  <h2><span class="n">13</span>External Review — Additional Findings</h2>
+  <p>A separate reviewer was given the V3 source and raised four issues. All four were reproduced against
+  the code rather than accepted on description; the tests live in
+  <code>test/ThirdPartyClaims.t.sol</code>. All four hold, though two are narrower than stated and one is a
+  property of ERC-20 rather than of this wallet. None of them had been found by the three internal rounds.</p>
+
+  <h3><span class="n">13.1</span>Guardian squatting through the factory</h3>
+  <p><span class="badge b-high">HIGH</span> &nbsp; <span class="badge b-pass">FIXED IN SOURCE</span> &nbsp; <span class="badge b-info">AWAITING V4 DEPLOYMENT</span></p>
+  <p>A wallet's CREATE2 address derives from the passkey public key alone; the guardians are not part of
+  it. <code>createWallet</code> is permissionless and sets the guardians in the same call, and
+  <code>setGuardians</code> is one-shot. Whoever deploys an address first therefore chooses, permanently,
+  the three parties who can rotate its owner. If the wallet already exists the factory returns it
+  unchanged, so a caller arriving second is handed the squatted wallet with no error and no signal.</p>
+  <p>The full takeover was reproduced end to end
+  (<code>test_Claim1_GuardianSquattingTakesOverTheWallet</code>): an attacker deploys the victim's
+  deterministic address with its own guardians; the victim's app then "creates" the wallet and receives the
+  same address back; two of the attacker's guardians open a recovery, wait out the 48-hour timelock and
+  rotate the signer. The wallet and its balance are theirs.</p>
+  <p>The multichain design amplifies this precisely because it is deterministic: the passkey public key
+  becomes visible on-chain the moment the user deploys anywhere, and the same address is claimable on every
+  other network. The exposure is therefore <b>networks where a user has not yet deployed</b>, not wallets
+  already in use — once correct guardians are set they cannot be replaced. The 48-hour timelock plus
+  <code>cancelRecovery</code> is a real defence, but only on a chain the owner is watching, which by
+  definition excludes the chains they have not deployed to.</p>
+  <div class="callout"><b>One part of the reviewer's recommendation does not hold.</b> Rejecting duplicate
+  guardians on-chain is hygiene, not a hole: approvals are tracked per address, so a duplicated guardian
+  cannot approve twice and cannot reach the 2-of-3 threshold alone
+  (<code>test_Claim1_DuplicateGuardianCannotSelfApprove</code>). Duplicates degrade the scheme to 2-of-2;
+  they do not enable a solo takeover.</div>
+  <p><b>Remediation, applied in source.</b> The factory no longer chooses guardians: it deploys the wallet
+  with none, and <code>setGuardians</code> is gated behind <code>msg.sender == address(this)</code> — the
+  same self-call pattern <code>authorizeAgent</code> and <code>setCallPolicy</code> already use — so only a
+  passkey-signed operation can set them. Duplicates are now rejected as well. A squatter is left with an
+  empty shell it cannot configure, and is in effect paying the victim's deployment gas. Guardians are read
+  nowhere except the recovery path, so a wallet without them operates normally; only recovery is
+  unavailable until the owner signs. Seven regression tests cover it, including the owner's real path — a
+  <code>execute()</code> batch whose item targets the wallet itself — and the fact that an authorized agent
+  cannot reach it either, because <code>executeAsAgent</code> refuses any item targeting the wallet.</p>
+  <p><b>Two related findings surfaced while fixing it.</b> The <code>credentialId</code> travelled through
+  the factory as an unauthenticated event field, so a squatter could publish a bogus one for someone else's
+  address. It cannot cost funds — signatures are verified against the stored public key — but a client that
+  trusts it pre-selects a credential the owner does not hold, and the passkey prompt fails. It has been
+  moved out of the factory entirely: the wallet now announces it itself, in the same passkey-signed call
+  that sets the guardians, through <code>CredentialSet(bytes32 indexed credentialHash, bytes
+  credentialId)</code>. The hash is indexed so a client holding a passkey <code>rawId</code> can find the
+  wallet it belongs to. Separately, <code>executeRecovery</code> rotates the signer but left the credential
+  untouched, so after a guardian recovery the on-chain credential pointed at a passkey the owner no longer
+  held; <code>setCredentialId</code>, self-call gated, closes that.</p>
+  <p><b>Available today, without a contract change:</b> read <code>guardians(0..2)</code> on a network
+  before treating a wallet there as one's own, and deploy proactively on every supported network so no
+  address is left unclaimed.</p>
+
+  <h3><span class="n">13.2</span>Token budgets do not cover case-3 spending</h3>
+  <p><span class="badge b-high">HIGH — conditional on a standing allowance</span> &nbsp; <span class="badge b-info">OPEN — mitigations below</span></p>
+  <p>The per-token counters accumulate only for the ERC-20 <code>transfer</code> and <code>approve</code>
+  selectors: <code>_checkTokenWhitelistAndAmount</code> is reached from those two branches and from nowhere
+  else. A case-3 protocol call therefore spends tokens without touching <code>tokenMaxAmounts</code>, the
+  daily limit or the lifetime budget — and without comparing the asset inside its calldata against
+  <code>allowedTokens</code>. This is deliberate as far as it goes: the model charges the budget at the
+  <code>approve</code> step, which is what the Aave fork suite asserts, so in the ordinary
+  approve-then-trade flow the budget is consumed.</p>
+
+  <p>The gap is <b>pre-existing allowances</b>, and the common case is not exotic: an owner who has granted
+  a router or Permit2 a large allowance from the interface — standard practice — leaves the agent able to
+  move that token through case 3 indefinitely without consuming a unit of its token budget. Reproduced in
+  <code>test_Claim2_PreExistingAllowanceEscapesTokenBudgets</code>: with all three token caps set to 10,
+  the agent moves 500 through a whitelisted router and both counters stay at zero. Permit2's own
+  <code>approve(address,address,uint160,uint48)</code> is likewise a different selector and is not
+  counted.</p>
+
+  <div class="callout warn"><b>Severity correction.</b> An earlier draft of this section described the loss
+  as trading beyond the intended volume, on the grounds that call policies pin every recipient to the
+  wallet. That understates it. The pin guarantees <i>where the output lands</i>, not <i>what it is worth</i>:
+  a compromised agent can swap a valuable asset into a worthless one through a pool it controls, and the
+  worthless token dutifully comes home while the value stays in the attacker's liquidity. Nothing in the
+  current design objects — the Universal Router validator contains no reference to amounts or prices at
+  all, and the SwapRouter02 policies pin the recipient and nothing else, so a swap with
+  <code>amountOutMinimum = 1</code> passes every check. Where a standing allowance exists, this is
+  effectively a full drain of the tokens it covers, not slippage.</div>
+
+  <p><b>Token selection narrows this but does not close it.</b> Choosing which tokens an agent may touch
+  does govern <code>transfer</code> and <code>approve</code>, so an unselected token with no standing
+  allowance cannot be moved: the agent cannot approve it either. Two holes remain. A token that already
+  carries an allowance is reachable regardless of the selection. And Aave's <code>borrow</code> and
+  <code>withdraw</code> consume no allowance at all, so there is nothing to zero: an agent holding an Aave
+  policy can take on debt in an asset the owner never selected, against the owner's collateral, with the
+  liquidation risk that implies. The funds land in the wallet — this is damage rather than theft — but it
+  is damage the token selection was expected to prevent.</p>
+
+  <h4>Remediation plan</h4>
+  <p>Full in-wallet accounting would require deep validators to decode and return the
+  <code>(token, maxSpend)</code> pairs they see, with the wallet accumulating them through
+  <code>_applyTokenSpend</code> and counting <code>amountInMaximum</code> for exact-output routes. That is a
+  change to every validator plus the wallet, and the agent factory has 101 bytes of EIP-170 headroom. It is
+  therefore staged rather than attempted now.</p>
+  <table class="data">
+    <tr><th>Stage</th><th>Measure</th><th>Cost</th></tr>
+    <tr><td rowspan="5"><b>Now</b><br>interface only</td><td>Rename the limit so it stops implying a global cap — it governs direct transfers and approvals, not DeFi volume</td><td>None</td></tr>
+    <tr><td>At authorization, read the allowances of every relevant token towards every protocol the agent's policies can reach, and require a signed revocation of any that is non-zero</td><td>Frontend + one signed batch</td></tr>
+    <tr><td>Drive agent operations as atomic batches: <code>approve(exact)</code> → protocol call → <code>approve(0)</code>, so the first leg consumes budget and nothing outlives the batch</td><td>Frontend; works on today's contract</td></tr>
+    <tr><td>For Permit2, check both layers — the ERC-20 allowance to Permit2 and Permit2's internal allowance to the router — and use exact amounts with short expirations</td><td>Frontend</td></tr>
+    <tr><td>An owner-facing emergency screen that revokes all allowances, and modest balances on wallets that carry agents</td><td>Frontend + operational</td></tr>
+    <tr><td rowspan="2"><b>Next</b><br>validator layer</td><td>Price control in the swap validators: reject a route whose <code>amountOutMinimum</code> is implausible against an oracle or TWAP. A validator is a <code>view</code> function, so it can read one. <b>This is the measure that closes the rigged-pool drain.</b></td><td>New validators; 48 h governance per network</td></tr>
+    <tr><td>An Aave validator that checks the <code>asset</code> argument against the wallet's selected tokens, so the selection governs lending too</td><td>New validator; same cycle</td></tr>
+    <tr><td rowspan="2"><b>Later</b></td><td>An agent vault the agent must route through, so the amount handed to it is a physical ceiling and routers leave <code>allowedProtocols</code> entirely</td><td>New contract + integration</td></tr>
+    <tr><td>In-wallet accounting, once a factory redesign frees the bytecode for it</td><td>Requires V5-scale work</td></tr>
+  </table>
+  <div class="callout"><b>How the severity comes down.</b> The rating is driven by two things: the loss has
+  no ceiling, and the precondition is ordinary user behaviour. Note what happens when no standing allowance
+  exists — the agent must <code>approve</code> before it can spend, and that approve <i>is</i> counted
+  against the per-token budget and gated by the token and recipient lists. The budget bounds everything
+  again. The finding is therefore not "the budget does not work" but "the budget does not work <i>while a
+  standing allowance exists</i>", and that condition is attackable without touching the contracts.
+  <table class="data">
+    <tr><th>State</th><th>What is bounded</th><th>Severity</th></tr>
+    <tr><td>Today</td><td>Nothing, where an allowance exists</td><td><b>HIGH</b></td></tr>
+    <tr><td>+ allowance hygiene (zero at authorization, exact atomic approvals, short Permit2 expirations)</td><td>Cumulative spend, via the token budget</td><td>MEDIUM</td></tr>
+    <tr><td>+ price control in the swap validators</td><td>Per-operation loss as well</td><td>LOW</td></tr>
+  </table>
+  Hygiene alone stops at medium because it is a snapshot: an owner can grant an allowance from any dApp
+  afterwards. It lowers the likelihood; only the validator lowers the impact. Two caveats: Aave's
+  <code>borrow</code> and <code>withdraw</code> consume no allowance, so hygiene does not reach them until
+  an Aave validator checks the <code>asset</code>; and a price bound caps each operation, not the total —
+  bounding the cumulative case-3 spend needs the in-wallet accounting the bytecode cannot currently
+  hold.</div>
+
+  <div class="callout warn"><b>What the interface measures cannot do.</b> Blocking unlimited approvals while
+  an agent is active is not enforceable from the wallet's own frontend: an owner can grant an allowance
+  from any dApp, and nothing on-chain prevents it. The authorization-time check is therefore a snapshot
+  that closes the common case — the forgotten standing allowance — not an invariant. Only the validator
+  layer makes it one.</div>
+
+  <h3><span class="n">13.3</span>Pausing or revoking an agent leaves its allowances alive</h3>
+  <p><span class="badge b-info">LOW</span> &nbsp; <span class="badge b-info">INHERENT TO ERC-20</span></p>
+  <p>An allowance lives in the token contract, so nothing the wallet does can retract it. Reproduced in
+  <code>test_Claim3_AllowanceSurvivesPauseAndRevoke</code>: the agent approves within its cap, the owner
+  pauses <i>and</i> revokes, and the spender still pulls the full amount. The reviewer correctly notes the
+  amount was charged to the budget at approval time, so no limit is evaded. This is a property of every
+  smart account, not a defect of this one, and it matters for incident response rather than for the
+  permission model: after revoking an agent, an owner should also zero the allowances it was granted. An
+  explicit warning at pause time and an owner-facing allowance revocation screen cover it.</p>
+
+  <h3><span class="n">13.4</span><code>approve</code> can carry ETH past the recipient whitelist</h3>
+  <p><span class="badge b-info">LOW</span> &nbsp; <span class="badge b-pass">FIXED IN SOURCE</span></p>
+  <p>An execution carrying both a positive <code>value</code> and <code>approve</code> calldata is
+  classified by the agent validator as a token operation — so the recipient check is applied to the
+  <i>spender</i> — while the parent <code>execute()</code> falls through to case 3 and forwards the ETH to
+  the token address. The ETH caps still apply, since <code>value</code> is accumulated unconditionally;
+  what is skipped is the destination whitelist. Reproduced in
+  <code>test_Claim4_ApproveCarriesEthPastRecipientWhitelist</code>, where a plain ETH send to the same
+  address reverts <code>RecipientNotAllowed</code> and the same ETH riding on an <code>approve</code>
+  arrives.</p>
+  <p>Severity is limited by a detail the reviewer does not mention: the target's <code>approve</code> must
+  be <code>payable</code> for the call to succeed at all. Standard ERC-20s are not, so the attempt simply
+  reverts; the test needs a purpose-built payable token to demonstrate the path. Exploitation therefore
+  requires the owner to have whitelisted an unusual or hostile token. A related piece of untidiness sits
+  next to it: a <code>transfer</code> carrying <code>value</code> is executed by the parent without
+  forwarding the ETH, yet the agent still charges that value to its ETH budget. Both are now refused:
+  a token call carrying value reverts <code>TokenCallWithValue</code>, verified by a regression test that
+  also confirms an ordinary value-free <code>approve</code> still works.</p>
+</section>
+</div>
+
+<div class="page section-break">
+<section>
+  <h2><span class="n">14</span>Adversarial Battery — Recovery &amp; Signature</h2>
+  <p>The permission layer had been attacked from every angle across three rounds; guardian recovery and the
+  signature path had not. Both hold funds, so both were given the same treatment: twenty tests written to
+  make something work that must not (<code>test/RecoveryAdversarial.t.sol</code>,
+  <code>test/SignatureAdversarial.t.sol</code>).</p>
+
+  <h3><span class="n">14.1</span>Signature path — no findings</h3>
+  <p>Ten attacks against the ERC-7739 / WebAuthn path, all rejected. The two that matter most are the
+  replay pairs, because this wallet's design invites both: the address is identical on every network, and
+  one passkey backs a smart wallet and an agent wallet at two different addresses.</p>
+  <table class="data">
+    <tr><th>Attack</th><th>Result</th></tr>
+    <tr><td>Replay a signature from one chain onto the same address on another</td><td><span class="badge b-pass">Rejected</span> chainId is bound in the verifier's domain</td></tr>
+    <tr><td>Replay a signature between the owner's own smart and agent wallets</td><td><span class="badge b-pass">Rejected</span> verifying contract is bound</td></tr>
+    <tr><td>Malleated signature (<code>s</code> replaced by <code>N − s</code>)</td><td><span class="badge b-pass">Rejected</span></td></tr>
+    <tr><td>Zeroed signature</td><td><span class="badge b-pass">Rejected</span></td></tr>
+    <tr><td>Signature over different contents, or another dApp's domain</td><td><span class="badge b-pass">Rejected</span></td></tr>
+    <tr><td>Tampered <code>authenticatorData</code> (user-verification flag dropped)</td><td><span class="badge b-pass">Rejected</span></td></tr>
+    <tr><td>Challenge swapped for another digest</td><td><span class="badge b-pass">Rejected</span></td></tr>
+    <tr><td><code>webauthn.create</code> presented where <code>webauthn.get</code> is required</td><td><span class="badge b-pass">Rejected</span></td></tr>
+  </table>
+
+  <h3><span class="n">14.2</span>Recovery — three findings</h3>
+  <p><b>Recovery did not revoke agents.</b> <span class="badge b-pass">FIXED IN SOURCE</span>
+  <code>executeRecovery</code> rotated the signer and touched nothing else, so an agent authorized before
+  the recovery kept spending after it, budget intact. That matters because compromise is precisely why an
+  owner reaches for recovery: an owner who recovers believing they have locked the attacker out had not
+  revoked the attacker's agent. Recovery now pauses agents through an <code>_afterRecovery</code> hook.
+  Pausing rather than revoking is deliberate — constant gas whatever the agent list looks like, reversible,
+  and it preserves each agent's configuration for the new owner to judge rather than forcing them to
+  rebuild it. The guard is <code>if (!paused()) _pause()</code>: without it, a wallet whose agents were
+  already paused could not have completed a recovery at all.</p>
+
+  <p><b>Guardians could never be rotated.</b> <span class="badge b-pass">FIXED IN SOURCE</span>
+  <code>setGuardians</code> was one-shot, so a guardian whose key was later lost or compromised was
+  permanent for the life of the wallet and the only remedy was to create a new wallet and move the funds.
+  The set is now replaceable by the owner. It remains a self-call, so the squatting of §13.1 stays closed,
+  and rotation is refused while a recovery is in flight (<code>RecoveryActive</code>) — otherwise a stolen
+  passkey could swap the guardians out from under a recovery already under way. The owner cancels first,
+  then rotates.</p>
+
+  <p><b>A single guardian can stall a recovery indefinitely.</b> <span class="badge b-info">OPEN —
+  ACCEPTED</span> <code>initiateRecovery</code> may be called whenever approvals are below two, and it
+  overwrites the pending key and zeroes the timelock. One malicious guardian therefore only has to
+  front-run each second approval to keep the honest pair from ever reaching the threshold. This is denial
+  of service against the rescue mechanism, not theft: the owner never rotates. It is also a race rather
+  than a lock — a companion test shows that once the honest pair lands two approvals, no one can reset
+  it. Accepted as a documented limitation.</p>
+
+  <div class="callout warn"><b>The trust model, stated plainly.</b> Two colluding guardians take the wallet
+  if the owner does not cancel inside the 48-hour window — that is what makes recovery work, and it is
+  tested as such. It means the owner must be watching every network the wallet exists on, which is the same
+  operational requirement the guardian squatting of §13.1 exposed from a different direction.</div>
+</section>
+</div>
+
+<div class="page section-break">
+<section>
+  <h2><span class="n">15</span>V4 — Pending Remediation</h2>
+  <p>Seven findings required a bytecode change and are fixed in source, waiting on a deployment. Because
+  CREATE2 addresses derive from the bytecode, they cannot be applied to wallets already deployed: the
+  migration is the same playbook as V1→V2 and V2→V3 — users recreate their wallet and move funds, after
+  which the superseded factories are killed. They travel in one deployment rather than forcing several
+  migrations. The contracts were renamed to V4 and the EIP-712 domain follows
+  (<code>BVCCSmartWalletV4</code>), as in the V2→V3 generation.</p>
+  <table class="data">
+    <tr><th>Item</th><th>Status</th></tr>
+    <tr><td>Cross-function reentrancy (§12.1)</td><td><span class="badge b-pass">Fixed</span> two layers, each with its own regression test</td></tr>
+    <tr><td>Guardian squatting (§13.1)</td><td><span class="badge b-pass">Fixed</span> the factory no longer chooses guardians; <code>setGuardians</code> is passkey-gated</td></tr>
+    <tr><td>Unauthenticated <code>credentialId</code> (§13.1)</td><td><span class="badge b-pass">Fixed</span> moved out of the factory into a wallet-emitted, signed event</td></tr>
+    <tr><td>Credential stale after recovery (§13.1)</td><td><span class="badge b-pass">Fixed</span> <code>setCredentialId</code>, self-call gated</td></tr>
+    <tr><td><code>approve</code> carrying ETH (§13.4)</td><td><span class="badge b-pass">Fixed</span> token calls must carry zero value</td></tr>
+    <tr><td>Agents survive recovery (§14.2)</td><td><span class="badge b-pass">Fixed</span> recovery pauses agents</td></tr>
+    <tr><td>Guardians could not be rotated (§14.2)</td><td><span class="badge b-pass">Fixed</span> owner may replace the set, never during a recovery</td></tr>
+    <tr><td>Case-3 token accounting (§13.2)</td><td><span class="badge b-info">Open</span> staged; the validator stage is what closes it</td></tr>
+    <tr><td>Single-guardian recovery stall (§14.2)</td><td><span class="badge b-info">Open</span> accepted; denial of service, not theft</td></tr>
+    <tr><td>Zero-check in validator constructors (§12)</td><td><span class="badge b-info">Open</span> accepted; inert, and deferred to ride the next validator deployment</td></tr>
+    <tr><td>Allowance revocation UX, token-cap defaults (§13.2)</td><td><span class="badge b-info">Open</span> interface work — deliberately not put in the contract</td></tr>
+  </table>
+
+  <h3>V4 deployment targets</h3>
+  <table class="data">
+    <tr><th>Contract</th><th>Address (CREATE2, identical on every network)</th></tr>
+    <tr><td>SmartWalletFactory V4 (salt …0A)</td><td class="mono addr">0xfd105197109244483b5f870501326E6faec9F93c</td></tr>
+    <tr><td>AgentWalletFactory V4 (salt …0B)</td><td class="mono addr">0xf3A61F9d64d45362E149A111289546523BCd26a6</td></tr>
+    <tr><td>ValidatorRegistry</td><td class="mono addr">0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2 — unchanged</td></tr>
+  </table>
+  <p>The registry is deliberately untouched: it is the address compiled into every wallet as a constant,
+  and the freeze-guard test proves the V4 wallet still resolves to it. Validators are shared across
+  generations, so nothing has to be re-registered for V4.</p>
+  <p>The agent factory ends at <b>24,541 bytes</b>, 35 below the EIP-170 limit, with
+  <code>executeAsAgent</code> case 3 at 64,972 gas. That margin is thin, and it is the reason two
+  candidate hardening measures were deliberately kept out of the contract: requiring non-zero token caps
+  when an agent has protocol access, and capping the owner's own approvals while an agent is active. Both
+  belong in the interface, where they cost nothing and can explain themselves. The remaining bytecode is
+  reserved for measures with no off-chain equivalent.</p>
+  <p><b>Until V4 is live</b>, four mitigations need no contract change: authorize agents with a non-empty
+  recipient whitelist that excludes the agent's own address; verify a wallet's guardians on a network
+  before treating it as yours or funding it; zero any standing allowances towards the protocols an agent
+  can reach before authorizing it; and deploy proactively on every supported network so no address is left
+  unclaimed.</p>
+  <p class="foot-note">Test suite at the time of writing: <b>303 tests, all passing</b>, including the
+  CREATE2 freeze-guard now that the V4 constants are in place.</p>
+</section>
+</div>
+
+<div class="page section-break">
+
+<section>
+  <h2><span class="n">16</span>Conclusion</h2>
+  <p>The BVCC Agent Wallet enforces a comprehensive, layered permission model. Three high-severity issues
+  were identified across three review rounds, each reproduced, remediated, redeployed and re-verified, and
+  the on-chain permission battery passes on the patched bytecode. Four more surfaced while preparing this
+  edition — a cross-function reentrancy, guardian squatting through the factory, the unbounded case-3
+  spending of §13.2, and agents surviving a recovery. All but one are fixed in source and wait on a V4
+  factory generation, together with the credential, guardian-rotation and <code>approve</code>-with-value
+  fixes. Guardian recovery was executed and verified end-to-end —
+  ownership rotation to a new passkey plus on-chain rejection of the old key (see §8). The V2 round fixed a
+  mainnet gas-griefing issue in the fee snapshot and concluded with a deterministic multichain deployment
+  (see §9).</p>
+  <p>The V3 round is the deepest change to the agent path so far. It closed a fund-exfiltration vector that
+  budgets could not see, by making agent DeFi calls default-deny per selector and anchoring the destination
+  either to the wallet itself or to an on-chain validator whose registration is asymmetric — immediate to
+  deny, 48 hours to allow (see §10, §11). Two would-be bypasses were caught inside that work: a command
+  mask that would have accepted a cross-chain bridge deposit as a swap, and an
+  <code>increaseLiquidity</code> path with no owner check, which was deliberately left unregistered. The
+  model is verified by 264 unit, fork and fuzz tests, by a mainnet swap in which every recipient resolves
+  to the wallet and the fee is exact, and by the adversarial variant of that same swap being rejected
+  before execution (see §12).</p>
+  <p>The residual risk is stated plainly rather than minimised. Case-3 protocol calls are safe in the sense
+  V3 set out to make them — the destination is anchored — but anchoring the destination is not the same as
+  bounding the value, and where a standing allowance exists that difference is the whole loss. Until V4
+  ships, a compromised agent key on a wallet left in the permissive default is worth more than its budget,
+  and an address on a network the owner has never deployed to can be claimed by someone else. The staged
+  plan in §13.2 says which of those the interface can narrow now and which needs the validator layer to
+  close properly.</p>
+  <p>Three lessons are worth recording alongside the findings. The reentrancy was dismissed once, on
+  plausible reasoning about EOAs, before a proof-of-concept contradicted it: assumptions about the shape of
+  an address deserve a test, not an argument. The most serious issues here were each found by looking again
+  at code that had already passed a review — guardian squatting came from an external reviewer, credential
+  rotation from a second pass by that same reviewer, and two more from attacking recovery directly. And the
+  static-analysis count moved by one across all of it: it did not rise while the reentrancy was exploitable
+  for three generations, and it did not fall when the fix closed it. Tools find patterns; the findings here
+  came from reading code and asking what an attacker would do with it. The contracts remain internally
+  reviewed and are not externally audited.</p>
 
   <h3>Appendix — key identifiers</h3>
   <table class="data">
@@ -421,12 +1203,20 @@
     <tr><td>SmartWalletFactory (Sepolia, pre-V2)</td><td class="mono addr">0xa5290A51a73903176e09C864E1542a07da67BD12</td></tr>
     <tr><td>SmartWalletFactory V2 (all networks)</td><td class="mono addr">0x230b7010529AB6977Dd8581B3eF018ef865BdEf1</td></tr>
     <tr><td>AgentWalletFactory V2 (all networks)</td><td class="mono addr">0x8D9e24022777173AD6336e00884b6C87c7EF054c</td></tr>
-    <tr><td>V2 networks</td><td>Arbitrum One (42161) · BNB Chain (56) · Arbitrum Sepolia (421614)</td></tr>
+    <tr><td>SmartWalletFactory V3 (all networks)</td><td class="mono addr">0xD42F61AA856A4f47885Ecd2D0ce119411d53C192</td></tr>
+    <tr><td>AgentWalletFactory V3 (all networks)</td><td class="mono addr">0xd866a7563cDaC9F71423be3332b62c329C676064</td></tr>
+    <tr><td>ValidatorRegistry V3 (all networks)</td><td class="mono addr">0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2</td></tr>
+    <tr><td>HookRegistry V3 (all networks)</td><td class="mono addr">0x551C6e7ABdA04a110790888e711198f25621b066</td></tr>
+    <tr><td>V3 test wallet (Arbitrum One)</td><td class="mono addr">0x605A4C65dBa64bd26d9F7701e1e4Cda48c594A5c</td></tr>
+    <tr><td>Governance admin (hardware wallet)</td><td class="mono addr">0x3145Bd5e2489d8bDdAb17F23F26F07Ac5aD55A4c</td></tr>
+    <tr><td>V2/V3 networks</td><td>Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arbitrum Sepolia</td></tr>
+    <tr><td>V3 build</td><td>solc 0.8.36 · via-IR · optimizer 50 · EVM cancun (frozen for CREATE2)</td></tr>
     <tr><td>Tooling</td><td>Slither 0.11.3 · Foundry (forge 1.5.1) · viem 2.x</td></tr>
   </table>
   <p class="foot-note">Confidential — Block Venture Chain Capital. Prepared for internal review and
-  repository inclusion. Security testing was performed on a public testnet (Arbitrum Sepolia); the V2
-  factories are additionally deployed on Arbitrum One and BNB Chain.</p>
+  repository inclusion. The V1 permission battery was executed on a public testnet (Arbitrum Sepolia); the
+  V3 call-policy layer was additionally verified on Arbitrum One mainnet. V2 and V3 factories are deployed
+  on Arbitrum One, Ethereum, BNB Chain, Base, Polygon and Arbitrum Sepolia.</p>
 </section>
 </div>
 

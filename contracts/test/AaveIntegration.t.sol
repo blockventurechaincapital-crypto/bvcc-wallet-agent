@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
+import {BVCCAgentWalletV4} from "../src/BVCCAgentWallet.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 
 interface IPool {
@@ -23,7 +23,7 @@ interface IERC20M {
 }
 
 /**
- * @notice C1-Core fork test: BVCCAgentWalletV3 call policies + BVCC fee logic against
+ * @notice C1-Core fork test: BVCCAgentWalletV4 call policies + BVCC fee logic against
  *         the REAL Aave v3 Pool on Arbitrum One. Needs network access (default public
  *         RPC, overridable via ARBITRUM_RPC_URL). Skips cleanly if forking fails.
  *
@@ -55,7 +55,7 @@ contract AaveIntegrationTest is Test {
     uint256 constant ALLOWED = 1 << 255;
     function pinW(uint256 w) internal pure returns (uint256) { return uint256(1) << (192 + w); }
 
-    BVCCAgentWalletV3 wallet;
+    BVCCAgentWalletV4 wallet;
     address agent;
     address attacker;
     address aUSDC;
@@ -71,8 +71,9 @@ contract AaveIntegrationTest is Test {
             return;
         }
 
-        wallet = new BVCCAgentWalletV3(P256_GX, P256_GY);
-        wallet.setGuardians([address(10), address(11), address(12)]);
+        wallet = new BVCCAgentWalletV4(P256_GX, P256_GY);
+        vm.prank(address(wallet));
+        wallet.setGuardians([address(10), address(11), address(12)], bytes("cred"));
         agent = makeAddr("agent");
         attacker = makeAddr("attacker");
         vm.deal(agent, 1 ether);
@@ -99,7 +100,7 @@ contract AaveIntegrationTest is Test {
         address[] memory recipients,
         uint128[] memory tokenTotalBudgets
     ) internal {
-        BVCCAgentWalletV3.AuthorizeParams memory ap;
+        BVCCAgentWalletV4.AuthorizeParams memory ap;
         ap.agent = agent;
         ap.allowedTokens = tokens;
         ap.tokenMaxAmounts = new uint128[](tokens.length);
@@ -222,37 +223,37 @@ contract AaveIntegrationTest is Test {
     // ==================================================================
 
     function test_Fork_Withdraw_ToAttacker_Reverts() public onlyForked {
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec1(address(POOL), abi.encodeWithSignature("withdraw(address,uint256,address)", USDC, 1e6, attacker));
     }
 
     function test_Fork_Supply_OnBehalfExternal_Reverts() public onlyForked {
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec2(USDC, _approveCd(USDC, address(POOL), 1e6), address(POOL),
             abi.encodeWithSignature("supply(address,uint256,address,uint16)", USDC, 1e6, attacker, uint16(0)));
     }
 
     function test_Fork_Borrow_OnBehalfExternal_Reverts() public onlyForked {
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec1(address(POOL), abi.encodeWithSignature("borrow(address,uint256,uint256,uint16,address)", WETH, 1e15, uint256(2), uint16(0), attacker));
     }
 
     function test_Fork_Repay_OnBehalfExternal_Reverts() public onlyForked {
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec2(WETH, _approveCd(WETH, address(POOL), 1e15), address(POOL),
             abi.encodeWithSignature("repay(address,uint256,uint256,address)", WETH, 1e15, uint256(2), attacker));
     }
 
     function test_Fork_FlashLoanSimple_Reverts() public onlyForked {
         // Pool is whitelisted, but flashLoanSimple has no call policy → default-deny.
-        vm.expectRevert(BVCCAgentWalletV3.SelectorNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.SelectorNotAllowed.selector);
         _exec1(address(POOL),
             abi.encodeWithSignature("flashLoanSimple(address,address,uint256,bytes,uint16)", address(wallet), USDC, 1e6, bytes(""), uint16(0)));
     }
 
     function test_Fork_UnregisteredSetUserEMode_Reverts() public onlyForked {
         // setUserEMode(uint8) — a real Pool function, but no policy registered.
-        vm.expectRevert(BVCCAgentWalletV3.SelectorNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.SelectorNotAllowed.selector);
         _exec1(address(POOL), abi.encodeWithSignature("setUserEMode(uint8)", uint8(1)));
     }
 
@@ -279,7 +280,7 @@ contract AaveIntegrationTest is Test {
         assertEq(totalSpent, 10_000e6, "approve to Pool consumes the token budget");
 
         // Second 10k supply → 20k > 15k budget → revert.
-        vm.expectRevert(BVCCAgentWalletV3.TokenTotalBudgetExceeded.selector);
+        vm.expectRevert(BVCCAgentWalletV4.TokenTotalBudgetExceeded.selector);
         _exec2(USDC, _approveCd(USDC, address(POOL), 10_000e6), address(POOL),
             abi.encodeWithSignature("supply(address,uint256,address,uint16)", USDC, 10_000e6, address(wallet), uint16(0)));
     }
@@ -299,7 +300,7 @@ contract AaveIntegrationTest is Test {
         _registerPolicies();
 
         // The approve(USDC, Pool, amt) spender check fails (Pool not in recipients).
-        vm.expectRevert(BVCCAgentWalletV3.RecipientNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.RecipientNotAllowed.selector);
         _exec2(USDC, _approveCd(USDC, address(POOL), 1e6), address(POOL),
             abi.encodeWithSignature("supply(address,uint256,address,uint16)", USDC, 1e6, address(wallet), uint16(0)));
     }

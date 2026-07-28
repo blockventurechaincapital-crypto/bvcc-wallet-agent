@@ -33,10 +33,10 @@ contract DeployAgentFactory is Script {
         require(FACTORY_OWNER != address(0), "Set FACTORY_OWNER (admin wallet) first");
         vm.startBroadcast();
 
-        BVCCAgentWalletFactoryV3 factory = new BVCCAgentWalletFactoryV3{salt: SALT}(FACTORY_OWNER);
+        BVCCAgentWalletFactoryV4 factory = new BVCCAgentWalletFactoryV4{salt: SALT}(FACTORY_OWNER);
 
         console.log("Deployer:                 ", msg.sender);
-        console.log("BVCCAgentWalletFactoryV3: ", address(factory));
+        console.log("BVCCAgentWalletFactoryV4: ", address(factory));
         console.log("");
         console.log(">> Actualiza contracts.agentFactory (Arb Sepolia) en lib/networks.ts");
 

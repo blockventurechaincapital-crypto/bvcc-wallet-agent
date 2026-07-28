@@ -1,6 +1,11 @@
 # Audits
 
-Security & test report for the BVCC Agent Wallet (2026-06). Covers the Arbitrum Sepolia engagement plus the V2 round: mainnet gas hardening (`PROBE_GAS_CAP`) and the deterministic multichain deployment of the V2 factories (Arbitrum One, BNB Chain, Arbitrum Sepolia).
+Security & test report for the BVCC Agent Wallet, covering three review rounds (2026-06 → 2026-07):
+
+- **V1** — the Arbitrum Sepolia engagement: static analysis, the `approve` token-cap bypass, the redeployed patch and the full agent-permission battery, plus guardian recovery verified end-to-end.
+- **V2** — mainnet gas hardening (`PROBE_GAS_CAP`) and the deterministic multichain deployment of the V2 factories.
+- **V3** — per-selector call policies, the on-chain validator registry and its 48-hour asymmetric governance, verified by unit/fork/fuzz tests and on Arbitrum One mainnet, deployed across six networks.
+- **Post-release review** — a cross-function reentrancy affecting V1, V2 and V3 alike (fixed in source, awaiting a V4 deployment) and four further findings from an external reviewer, including guardian squatting through the permissionless factory (open). See §12.1, §13 and §14.
 
 | File | Description |
 |---|---|

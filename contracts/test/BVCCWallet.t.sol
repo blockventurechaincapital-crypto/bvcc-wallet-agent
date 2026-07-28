@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCSmartWalletV3} from "../src/BVCCWallet.sol";
+import {BVCCSmartWalletV4} from "../src/BVCCWallet.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 import {ERC7579Utils} from "@openzeppelin/contracts/account/utils/draft-ERC7579Utils.sol";
 
@@ -82,7 +82,7 @@ contract MockRevertingBalanceToken {
     }
 }
 
-contract BVCCSmartWalletV3Test is Test {
+contract BVCCSmartWalletV4Test is Test {
     using ERC7579Utils for *;
 
     address constant ENTRY_POINT = 0x433709009B8330FDa32311DF1C2AFA402eD8D009;
@@ -97,7 +97,7 @@ contract BVCCSmartWalletV3Test is Test {
     uint256 constant FEE_NUM = 500;
     uint256 constant FEE_DEN = 1_000_000;
 
-    BVCCSmartWalletV3 wallet;
+    BVCCSmartWalletV4 wallet;
     MockERC20  token;
     MockSwapTarget swapTarget;
 
@@ -109,7 +109,7 @@ contract BVCCSmartWalletV3Test is Test {
     address g3 = address(3);
 
     function setUp() public {
-        wallet     = new BVCCSmartWalletV3(P256_GX, P256_GY);
+        wallet     = new BVCCSmartWalletV4(P256_GX, P256_GY);
         token      = new MockERC20();
         swapTarget = new MockSwapTarget();
 
@@ -137,7 +137,8 @@ contract BVCCSmartWalletV3Test is Test {
     }
 
     function _setGuardians() internal {
-        wallet.setGuardians([g1, g2, g3]);
+        vm.prank(address(wallet));
+        wallet.setGuardians([g1, g2, g3], bytes("cred"));
     }
 
     // =========================================================================
@@ -206,7 +207,7 @@ contract BVCCSmartWalletV3Test is Test {
         bytes memory cd = abi.encodeWithSignature("transfer(address,uint256)", recipient, amount);
 
         vm.prank(ENTRY_POINT);
-        vm.expectRevert(BVCCSmartWalletV3.InsufficientBalanceForFee.selector);
+        vm.expectRevert(BVCCSmartWalletV4.InsufficientBalanceForFee.selector);
         wallet.execute{value: 0}(BATCH_MODE, _batch(address(token), 0, cd));
     }
 
@@ -330,7 +331,7 @@ contract BVCCSmartWalletV3Test is Test {
 
         // Timelock not expired yet — reverts
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV3.TimelockNotExpired.selector);
+        vm.expectRevert(BVCCSmartWalletV4.TimelockNotExpired.selector);
         wallet.executeRecovery();
 
         vm.warp(block.timestamp + 48 hours);
@@ -364,7 +365,7 @@ contract BVCCSmartWalletV3Test is Test {
     function test_NonGuardianCannotInitiateRecovery() public {
         _setGuardians();
         vm.prank(makeAddr("random"));
-        vm.expectRevert(BVCCSmartWalletV3.NotGuardian.selector);
+        vm.expectRevert(BVCCSmartWalletV4.NotGuardian.selector);
         wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
     }
 
@@ -375,7 +376,7 @@ contract BVCCSmartWalletV3Test is Test {
         vm.warp(block.timestamp + 48 hours);
 
         vm.prank(makeAddr("random"));
-        vm.expectRevert(BVCCSmartWalletV3.NotGuardian.selector);
+        vm.expectRevert(BVCCSmartWalletV4.NotGuardian.selector);
         wallet.executeRecovery();
     }
 
@@ -384,14 +385,14 @@ contract BVCCSmartWalletV3Test is Test {
         vm.prank(g1); wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
 
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV3.InsufficientApprovals.selector);
+        vm.expectRevert(BVCCSmartWalletV4.InsufficientApprovals.selector);
         wallet.executeRecovery();
     }
 
     function test_ApproveRevertsWhenNoRecoveryInProgress() public {
         _setGuardians();
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV3.NoRecoveryInProgress.selector);
+        vm.expectRevert(BVCCSmartWalletV4.NoRecoveryInProgress.selector);
         wallet.approveRecovery();
     }
 
@@ -401,7 +402,7 @@ contract BVCCSmartWalletV3Test is Test {
         vm.prank(g2); wallet.approveRecovery();
 
         vm.prank(g2);
-        vm.expectRevert(BVCCSmartWalletV3.AlreadyApproved.selector);
+        vm.expectRevert(BVCCSmartWalletV4.AlreadyApproved.selector);
         wallet.approveRecovery();
     }
 
@@ -427,7 +428,7 @@ contract BVCCSmartWalletV3Test is Test {
         vm.prank(g1); wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
 
         vm.prank(g1);
-        vm.expectRevert(BVCCSmartWalletV3.OnlyWalletCanCancel.selector);
+        vm.expectRevert(BVCCSmartWalletV4.OnlyWallet.selector);
         wallet.cancelRecovery();
     }
 
@@ -446,15 +447,24 @@ contract BVCCSmartWalletV3Test is Test {
     // RECOVERY — guardian management
     // =========================================================================
 
-    function test_SetGuardiansOnlyOnce() public {
+    /// @dev Guardians are replaceable by the owner (self-call), so a lost or compromised
+    ///      guardian key is not permanent. Still refused to anyone else.
+    function test_OwnerCanRotateGuardians() public {
         _setGuardians();
-        vm.expectRevert(BVCCSmartWalletV3.GuardiansAlreadySet.selector);
-        wallet.setGuardians([address(4), address(5), address(6)]);
+        vm.prank(address(wallet));
+        wallet.setGuardians([address(4), address(5), address(6)], bytes("cred"));
+        assertEq(wallet.guardians(0), address(4));
+        assertEq(wallet.guardians(2), address(6));
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(BVCCSmartWalletV4.OnlyWallet.selector);
+        wallet.setGuardians([address(7), address(8), address(9)], bytes("cred"));
     }
 
     function test_SetGuardiansRejectsZeroAddress() public {
-        vm.expectRevert(BVCCSmartWalletV3.InvalidGuardian.selector);
-        wallet.setGuardians([address(1), address(0), address(3)]);
+        vm.expectRevert(BVCCSmartWalletV4.InvalidGuardian.selector);
+        vm.prank(address(wallet));
+        wallet.setGuardians([address(1), address(0), address(3)], bytes("cred"));
     }
 
     function test_CannotResetRecoveryAfterThreshold() public {
@@ -464,7 +474,7 @@ contract BVCCSmartWalletV3Test is Test {
 
         // Guardian 3 tries to override — must revert
         vm.prank(g3);
-        vm.expectRevert(BVCCSmartWalletV3.RecoveryAlreadyApproved.selector);
+        vm.expectRevert(BVCCSmartWalletV4.RecoveryAlreadyApproved.selector);
         wallet.initiateRecovery(uint256(newSignerX), uint256(newSignerY));
     }
 
@@ -473,6 +483,6 @@ contract BVCCSmartWalletV3Test is Test {
     // =========================================================================
 
     function test_WalletType_IsStandard() public view {
-        assertEq(wallet.walletType(), 0, "BVCCSmartWalletV3 should return type 0 (STANDARD)");
+        assertEq(wallet.walletType(), 0, "BVCCSmartWalletV4 should return type 0 (STANDARD)");
     }
 }

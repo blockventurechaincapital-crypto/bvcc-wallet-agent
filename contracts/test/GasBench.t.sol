@@ -2,8 +2,8 @@
 pragma solidity ^0.8.27;
 
 import {Test, console} from "forge-std/Test.sol";
-import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
-import {BVCCAgentWalletFactoryV3} from "../src/BVCCAgentWalletFactory.sol";
+import {BVCCAgentWalletV4} from "../src/BVCCAgentWallet.sol";
+import {BVCCAgentWalletFactoryV4} from "../src/BVCCAgentWalletFactory.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 
 contract GBProtocol {
@@ -21,18 +21,18 @@ contract GasBenchTest is Test {
 
     function test_gasbench() public {
         // --- wallet creation via factory ---
-        BVCCAgentWalletFactoryV3 factory = new BVCCAgentWalletFactoryV3(address(0xBEEF));
+        BVCCAgentWalletFactoryV4 factory = new BVCCAgentWalletFactoryV4(address(0xBEEF));
         uint256 g = gasleft();
-        factory.createWallet(uint256(P256_GX), uint256(P256_GY), GUARDIANS, "cred");
+        factory.createWallet(uint256(P256_GX), uint256(P256_GY));
         console.log("GAS createWallet          ", g - gasleft());
 
-        BVCCAgentWalletV3 wallet = new BVCCAgentWalletV3(P256_GX, P256_GY);
+        BVCCAgentWalletV4 wallet = new BVCCAgentWalletV4(P256_GX, P256_GY);
         vm.deal(address(wallet), 10 ether);
         GBProtocol protocol = new GBProtocol();
         address agent = makeAddr("agent");
 
         // --- authorizeAgent ---
-        BVCCAgentWalletV3.AuthorizeParams memory ap;
+        BVCCAgentWalletV4.AuthorizeParams memory ap;
         ap.agent = agent;
         ap.allowedTokens = new address[](0);
         ap.tokenMaxAmounts = new uint128[](0);

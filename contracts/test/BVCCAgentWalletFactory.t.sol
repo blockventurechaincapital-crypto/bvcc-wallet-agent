@@ -2,10 +2,10 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCAgentWalletFactoryV3} from "../src/BVCCAgentWalletFactory.sol";
+import {BVCCAgentWalletFactoryV4} from "../src/BVCCAgentWalletFactory.sol";
 
-contract BVCCAgentWalletFactoryV3Test is Test {
-    BVCCAgentWalletFactoryV3 factory;
+contract BVCCAgentWalletFactoryV4Test is Test {
+    BVCCAgentWalletFactoryV4 factory;
 
     // P-256 generator point — valid public key
     uint256 constant PUB_KEY_X = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296;
@@ -17,7 +17,7 @@ contract BVCCAgentWalletFactoryV3Test is Test {
     address constant OWNER = address(0xB0CC);
 
     function setUp() public {
-        factory = new BVCCAgentWalletFactoryV3(OWNER);
+        factory = new BVCCAgentWalletFactoryV4(OWNER);
     }
 
     function test_OwnerIsSet() public view {
@@ -27,13 +27,13 @@ contract BVCCAgentWalletFactoryV3Test is Test {
 
     function test_CreationWorksBeforeKill() public {
         address predicted = factory.getWalletAddress(PUB_KEY_X, PUB_KEY_Y);
-        address deployed  = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        address deployed  = factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
         assertEq(deployed, predicted);
     }
 
     function test_KillOnlyOwner() public {
         vm.prank(address(0xBAD));
-        vm.expectRevert(BVCCAgentWalletFactoryV3.NotOwner.selector);
+        vm.expectRevert(BVCCAgentWalletFactoryV4.NotOwner.selector);
         factory.kill();
     }
 
@@ -42,8 +42,8 @@ contract BVCCAgentWalletFactoryV3Test is Test {
         factory.kill();
         assertTrue(factory.killed());
 
-        vm.expectRevert(BVCCAgentWalletFactoryV3.FactoryKilledError.selector);
-        factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        vm.expectRevert(BVCCAgentWalletFactoryV4.FactoryKilledError.selector);
+        factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
     }
 
     function test_KillStillAllowsAddressPrediction() public {
@@ -55,7 +55,7 @@ contract BVCCAgentWalletFactoryV3Test is Test {
 
     function test_KillEmitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit BVCCAgentWalletFactoryV3.FactoryKilled(OWNER);
+        emit BVCCAgentWalletFactoryV4.FactoryKilled(OWNER);
         vm.prank(OWNER);
         factory.kill();
     }

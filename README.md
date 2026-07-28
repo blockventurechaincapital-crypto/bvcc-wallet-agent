@@ -38,9 +38,9 @@
 This monorepo contains both halves of the project so judges can review them together:
 
 - **Frontend** — Next.js app (this repo root: `app/`, `components/`, `lib/`, `public/`).
-- **Contracts** — Foundry Solidity smart wallet + AI agent wallet contracts (`contracts/`, V3):
-  `BVCCWallet` / `BVCCWalletFactory` (personal) and `BVCCAgentWallet` / `BVCCAgentWalletFactory` (AI-agent, on-chain spending limits + per-selector call policies), plus the V3 security layer — `BVCCValidatorRegistry`, `BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`, `BVCCHookRegistry`, `IBVCCValidator`.
-- **Tests** — 264 Foundry tests (unit, fork & fuzz) in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
+- **Contracts** — Foundry Solidity smart wallet + AI agent wallet contracts (`contracts/`, V4):
+  `BVCCWallet` / `BVCCWalletFactory` (personal) and `BVCCAgentWallet` / `BVCCAgentWalletFactory` (AI-agent, on-chain spending limits + per-selector call policies), plus the security layer — `BVCCValidatorRegistry`, `BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`, `BVCCHookRegistry`, `IBVCCValidator`.
+- **Tests** — 303 Foundry tests (unit, fork & fuzz) in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
 - **Status** — Experimental public beta; smart contracts internally tested, **not externally audited**.
 
 ## Documentation
@@ -56,7 +56,7 @@ Developer docs live in [`docs/`](docs/) and on the web at [bvccwallet.blockventu
 
 ## Security Report
 
-Internal security & test report for the BVCC Agent Wallet (Arbitrum Sepolia engagement, 2026-06). Full files in [`audits/`](audits).
+Internal security & test report for the BVCC Agent Wallet, covering four rounds: the Arbitrum Sepolia engagement (V1, 2026-06), the V2 mainnet gas hardening and multichain deploy, the V3 call-policy layer verified on Arbitrum One, and V4 (2026-07) — seven high-severity findings fixed, including a cross-function reentrancy that let a compromised agent bypass every limit and guardian squatting through the factory. Two issues remain open by decision, documented with their mitigations. Full files in [`audits/`](audits).
 
 | Report | PDF | View in browser |
 |---|---|---|
@@ -135,8 +135,8 @@ rm -rf .next && npm run dev
 
 | Contract | Networks | Address |
 |---|---|---|
-| BVCCSmartWalletFactoryV3 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0xD42F61AA856A4f47885Ecd2D0ce119411d53C192` |
-| BVCCAgentWalletFactoryV3 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0xd866a7563cDaC9F71423be3332b62c329C676064` |
+| BVCCSmartWalletFactoryV4 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0xfd105197109244483b5f870501326E6faec9F93c` |
+| BVCCAgentWalletFactoryV4 | Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arb Sepolia | `0xf3A61F9d64d45362E149A111289546523BCd26a6` |
 | BVCCValidatorRegistry | all 6 (same address) | `0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2` |
 | BVCCHookRegistry | all 6 (same address) | `0x551C6e7ABdA04a110790888e711198f25621b066` |
 | EntryPoint OZ v0.9 (canonical) | all | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
@@ -157,9 +157,19 @@ position manager); their addresses per network are recorded in
 > steps — BVCC registers its validator in the registry (48h timelock to *allow*, immediate
 > to *deny*), and the owner adds the policy — so neither side alone can widen an agent's
 > reach. The biometric owner is never restricted by policies; they apply only to agents.
-> V3 keeps the V2 swap-gas fix (`PROBE_GAS_CAP = 100_000`). Previous V2 factories
+> **V4 (2026-07).** Seven high-severity fixes on top of V3: a cross-function reentrancy through
+> the `_currentAgent` flag that let a compromised agent bypass every limit; guardian squatting —
+> the factory no longer chooses guardians, so deploying someone else's deterministic address
+> gains you nothing; the passkey credential is now announced by the wallet itself in a signed
+> call instead of travelling unauthenticated through the factory, and can be rotated after a
+> recovery; recovery pauses agents; guardians became replaceable by the owner; and token calls
+> may no longer carry native value. Wallets on an older generation see a banner in the app and
+> can migrate with the same passkey.
+>
+> V4 keeps the V2 swap-gas fix (`PROBE_GAS_CAP = 100_000`). Previous V3 factories
+> (`0xD42F61AA…` / `0xd866a756…`), V2 factories
 > (`0x230b…BdEf1` / `0x8D9e…054c`) and V1 factories (`0xa5290A51…` / `0xc87aa107…`) are
-> deprecated. See [`audits/`](audits) for the report on the V2 line.
+> deprecated. See [`audits/`](audits) for the report, which covers all four rounds.
 
 ### Wallet types
 
@@ -173,7 +183,7 @@ position manager); their addresses per network are recorded in
   - maxPerTxWei, dailyLimitWei, totalBudgetWei
   - Renewable period budget (e.g. 500 ETH / 7 days)
   - ERC-20 token and DeFi protocol whitelist
-  - Per-selector call policies (V3): the recipient of a DeFi call is pinned to the wallet or checked by an on-chain validator
+  - Per-selector call policies: the recipient of a DeFi call is pinned to the wallet or checked by an on-chain validator
   - Expiry timestamp
 - Fee: 0.15% per transaction
 - The agent pays its own gas (direct EOA, not AA)

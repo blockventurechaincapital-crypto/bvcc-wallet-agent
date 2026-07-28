@@ -2,11 +2,11 @@
 // Factory for BVCCAgentWallet — AI Agent wallet type
 pragma solidity ^0.8.20;
 
-import {BVCCAgentWalletV3} from "./BVCCAgentWallet.sol";
+import {BVCCAgentWalletV4} from "./BVCCAgentWallet.sol";
 
-contract BVCCAgentWalletFactoryV3 {
+contract BVCCAgentWalletFactoryV4 {
 
-    event AgentWalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY, string credentialId);
+    event AgentWalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY);
     event FactoryKilled(address indexed by);
 
     error NotOwner();
@@ -58,7 +58,7 @@ contract BVCCAgentWalletFactoryV3 {
     ) public view returns (address) {
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
         bytes32 initCodeHash = keccak256(abi.encodePacked(
-            type(BVCCAgentWalletV3).creationCode,
+            type(BVCCAgentWalletV4).creationCode,
             abi.encode(bytes32(pubKeyX), bytes32(pubKeyY))
         ));
         return address(uint160(uint256(keccak256(abi.encodePacked(
@@ -73,31 +73,29 @@ contract BVCCAgentWalletFactoryV3 {
     // Deployment with CREATE2 — idempotent
     // -------------------------------------------------------------------------
 
-    /// @notice Deploys a new BVCCAgentWallet with CREATE2 and immediately sets its guardians.
+    /// @notice Deploys a new BVCCAgentWallet with CREATE2. Guardians are NOT set here.
     ///         If a wallet for the given public key already exists, returns it without
     ///         re-deploying (idempotent).
     /// @param pubKeyX   X coordinate of the P-256 / WebAuthn public key
     /// @param pubKeyY   Y coordinate of the P-256 / WebAuthn public key
-    /// @param guardians 3 recovery addresses (2-of-3 guardian scheme)
     /// @return wallet   Address of the deployed (or pre-existing) wallet
     function createWallet(
         uint256 pubKeyX,
-        uint256 pubKeyY,
-        address[3] memory guardians,
-        string calldata credentialId
+        uint256 pubKeyY
     ) external returns (address wallet) {
         if (killed) revert FactoryKilledError();
         address predicted = getWalletAddress(pubKeyX, pubKeyY);
         if (predicted.code.length > 0) return predicted;
 
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
-        BVCCAgentWalletV3 w = new BVCCAgentWalletV3{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
+        BVCCAgentWalletV4 w = new BVCCAgentWalletV4{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
         wallet = address(w);
 
-        // setGuardians can only be called once (guarded by guardians[0] == address(0))
-        w.setGuardians(guardians);
+        // Guardians are NOT set here: the deployer of an address must not get to choose
+        // who can rotate its owner. The owner sets them with their passkey, via
+        // execute() -> setGuardians (see BVCCWallet.setGuardians).
 
-        emit AgentWalletCreated(wallet, pubKeyX, pubKeyY, credentialId);
+        emit AgentWalletCreated(wallet, pubKeyX, pubKeyY);
     }
 
     // -------------------------------------------------------------------------

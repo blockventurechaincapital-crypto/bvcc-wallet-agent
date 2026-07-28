@@ -4,9 +4,7 @@ export const BVCC_WALLET_FACTORY_ABI = [
     "name": "createWallet",
     "inputs": [
       { "name": "pubKeyX", "type": "uint256", "internalType": "uint256" },
-      { "name": "pubKeyY", "type": "uint256", "internalType": "uint256" },
-      { "name": "guardians", "type": "address[3]", "internalType": "address[3]" },
-      { "name": "credentialId", "type": "string", "internalType": "string" }
+      { "name": "pubKeyY", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [
       { "name": "wallet", "type": "address", "internalType": "address" }
@@ -39,6 +37,36 @@ export const BVCC_WALLET_FACTORY_ABI = [
   {
     "type": "event",
     "name": "WalletCreated",
+    "inputs": [
+      { "name": "wallet", "type": "address", "indexed": true, "internalType": "address" },
+      { "name": "pubKeyX", "type": "uint256", "indexed": false, "internalType": "uint256" },
+      { "name": "pubKeyY", "type": "uint256", "indexed": false, "internalType": "uint256" }
+    ],
+    "anonymous": false
+  }
+] as const
+
+/**
+ * Pre-V4 factories emitted the credential in their own creation event, which was never
+ * authenticated: whoever deployed an address could publish any string for it. V4 moved it
+ * to CredentialSet, emitted by the wallet inside the passkey-signed call that sets the
+ * guardians. Wallets created before V4 still only have the old event, so both are read.
+ */
+export const LEGACY_WALLET_CREATED_ABI = [
+  {
+    "type": "event",
+    "name": "WalletCreated",
+    "inputs": [
+      { "name": "wallet", "type": "address", "indexed": true, "internalType": "address" },
+      { "name": "pubKeyX", "type": "uint256", "indexed": false, "internalType": "uint256" },
+      { "name": "pubKeyY", "type": "uint256", "indexed": false, "internalType": "uint256" },
+      { "name": "credentialId", "type": "string", "indexed": false, "internalType": "string" }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "AgentWalletCreated",
     "inputs": [
       { "name": "wallet", "type": "address", "indexed": true, "internalType": "address" },
       { "name": "pubKeyX", "type": "uint256", "indexed": false, "internalType": "uint256" },
@@ -244,11 +272,32 @@ export const BVCC_WALLET_ABI = [
     "type": "function",
     "name": "setGuardians",
     "inputs": [
-      { "name": "_guardians", "type": "address[3]", "internalType": "address[3]" }
+      { "name": "_guardians", "type": "address[3]", "internalType": "address[3]" },
+      { "name": "credentialId", "type": "bytes", "internalType": "bytes" }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
+  {
+    "type": "function",
+    "name": "setCredentialId",
+    "inputs": [
+      { "name": "newCredentialId", "type": "bytes", "internalType": "bytes" }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "CredentialSet",
+    "inputs": [
+      { "name": "credentialHash", "type": "bytes32", "indexed": true, "internalType": "bytes32" },
+      { "name": "credentialId", "type": "bytes", "indexed": false, "internalType": "bytes" }
+    ],
+    "anonymous": false
+  },
+  { "type": "error", "name": "RecoveryActive", "inputs": [] },
+  { "type": "error", "name": "InvalidGuardian", "inputs": [] },
   {
     "type": "function",
     "name": "signer",
@@ -343,9 +392,7 @@ export const BVCC_AGENT_WALLET_FACTORY_ABI = [
     "name": "createWallet",
     "inputs": [
       { "name": "pubKeyX", "type": "uint256", "internalType": "uint256" },
-      { "name": "pubKeyY", "type": "uint256", "internalType": "uint256" },
-      { "name": "guardians", "type": "address[3]", "internalType": "address[3]" },
-      { "name": "credentialId", "type": "string", "internalType": "string" }
+      { "name": "pubKeyY", "type": "uint256", "internalType": "uint256" }
     ],
     "outputs": [
       { "name": "wallet", "type": "address", "internalType": "address" }
@@ -381,8 +428,7 @@ export const BVCC_AGENT_WALLET_FACTORY_ABI = [
     "inputs": [
       { "name": "wallet", "type": "address", "indexed": true, "internalType": "address" },
       { "name": "pubKeyX", "type": "uint256", "indexed": false, "internalType": "uint256" },
-      { "name": "pubKeyY", "type": "uint256", "indexed": false, "internalType": "uint256" },
-      { "name": "credentialId", "type": "string", "indexed": false, "internalType": "string" }
+      { "name": "pubKeyY", "type": "uint256", "indexed": false, "internalType": "uint256" }
     ],
     "anonymous": false
   }
@@ -411,6 +457,10 @@ export const BVCC_AGENT_WALLET_ABI = [
   { "type": "error", "name": "CalldataTooShort", "inputs": [] },
   { "type": "error", "name": "PolicyValidationFailed", "inputs": [] },   // deep validator (e.g. Universal Router) denied the call
   { "type": "error", "name": "OnlyWallet", "inputs": [] },
+  { "type": "error", "name": "ReentrantAgentExecute", "inputs": [] },     // V4: no external execute() while an agent batch is in flight
+  { "type": "error", "name": "TokenCallWithValue", "inputs": [] },        // V4: transfer/approve must not carry ETH
+  { "type": "error", "name": "AgentMustBeEOA", "inputs": [] },            // V4: re-checked on every execution, not only at authorization
+  { "type": "error", "name": "RecoveryActive", "inputs": [] },            // V4: guardians cannot be rotated mid-recovery
   {
     "type": "function",
     "name": "setCallPolicy",

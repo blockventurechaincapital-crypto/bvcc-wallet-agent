@@ -52,6 +52,7 @@ export const dashboard = {
       depAction: 'Deploy',
       depDeploying: 'Deploying…',
       depSuccess: 'Wallet deployed on this network',
+      depRecoveryPending: 'Recovery is not set up on this network yet. Open the wallet and sign it with your passkey — until you do, this wallet has no guardians here.',
       depAgentMissing: 'The Agent Wallet factory is not available on this network yet.',
 
       // Token detail modal
@@ -132,6 +133,7 @@ export const dashboard = {
       depAction: 'Desplegar',
       depDeploying: 'Desplegando…',
       depSuccess: 'Wallet desplegada en esta red',
+      depRecoveryPending: 'La recuperación aún no está configurada en esta red. Entra en la wallet y fírmala con tu passkey — hasta entonces esta wallet no tiene guardianes aquí.',
       depAgentMissing: 'La factory de Agent Wallet aún no está disponible en esta red.',
 
       // Token detail modal

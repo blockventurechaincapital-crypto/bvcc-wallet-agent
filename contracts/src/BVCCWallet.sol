@@ -15,7 +15,7 @@ import {SignerP256} from "@openzeppelin/contracts/utils/cryptography/signers/Sig
 import {SignerWebAuthn} from "@openzeppelin/contracts/utils/cryptography/signers/SignerWebAuthn.sol";
 import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
 
-contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAuthn, ERC7821, ERC721Holder, ERC1155Holder {
+contract BVCCSmartWalletV4 is Account, EIP712, ERC7739, SignerP256, SignerWebAuthn, ERC7821, ERC721Holder, ERC1155Holder {
     using ERC7579Utils for *;
 
     // -------------------------------------------------------------------------
@@ -46,10 +46,10 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
 
     error AlreadyApproved();
     error ETHFeeFailed();
-    error GuardiansAlreadySet();
+    error RecoveryActive();
     error InsufficientApprovals();
     error NoRecoveryInProgress();
-    error OnlyWalletCanCancel();
+    error OnlyWallet();
     error RecoveryAlreadyApproved();
     error TimelockNotExpired();
     error TokenFeeFailed();
@@ -67,6 +67,14 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
     event RecoveryReadyToExecute(uint256 executeAfter);
     event RecoveryCancelled();
     event RecoveryExecuted(uint256 newSignerX, uint256 newSignerY);
+
+    /// @notice The passkey credential this wallet answers to, announced by the wallet
+    ///         itself in a passkey-signed call. Emitted here rather than by the factory so
+    ///         it cannot be forged by whoever deploys the address. The hash is indexed so a
+    ///         client holding a passkey rawId can find the wallet it belongs to; the full
+    ///         id travels in the data; the most recent event from this wallet is the
+    ///         current one, and only a passkey-signed call can emit it.
+    event CredentialSet(bytes32 indexed credentialHash, bytes credentialId);
 
     /// @notice Delay between 2nd approval and execution — owner's reaction window.
     uint256 public constant RECOVERY_DELAY = 48 hours;
@@ -95,7 +103,7 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
     // -------------------------------------------------------------------------
 
     constructor(bytes32 qx, bytes32 qy)
-        EIP712("BVCCSmartWalletV3", "1")
+        EIP712("BVCCSmartWalletV4", "1")
         SignerP256(qx, qy)
     {}
 
@@ -122,7 +130,7 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
      *
      *  Recovery functions do NOT use execute — no fee.
      */
-    function execute(bytes32 mode, bytes calldata executionData) public payable override {
+    function execute(bytes32 mode, bytes calldata executionData) public payable virtual override {
         if (!_erc7821AuthorizedExecutor(msg.sender, mode, executionData))
             revert AccountUnauthorized(msg.sender);
         if (!supportsExecutionMode(mode)) revert UnsupportedExecutionMode();
@@ -332,16 +340,55 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
     // Recovery — 2-of-3 guardian scheme
     // -------------------------------------------------------------------------
 
-    // Fix 1: validate no address(0) guardians — prevents one-time check bypass
-    function setGuardians(address[3] calldata _guardians) external {
-        require(guardians[0] == address(0), GuardiansAlreadySet());
+    /**
+     * @notice Set the 2-of-3 recovery guardians. Callable once, by the wallet itself.
+     * @dev Must be called via execute() — authenticated by the owner's passkey.
+     *      Previously this was permissionless and the factory called it while deploying,
+     *      which let anyone deploy someone else's deterministic address (it derives from
+     *      the public key alone) and pick, permanently, who could rotate its owner. The
+     *      self-call requirement moves that choice behind the passkey, so a squatter is
+     *      left with a wallet it cannot configure.
+     *      Guardians are read nowhere but the recovery path: a wallet without them
+     *      operates normally, it simply has no recovery until the owner sets them.
+     *      Duplicates are rejected as hygiene — they cannot produce a solo takeover
+     *      (approvals are tracked per address) but they silently degrade 2-of-3 to 2-of-2.
+     *
+     *      The set is REPLACEABLE by the owner: a guardian whose key is later lost or
+     *      compromised would otherwise be permanent for the life of the wallet, leaving
+     *      "create a new wallet and move the funds" as the only remedy. Rotation is
+     *      refused while a recovery is in flight, so a stolen passkey cannot be used to
+     *      swap the guardians out from under a recovery that is already under way; the
+     *      owner cancels first, then rotates.
+     */
+    function setGuardians(address[3] calldata _guardians, bytes calldata credentialId) external {
+        require(msg.sender == address(this), OnlyWallet());
+        require(!recoveryInProgress, RecoveryActive());
         require(
             _guardians[0] != address(0) &&
             _guardians[1] != address(0) &&
             _guardians[2] != address(0),
             InvalidGuardian()
         );
+        require(
+            _guardians[0] != _guardians[1] &&
+            _guardians[1] != _guardians[2] &&
+            _guardians[0] != _guardians[2],
+            InvalidGuardian()
+        );
         guardians = _guardians;
+        _setCredential(credentialId);
+    }
+
+    /// @notice Re-point the wallet at a new passkey credential id (e.g. after a guardian
+    ///         recovery rotated the signer, or the owner moved to a new passkey).
+    /// @dev Must be called via execute() — authenticated by the owner's passkey.
+    function setCredentialId(bytes calldata newCredentialId) external {
+        require(msg.sender == address(this), OnlyWallet());
+        _setCredential(newCredentialId);
+    }
+
+    function _setCredential(bytes calldata credentialId) private {
+        emit CredentialSet(keccak256(credentialId), credentialId);
     }
 
     // Fix 3: block reset once threshold is reached — prevents guardian griefing
@@ -374,10 +421,16 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
         }
     }
 
+    /// @dev Hook run after the signer has been rotated. Empty here; the agent wallet
+    ///      overrides it to pause agents, because recovery is what an owner reaches for
+    ///      when they believe they have been compromised — and an agent authorized by
+    ///      the attacker would otherwise survive the rotation with its budget intact.
+    function _afterRecovery() internal virtual {}
+
     // Fix 2: owner can cancel recovery using their WebAuthn key during the 48h window
     // Must be called via execute() — authenticated by Face ID / WebAuthn
     function cancelRecovery() external {
-        require(msg.sender == address(this), OnlyWalletCanCancel());
+        require(msg.sender == address(this), OnlyWallet());
         require(recoveryInProgress, NoRecoveryInProgress());
         _resetRecovery();
         emit RecoveryCancelled();
@@ -394,6 +447,7 @@ contract BVCCSmartWalletV3 is Account, EIP712, ERC7739, SignerP256, SignerWebAut
 
         _setSigner(bytes32(newX), bytes32(newY));
         _resetRecovery();
+        _afterRecovery();
 
         emit RecoveryExecuted(newX, newY);
     }

@@ -2,7 +2,8 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
+import {BVCCAgentWalletV4} from "../src/BVCCAgentWallet.sol";
+import {BVCCSmartWalletV4} from "../src/BVCCWallet.sol";
 import {BVCCValidatorRegistry} from "../src/BVCCValidatorRegistry.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 
@@ -59,7 +60,7 @@ contract CallPolicyAdversarialTest is Test {
     bytes32 constant P256_GX = bytes32(0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296);
     bytes32 constant P256_GY = bytes32(0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5);
 
-    // Frozen VALIDATOR_REGISTRY constant compiled into BVCCAgentWalletV3
+    // Frozen VALIDATOR_REGISTRY constant compiled into BVCCAgentWalletV4
     // (test/Create2Consistency.t.sol proves the wallet uses exactly this address).
     address constant REGISTRY = 0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2;
 
@@ -77,7 +78,7 @@ contract CallPolicyAdversarialTest is Test {
     bytes4 constant EXACT_IN = bytes4(keccak256("exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))"));
     bytes4 constant P2_APPROVE = bytes4(keccak256("approve(address,address,uint160,uint48)"));
 
-    BVCCAgentWalletV3 wallet;
+    BVCCAgentWalletV4 wallet;
     MockAavePool pool;
     MockRouter   router;
     MockPermit2  permit2;
@@ -86,8 +87,9 @@ contract CallPolicyAdversarialTest is Test {
     address attacker;
 
     function setUp() public {
-        wallet = new BVCCAgentWalletV3(P256_GX, P256_GY);
-        wallet.setGuardians([address(10), address(11), address(12)]);
+        wallet = new BVCCAgentWalletV4(P256_GX, P256_GY);
+        vm.prank(address(wallet));
+        wallet.setGuardians([address(10), address(11), address(12)], bytes("cred"));
         vm.deal(address(wallet), 100 ether);
         pool = new MockAavePool();
         router = new MockRouter();
@@ -109,7 +111,7 @@ contract CallPolicyAdversarialTest is Test {
     // ------------------------------------------------------------------
 
     function _authorize(address[] memory protocols) internal {
-        BVCCAgentWalletV3.AuthorizeParams memory ap;
+        BVCCAgentWalletV4.AuthorizeParams memory ap;
         ap.agent = agent;
         ap.allowedTokens = new address[](0);
         ap.tokenMaxAmounts = new uint128[](0);
@@ -153,7 +155,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_Withdraw_ToAttacker_Reverts() public {
         _setPolicy(address(pool), WITHDRAW, ALLOWED | pinW(2));
         bytes memory cd = abi.encodeWithSignature("withdraw(address,uint256,address)", address(asset), 1e18, attacker);
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -171,7 +173,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_Supply_OnBehalfExternal_Reverts() public {
         _setPolicy(address(pool), SUPPLY, ALLOWED | pinW(2));
         bytes memory cd = abi.encodeWithSignature("supply(address,uint256,address,uint16)", address(asset), 1e18, attacker, uint16(0));
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -185,7 +187,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_Borrow_OnBehalfExternal_Reverts() public {
         _setPolicy(address(pool), BORROW, ALLOWED | pinW(4));
         bytes memory cd = abi.encodeWithSignature("borrow(address,uint256,uint256,uint16,address)", address(asset), 1e18, uint256(2), uint16(0), attacker);
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -199,7 +201,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_Repay_OnBehalfExternal_Reverts() public {
         _setPolicy(address(pool), REPAY, ALLOWED | pinW(3));
         bytes memory cd = abi.encodeWithSignature("repay(address,uint256,uint256,address)", address(asset), 1e18, uint256(2), attacker);
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -216,7 +218,7 @@ contract CallPolicyAdversarialTest is Test {
 
     function test_Swap_RecipientAttacker_Reverts() public {
         _setPolicy(address(router), EXACT_IN, ALLOWED | pinW(3));
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(router), 0, _swapCd(attacker));
     }
 
@@ -233,7 +235,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_UnregisteredSelector_OnWhitelistedProtocol_Reverts() public {
         // pool IS in allowedProtocols, but WITHDRAW has no policy registered.
         bytes memory cd = abi.encodeWithSignature("withdraw(address,uint256,address)", address(asset), 1e18, address(wallet));
-        vm.expectRevert(BVCCAgentWalletV3.SelectorNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.SelectorNotAllowed.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -250,7 +252,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_Permit2Approve_UnauthorizedSpender_Reverts() public {
         _setPolicy(address(permit2), P2_APPROVE, ALLOWED | pinP(1));
         bytes memory cd = abi.encodeWithSignature("approve(address,address,uint160,uint48)", address(asset), attacker, uint160(1e18), uint48(0));
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(permit2), 0, cd);
     }
 
@@ -280,7 +282,7 @@ contract CallPolicyAdversarialTest is Test {
     function test_Deep_ValidatorFalse_Reverts() public {
         vm.etch(REGISTRY, address(new RegFalse()).code);
         _setPolicy(address(router), EXACT_IN, ALLOWED | DEEP);
-        vm.expectRevert(BVCCAgentWalletV3.PolicyValidationFailed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PolicyValidationFailed.selector);
         _exec(address(router), 0, _swapCd(address(wallet)));
     }
 
@@ -310,7 +312,7 @@ contract CallPolicyAdversarialTest is Test {
         BVCCValidatorRegistry reg = new BVCCValidatorRegistry(address(0xABCD));
         vm.etch(REGISTRY, address(reg).code);
         _setPolicy(address(router), EXACT_IN, ALLOWED | DEEP);
-        vm.expectRevert(BVCCAgentWalletV3.PolicyValidationFailed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PolicyValidationFailed.selector);
         _exec(address(router), 0, _swapCd(address(wallet)));
     }
 
@@ -384,7 +386,7 @@ contract CallPolicyAdversarialTest is Test {
         assertEq(pool.calls(), 1);
 
         _setPolicy(address(pool), WITHDRAW, 0); // revoke
-        vm.expectRevert(BVCCAgentWalletV3.SelectorNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.SelectorNotAllowed.selector);
         _exec(address(pool), 0, abi.encodeWithSignature("withdraw(address,uint256,address)", address(asset), 1e18, address(wallet)));
     }
 
@@ -394,7 +396,7 @@ contract CallPolicyAdversarialTest is Test {
 
     function test_ShortCalldata_Reverts() public {
         _setPolicy(address(pool), bytes4(0x12345678), ALLOWED);
-        vm.expectRevert(BVCCAgentWalletV3.CalldataTooShort.selector);
+        vm.expectRevert(BVCCAgentWalletV4.CalldataTooShort.selector);
         _exec(address(pool), 0, hex"1234"); // 2 bytes < 4
     }
 
@@ -402,7 +404,7 @@ contract CallPolicyAdversarialTest is Test {
         // withdraw has 3 words; pinning word 6 reads past the end → 0 → mismatch.
         _setPolicy(address(pool), WITHDRAW, ALLOWED | pinW(6));
         bytes memory cd = abi.encodeWithSignature("withdraw(address,uint256,address)", address(asset), 1e18, address(wallet));
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -413,7 +415,7 @@ contract CallPolicyAdversarialTest is Test {
         // the right word. The shipped presets pin the correct one (word 2 = `to`).
         _setPolicy(address(pool), WITHDRAW, ALLOWED | pinW(1));
         bytes memory cd = abi.encodeWithSignature("withdraw(address,uint256,address)", address(asset), 1e18, attacker);
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -423,7 +425,7 @@ contract CallPolicyAdversarialTest is Test {
         // word 2 = wallet in low 160 bits, but with dirty high bits → full-word compare fails.
         uint256 dirty = uint256(uint160(address(wallet))) | (uint256(1) << 200);
         _patchWord(cd, 2, dirty);
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(pool), 0, cd);
     }
 
@@ -432,7 +434,7 @@ contract CallPolicyAdversarialTest is Test {
         bytes memory cd = abi.encodeWithSignature("approve(address,address,uint160,uint48)", address(asset), address(router), uint160(1e18), uint48(0));
         uint256 dirty = uint256(uint160(address(router))) | (uint256(1) << 200);
         _patchWord(cd, 1, dirty);
-        vm.expectRevert(BVCCAgentWalletV3.PinnedArgMismatch.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PinnedArgMismatch.selector);
         _exec(address(permit2), 0, cd);
     }
 
@@ -451,7 +453,7 @@ contract CallPolicyAdversarialTest is Test {
             callData: abi.encodeWithSignature("withdraw(address,uint256,address)", address(asset), 1e18, address(wallet))
         });
         vm.prank(agent);
-        vm.expectRevert(BVCCAgentWalletV3.SelectorNotAllowed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.SelectorNotAllowed.selector);
         wallet.executeAsAgent(BATCH_MODE, abi.encode(b));
 
         assertEq(r1.balance, 0, "legit item 0 rolled back with the batch");
@@ -481,11 +483,11 @@ contract CallPolicyAdversarialTest is Test {
 
     function test_SetCallPolicy_OnlyWallet() public {
         vm.prank(attacker);
-        vm.expectRevert(BVCCAgentWalletV3.OnlyWallet.selector);
+        vm.expectRevert(BVCCSmartWalletV4.OnlyWallet.selector);
         wallet.setCallPolicy(address(pool), WITHDRAW, ALLOWED);
 
         vm.prank(agent);
-        vm.expectRevert(BVCCAgentWalletV3.OnlyWallet.selector);
+        vm.expectRevert(BVCCSmartWalletV4.OnlyWallet.selector);
         wallet.setCallPolicy(address(pool), WITHDRAW, ALLOWED);
     }
 }

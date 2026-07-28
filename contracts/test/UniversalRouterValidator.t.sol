@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import {Test} from "forge-std/Test.sol";
 import {BVCCUniversalRouterValidator} from "../src/BVCCUniversalRouterValidator.sol";
 import {BVCCValidatorRegistry} from "../src/BVCCValidatorRegistry.sol";
-import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
+import {BVCCAgentWalletV4} from "../src/BVCCAgentWallet.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 
 /// @dev No-op Universal Router stand-in so the wallet's Case-3 call succeeds once
@@ -322,9 +322,10 @@ contract UniversalRouterValidatorTest is Test {
     bytes32 constant P256_GX = bytes32(0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296);
     bytes32 constant P256_GY = bytes32(0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5);
 
-    function _wireWalletWithValidator() internal returns (BVCCAgentWalletV3 w, MockUR ur, address agent, BVCCUniversalRouterValidator v) {
-        w = new BVCCAgentWalletV3(P256_GX, P256_GY);
-        w.setGuardians([address(10), address(11), address(12)]);
+    function _wireWalletWithValidator() internal returns (BVCCAgentWalletV4 w, MockUR ur, address agent, BVCCUniversalRouterValidator v) {
+        w = new BVCCAgentWalletV4(P256_GX, P256_GY);
+        vm.prank(address(w));
+        w.setGuardians([address(10), address(11), address(12)], bytes("cred"));
         ur = new MockUR();
         v = new BVCCUniversalRouterValidator(address(ur)); // bound to THIS router
         agent = makeAddr("agentE2E");
@@ -335,7 +336,7 @@ contract UniversalRouterValidatorTest is Test {
         vm.warp(block.timestamp + 48 hours);
         BVCCValidatorRegistry(REGISTRY).activateValidator(address(ur));
 
-        BVCCAgentWalletV3.AuthorizeParams memory ap;
+        BVCCAgentWalletV4.AuthorizeParams memory ap;
         ap.agent = agent;
         ap.allowedTokens = new address[](0);
         ap.tokenMaxAmounts = new uint128[](0);
@@ -351,7 +352,7 @@ contract UniversalRouterValidatorTest is Test {
         w.setCallPolicy(address(ur), bytes4(keccak256("execute(bytes,bytes[],uint256)")), (uint256(1) << 255) | (uint256(1) << 254));
     }
 
-    function _agentExec(BVCCAgentWalletV3 w, address agent, address target, bytes memory data) internal {
+    function _agentExec(BVCCAgentWalletV4 w, address agent, address target, bytes memory data) internal {
         Execution[] memory b = new Execution[](1);
         b[0] = Execution({target: target, value: 0, callData: data});
         vm.prank(agent);
@@ -365,14 +366,14 @@ contract UniversalRouterValidatorTest is Test {
     }
 
     function test_E2E_ValidSwapToWallet_Passes() public {
-        (BVCCAgentWalletV3 w, MockUR ur, address agent, ) = _wireWalletWithValidator();
+        (BVCCAgentWalletV4 w, MockUR ur, address agent, ) = _wireWalletWithValidator();
         _agentExec(w, agent, address(ur), _urV3For(address(w)));
         assertEq(ur.calls(), 1, "validated UR swap reaches the router");
     }
 
     function test_E2E_SwapToAttacker_Reverts() public {
-        (BVCCAgentWalletV3 w, MockUR ur, address agent, ) = _wireWalletWithValidator();
-        vm.expectRevert(BVCCAgentWalletV3.PolicyValidationFailed.selector);
+        (BVCCAgentWalletV4 w, MockUR ur, address agent, ) = _wireWalletWithValidator();
+        vm.expectRevert(BVCCAgentWalletV4.PolicyValidationFailed.selector);
         _agentExec(w, agent, address(ur), _urV3For(attacker));
         assertEq(ur.calls(), 0, "attacker-recipient swap never reaches the router");
     }
@@ -380,11 +381,11 @@ contract UniversalRouterValidatorTest is Test {
     function test_E2E_AcrossCommand0x40_Reverts() public {
         // The exploit the mask bug would have allowed: byte 0x40 with a v3-swap-shaped
         // body. The validator denies it → PolicyValidationFailed, router never called.
-        (BVCCAgentWalletV3 w, MockUR ur, address agent, ) = _wireWalletWithValidator();
+        (BVCCAgentWalletV4 w, MockUR ur, address agent, ) = _wireWalletWithValidator();
         bytes[] memory inputs = new bytes[](1);
         inputs[0] = _v3Input(attacker);
         bytes memory cd = _execCd(abi.encodePacked(uint8(0x40)), inputs);
-        vm.expectRevert(BVCCAgentWalletV3.PolicyValidationFailed.selector);
+        vm.expectRevert(BVCCAgentWalletV4.PolicyValidationFailed.selector);
         _agentExec(w, agent, address(ur), cd);
         assertEq(ur.calls(), 0);
     }

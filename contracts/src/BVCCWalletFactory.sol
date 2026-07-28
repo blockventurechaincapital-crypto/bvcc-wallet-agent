@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {BVCCSmartWalletV3} from "./BVCCWallet.sol";
+import {BVCCSmartWalletV4} from "./BVCCWallet.sol";
 
-contract BVCCSmartWalletFactoryV3 {
+contract BVCCSmartWalletFactoryV4 {
 
-    event WalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY, string credentialId);
+    event WalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY);
     event FactoryKilled(address indexed by);
 
     error NotOwner();
@@ -57,7 +57,7 @@ contract BVCCSmartWalletFactoryV3 {
     ) public view returns (address) {
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
         bytes32 initCodeHash = keccak256(abi.encodePacked(
-            type(BVCCSmartWalletV3).creationCode,
+            type(BVCCSmartWalletV4).creationCode,
             abi.encode(bytes32(pubKeyX), bytes32(pubKeyY))
         ));
         return address(uint160(uint256(keccak256(abi.encodePacked(
@@ -72,31 +72,29 @@ contract BVCCSmartWalletFactoryV3 {
     // Deployment with CREATE2 — idempotent
     // -------------------------------------------------------------------------
 
-    /// @notice Deploys a new BVCCWallet with CREATE2 and immediately sets its guardians.
+    /// @notice Deploys a new BVCCWallet with CREATE2. Guardians are NOT set here.
     ///         If a wallet for the given public key already exists, returns it without
     ///         re-deploying (idempotent).
     /// @param pubKeyX   X coordinate of the P-256 / WebAuthn public key
     /// @param pubKeyY   Y coordinate of the P-256 / WebAuthn public key
-    /// @param guardians 3 recovery addresses (2-of-3 guardian scheme)
     /// @return wallet   Address of the deployed (or pre-existing) wallet
     function createWallet(
         uint256 pubKeyX,
-        uint256 pubKeyY,
-        address[3] memory guardians,
-        string calldata credentialId
+        uint256 pubKeyY
     ) external returns (address wallet) {
         if (killed) revert FactoryKilledError();
         address predicted = getWalletAddress(pubKeyX, pubKeyY);
         if (predicted.code.length > 0) return predicted;
 
         bytes32 salt = keccak256(abi.encode(pubKeyX, pubKeyY));
-        BVCCSmartWalletV3 w = new BVCCSmartWalletV3{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
+        BVCCSmartWalletV4 w = new BVCCSmartWalletV4{salt: salt}(bytes32(pubKeyX), bytes32(pubKeyY));
         wallet = address(w);
 
-        // setGuardians can only be called once (guarded by guardians[0] == address(0))
-        w.setGuardians(guardians);
+        // Guardians are NOT set here: the deployer of an address must not get to choose
+        // who can rotate its owner. The owner sets them with their passkey, via
+        // execute() -> setGuardians (see BVCCWallet.setGuardians).
 
-        emit WalletCreated(wallet, pubKeyX, pubKeyY, credentialId);
+        emit WalletCreated(wallet, pubKeyX, pubKeyY);
     }
 
     // -------------------------------------------------------------------------

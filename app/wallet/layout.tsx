@@ -8,6 +8,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import OutdatedWalletNotice from '@/components/OutdatedWalletNotice'
 
 const COLORS = {
   bg: '#06080f',
@@ -476,6 +477,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             <NetworkSelector />
             <ConnectButton />
           </div>
+          <OutdatedWalletNotice />
           <div className="wallet-main" style={{ flex: 1, overflowY: 'auto' }}>
             {children}
           </div>

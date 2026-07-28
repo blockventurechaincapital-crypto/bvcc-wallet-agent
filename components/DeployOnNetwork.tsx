@@ -39,7 +39,10 @@ export default function DeployOnNetwork({ address }: { address: string }) {
 
   function handleDeploy() {
     if (!seed || !factoryAddr) return
-    const args = [seed.pubKeyX, seed.pubKeyY, seed.guardians, seed.credentialId] as const
+    // V4: the factory only deploys. The guardians of the source network are NOT copied
+    // here any more — they are registered on this network in a passkey-signed call, so
+    // the deployer of an address never gets to choose who can rotate its owner.
+    const args = [seed.pubKeyX, seed.pubKeyY] as const
     if (seed.walletType === 1) {
       writeContract({
         address: factoryAddr,
@@ -138,14 +141,17 @@ export default function DeployOnNetwork({ address }: { address: string }) {
                   </div>
                   <div style={{ ...row, borderBottom: 'none' }}>
                     <span style={lbl}>{t('dashboard.accountGuardians')}</span>
-                    <span style={val}>{seed.guardians.map(shortAddr).join('  ')}</span>
+                    <span style={{ ...val, color: '#8892a4' }}>{seed.guardians.map(shortAddr).join('  ')}</span>
                   </div>
                 </div>
 
                 {isSuccess ? (
                   <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                    <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#48bb78', fontWeight: 600 }}>
+                    <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#48bb78', fontWeight: 600 }}>
                       ✓ {t('dashboard.depSuccess')}
+                    </p>
+                    <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#e6b800', lineHeight: 1.5 }}>
+                      {t('dashboard.depRecoveryPending')}
                     </p>
                     <button onClick={close} style={{ padding: '9px 18px', fontSize: '12px', fontWeight: 600, color: '#06080f', background: GOLD_GRADIENT, border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
                       {t('common.close')}

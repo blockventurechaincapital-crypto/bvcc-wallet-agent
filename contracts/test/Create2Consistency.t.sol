@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test, console} from "forge-std/Test.sol";
-import {BVCCAgentWalletV3} from "../src/BVCCAgentWallet.sol";
+import {BVCCAgentWalletV4} from "../src/BVCCAgentWallet.sol";
 import {DeployFactoriesMainnet} from "../script/DeployFactoriesMainnet.s.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 
@@ -23,7 +23,7 @@ contract MockProtocol {
  * @notice Self-checking CREATE2 consistency. If ANY source change drifts the V3
  *         bytecode, these tests fail until the baked constants are re-synced:
  *          - DeployFactoriesMainnet.EXPECTED_* == CREATE2(registry/factories)
- *          - BVCCAgentWalletV3.VALIDATOR_REGISTRY == CREATE2(registry), proven
+ *          - BVCCAgentWalletV4.VALIDATOR_REGISTRY == CREATE2(registry), proven
  *            behaviorally: a DEEP_VALIDATION call only succeeds if the wallet's
  *            compiled constant points at the etched registry address.
  *         This is the freeze-guard for C2: never deploy with these tests red.
@@ -54,11 +54,11 @@ contract Create2ConsistencyTest is Test {
         (address reg,,) = new DeployFactoriesMainnet().predicted();
         vm.etch(reg, address(new MockRegistryTrue()).code);
 
-        BVCCAgentWalletV3 wallet = new BVCCAgentWalletV3(P256_GX, P256_GY);
+        BVCCAgentWalletV4 wallet = new BVCCAgentWalletV4(P256_GX, P256_GY);
         MockProtocol protocol = new MockProtocol();
         address agent = makeAddr("agent");
 
-        BVCCAgentWalletV3.AuthorizeParams memory ap;
+        BVCCAgentWalletV4.AuthorizeParams memory ap;
         ap.agent = agent;
         ap.allowedTokens = new address[](0);
         ap.tokenMaxAmounts = new uint128[](0);

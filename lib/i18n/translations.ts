@@ -20,6 +20,7 @@ import { connect } from './ns/connect'
 import { components } from './ns/components'
 import { disclaimer } from './ns/disclaimer'
 import { legal } from './ns/legal'
+import { walletversion } from './ns/walletversion'
 import { allowances } from './ns/allowances'
 import { positions } from './ns/positions'
 
@@ -28,7 +29,7 @@ export type Lang = 'en' | 'es'
 const parts = [
   common, nav, appshell, marketing, dashboard, send, swap, receive, bridge,
   transactions, addressbook, settings, recovery, agents, dapps, connect, components,
-  disclaimer, legal, allowances, positions,
+  disclaimer, legal, allowances, positions, walletversion,
 ]
 
 function build(lang: Lang): Record<string, unknown> {

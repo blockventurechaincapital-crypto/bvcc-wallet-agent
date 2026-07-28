@@ -129,7 +129,7 @@ export const agentIntegration: LocalizedDoc = {
   en: {
     title: 'Agent Integration Guide',
     intro:
-      'How an external AI agent (or any automated system) executes transactions through a BVCC Agent Wallet (`BVCCAgentWalletV3`). All permissions, spending limits and call policies are enforced on-chain — the agent cannot exceed them no matter what its code does.',
+      'How an external AI agent (or any automated system) executes transactions through a BVCC Agent Wallet (`BVCCAgentWalletV4`). All permissions, spending limits and call policies are enforced on-chain — the agent cannot exceed them no matter what its code does.',
     blocks: [
       { type: 'h2', text: 'How it works' },
       {
@@ -181,7 +181,7 @@ export const agentIntegration: LocalizedDoc = {
             '`callData` starts with `0x095ea7b3` (`approve(address,uint256)`)',
             'token whitelist + per-token amount cap + spender checked against recipient whitelist',
           ],
-          ['3. DeFi / anything else', 'any other `callData`', '`target` in the protocol whitelist + a call policy registered for the selector (V3)'],
+          ['3. DeFi / anything else', 'any other `callData`', '`target` in the protocol whitelist + a call policy registered for the selector'],
         ],
       },
       {
@@ -192,7 +192,7 @@ export const agentIntegration: LocalizedDoc = {
         ],
       },
 
-      { type: 'h2', text: 'Call policies (case 3, V3)' },
+      { type: 'h2', text: 'Call policies (case 3)' },
       {
         type: 'p',
         text: 'For a DeFi call to go through, the wallet owner must have registered a call policy for that protocol + selector. This is separate from `allowedProtocols` (which only whitelists the target) and is what stops a stolen agent key from redirecting funds. You don’t set policies — the owner does, in the app — but you need to know what passes:',
@@ -289,8 +289,10 @@ export const agentIntegration: LocalizedDoc = {
           ['`ExceedsTokenMaxAmount()` / `TokenBatchLimitExceeded()`', 'per-tx/batch token cap'],
           ['`TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'per-token day / lifetime budgets'],
           ['`NoProtocolsWhitelisted()` / `ProtocolNotAllowed()`', 'DeFi call with empty whitelist / target not listed'],
-          ['`SelectorNotAllowed()`', 'no call policy registered for this `target` + selector (V3)'],
-          ['`PinnedArgMismatch()`', 'a pinned calldata word (recipient/spender) is not the wallet / not a whitelisted protocol (V3)'],
+          ['`AgentMustBeEOA()`', 'the agent address carries code — V4 checks this on every execution, so an EIP-7702 delegation added later locks the agent out until removed'],
+          ['`TokenCallWithValue()`', 'a transfer/approve carried native value — V4 requires zero value on token calls'],
+          ['`SelectorNotAllowed()`', 'no call policy registered for this `target` + selector'],
+          ['`PinnedArgMismatch()`', 'a pinned calldata word (recipient/spender) is not the wallet / not a whitelisted protocol'],
           ['`PolicyValidationFailed()`', 'a DEEP-policy validator denied the call, reverted, or isn’t registered/active (V3)'],
           ['`CalldataTooShort()`', 'DeFi calldata under 4 bytes — no selector to check (V3)'],
           ['`RecipientNotAllowed()`', 'destination/spender not in `allowedRecipients`'],
@@ -323,7 +325,7 @@ export const agentIntegration: LocalizedDoc = {
   es: {
     title: 'Guía de integración de agentes',
     intro:
-      'Cómo un agente IA externo (o cualquier sistema automatizado) ejecuta transacciones a través de una BVCC Agent Wallet (`BVCCAgentWalletV3`). Todos los permisos, límites de gasto y call policies se aplican on-chain — el agente no puede excederlos haga lo que haga su código.',
+      'Cómo un agente IA externo (o cualquier sistema automatizado) ejecuta transacciones a través de una BVCC Agent Wallet (`BVCCAgentWalletV4`). Todos los permisos, límites de gasto y call policies se aplican on-chain — el agente no puede excederlos haga lo que haga su código.',
     blocks: [
       { type: 'h2', text: 'Cómo funciona' },
       {
@@ -483,6 +485,8 @@ export const agentIntegration: LocalizedDoc = {
           ['`ExceedsTokenMaxAmount()` / `TokenBatchLimitExceeded()`', 'tope de token por tx/batch'],
           ['`TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'presupuestos por token (día / vida)'],
           ['`NoProtocolsWhitelisted()` / `ProtocolNotAllowed()`', 'llamada DeFi con whitelist vacía / target no listado'],
+          ['`AgentMustBeEOA()`', 'the agent address carries code — V4 checks this on every execution, so an EIP-7702 delegation added later locks the agent out until removed'],
+          ['`TokenCallWithValue()`', 'a transfer/approve carried native value — V4 requires zero value on token calls'],
           ['`SelectorNotAllowed()`', 'sin call policy registrada para este `target` + selector (V3)'],
           ['`PinnedArgMismatch()`', 'una palabra pinneada del calldata (recipient/spender) no es la wallet / no es un protocolo whitelisteado (V3)'],
           ['`PolicyValidationFailed()`', 'un validator de policy DEEP denegó la llamada, revirtió, o no está registrado/activo (V3)'],

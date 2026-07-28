@@ -124,7 +124,7 @@ function kill() external; // owner-only, one-way: permanently blocks NEW wallet 
 
 ## Security notes
 
-- Internal security review (bilingual report in [`audits/`](../audits), covering the V2 line): HIGH finding (approve cap-bypass) fixed; Slither clean of real findings. **No external audit yet** — this is experimental beta software.
+- Internal security review (bilingual report in [`audits/`](../audits), covering the V1, V2 and V3 rounds): three HIGH findings fixed and re-verified; Slither clean of real findings. **No external audit yet** — this is experimental beta software.
 - V2 (June 2026) fixed a gas-griefing edge on Arbitrum: balance probes are capped at 100k gas (`PROBE_GAS_CAP`) so calldata that happens to contain a precompile address can't burn the transaction's gas. V3 keeps this fix.
 - V3 (July 2026) closes an agent fund-exfiltration path: a stolen agent key could previously name its own address as the `recipient`/`to` of a swap or `Pool.withdraw` and move funds without touching the ETH/token budget. V3 makes case-3 calls default-deny per selector and pins the recipient to the wallet (or validates it on-chain). The owner's biometric path is unaffected. The V3 suite is **264 Foundry tests** (unit, fork & fuzz).
 

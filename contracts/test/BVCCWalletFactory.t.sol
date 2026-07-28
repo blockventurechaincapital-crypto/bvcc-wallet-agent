@@ -2,11 +2,11 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {BVCCSmartWalletFactoryV3} from "../src/BVCCWalletFactory.sol";
-import {BVCCSmartWalletV3} from "../src/BVCCWallet.sol";
+import {BVCCSmartWalletFactoryV4} from "../src/BVCCWalletFactory.sol";
+import {BVCCSmartWalletV4} from "../src/BVCCWallet.sol";
 
-contract BVCCSmartWalletFactoryV3Test is Test {
-    BVCCSmartWalletFactoryV3 factory;
+contract BVCCSmartWalletFactoryV4Test is Test {
+    BVCCSmartWalletFactoryV4 factory;
 
     // P-256 generator point — valid public key
     uint256 constant PUB_KEY_X = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296;
@@ -18,7 +18,7 @@ contract BVCCSmartWalletFactoryV3Test is Test {
     address constant OWNER = address(0xB0CC);
 
     function setUp() public {
-        factory = new BVCCSmartWalletFactoryV3(OWNER);
+        factory = new BVCCSmartWalletFactoryV4(OWNER);
     }
 
     // =========================================================================
@@ -27,7 +27,7 @@ contract BVCCSmartWalletFactoryV3Test is Test {
 
     function test_DeterministicAddress() public {
         address predicted = factory.getWalletAddress(PUB_KEY_X, PUB_KEY_Y);
-        address deployed  = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        address deployed  = factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
         assertEq(deployed, predicted, "Deployed address must match predicted");
     }
 
@@ -36,8 +36,8 @@ contract BVCCSmartWalletFactoryV3Test is Test {
     // =========================================================================
 
     function test_CreateWalletIsIdempotent() public {
-        address first  = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
-        address second = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        address first  = factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
+        address second = factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
         assertEq(first, second, "Both calls must return the same wallet address");
     }
 
@@ -48,30 +48,41 @@ contract BVCCSmartWalletFactoryV3Test is Test {
     function test_IsDeployed() public {
         address predicted = factory.getWalletAddress(PUB_KEY_X, PUB_KEY_Y);
         assertFalse(factory.isDeployed(predicted), "Should not be deployed yet");
-        factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
         assertTrue(factory.isDeployed(predicted), "Should be deployed now");
     }
 
     // =========================================================================
-    // 4. WalletCreated event emitted with correct credentialId
+    // 4. WalletCreated event carries only the address and pubkey
     // =========================================================================
 
     function test_WalletCreatedEventEmitted() public {
         address predicted = factory.getWalletAddress(PUB_KEY_X, PUB_KEY_Y);
         vm.expectEmit(true, false, false, true);
-        emit BVCCSmartWalletFactoryV3.WalletCreated(predicted, PUB_KEY_X, PUB_KEY_Y, CRED_ID);
-        factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        emit BVCCSmartWalletFactoryV4.WalletCreated(predicted, PUB_KEY_X, PUB_KEY_Y);
+        factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
     }
 
     // =========================================================================
-    // 5. Guardians are set on the deployed wallet
+    // 5. The factory does NOT set guardians — the owner does, with their passkey
     // =========================================================================
 
-    function test_GuardiansSetOnDeployedWallet() public {
-        address deployed = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
-        BVCCSmartWalletV3 w = BVCCSmartWalletV3(payable(deployed));
+    function test_DeployLeavesNoGuardians() public {
+        address deployed = factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
+        BVCCSmartWalletV4 w = BVCCSmartWalletV4(payable(deployed));
+        assertEq(w.guardians(0), address(0), "deployer must not choose guardians");
+        assertEq(w.guardians(1), address(0));
+        assertEq(w.guardians(2), address(0));
+
+        // Whoever deployed it cannot configure it either.
+        vm.prank(makeAddr("squatter"));
+        vm.expectRevert();                       // OnlyWallet
+        w.setGuardians(GUARDIANS, bytes("cred"));
+
+        // The owner sets them through a self-call authenticated by their passkey.
+        vm.prank(deployed);
+        w.setGuardians(GUARDIANS, bytes("cred"));
         assertEq(w.guardians(0), GUARDIANS[0]);
-        assertEq(w.guardians(1), GUARDIANS[1]);
         assertEq(w.guardians(2), GUARDIANS[2]);
     }
 
@@ -97,7 +108,7 @@ contract BVCCSmartWalletFactoryV3Test is Test {
 
     function test_KillOnlyOwner() public {
         vm.prank(address(0xBAD));
-        vm.expectRevert(BVCCSmartWalletFactoryV3.NotOwner.selector);
+        vm.expectRevert(BVCCSmartWalletFactoryV4.NotOwner.selector);
         factory.kill();
     }
 
@@ -106,8 +117,8 @@ contract BVCCSmartWalletFactoryV3Test is Test {
         factory.kill();
         assertTrue(factory.killed());
 
-        vm.expectRevert(BVCCSmartWalletFactoryV3.FactoryKilledError.selector);
-        factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        vm.expectRevert(BVCCSmartWalletFactoryV4.FactoryKilledError.selector);
+        factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
     }
 
     function test_KillStillAllowsAddressPrediction() public {
@@ -120,13 +131,13 @@ contract BVCCSmartWalletFactoryV3Test is Test {
 
     function test_KillEmitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit BVCCSmartWalletFactoryV3.FactoryKilled(OWNER);
+        emit BVCCSmartWalletFactoryV4.FactoryKilled(OWNER);
         vm.prank(OWNER);
         factory.kill();
     }
 
     function test_CreationWorksBeforeKill() public {
-        address deployed = factory.createWallet(PUB_KEY_X, PUB_KEY_Y, GUARDIANS, CRED_ID);
+        address deployed = factory.createWallet(PUB_KEY_X, PUB_KEY_Y);
         assertTrue(deployed != address(0));
     }
 }
