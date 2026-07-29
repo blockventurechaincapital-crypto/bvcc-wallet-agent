@@ -8,7 +8,8 @@ import {BVCCAgentWalletFactoryV4} from "../src/BVCCAgentWalletFactory.sol";
 import {Execution} from "@openzeppelin/contracts/interfaces/draft-IERC7579.sol";
 
 /**
- * Verification of four claims raised by an external reviewer. Read-only w.r.t. the
+ * Verification of four claims raised by a later internal review pass that used a
+ * different analysis tool than the earlier rounds. Read-only w.r.t. the
  * contracts: nothing here changes src/, these tests only establish what is true today.
  */
 
