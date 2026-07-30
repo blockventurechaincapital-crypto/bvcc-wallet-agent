@@ -108,6 +108,15 @@ function IconCopy() {
   )
 }
 
+function IconSearch() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" />
+    </svg>
+  )
+}
+
 interface NavItem {
   label: string
   href: string
@@ -286,6 +295,15 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
           cursor: default;
           opacity: 0.38;
         }
+        /* Address row: copiar y abrir en el explorador */
+        .addr-btn:hover:not([disabled]):not([aria-disabled="true"]) {
+          background: rgba(212,175,55,0.08);
+          color: #D4AF37 !important;
+        }
+        .addr-btn:focus-visible {
+          outline: 1px solid rgba(212,175,55,0.6);
+          outline-offset: 1px;
+        }
         .disconnect-btn:hover {
           background: rgba(229,62,62,0.08) !important;
           color: #fc8181 !important;
@@ -335,25 +353,67 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
               <span style={{ fontSize: '13px', fontWeight: '400', color: COLORS.textSubtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Wallet</span>
             </div>
 
-            {/* Address row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '12px', fontFamily: 'monospace', color: COLORS.textSecondary }}>{shortAddress}</span>
+            {/* Address row — the address itself copies; the lens opens the explorer */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
                 onClick={copyAddress}
-                title={t('nav.copyAddress')}
+                disabled={!address}
+                title={copied ? t('nav.copiedAddress') : t('nav.copyAddress')}
+                className="addr-btn"
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  marginLeft: '-4px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  color: copied ? COLORS.gold : COLORS.textSecondary,
+                  cursor: address ? 'pointer' : 'default',
+                  transition: 'color 0.15s, background 0.15s',
+                }}
+              >
+                {shortAddress}
+              </button>
+              <button
+                onClick={copyAddress}
+                disabled={!address}
+                title={copied ? t('nav.copiedAddress') : t('nav.copyAddress')}
+                className="addr-btn"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: address ? 'pointer' : 'default',
                   padding: '2px',
+                  borderRadius: '4px',
                   color: copied ? COLORS.gold : COLORS.textSubtle,
                   display: 'flex',
                   alignItems: 'center',
-                  transition: 'color 0.15s',
+                  transition: 'color 0.15s, background 0.15s',
                 }}
               >
                 <IconCopy />
               </button>
+              <a
+                href={address ? `${network.blockExplorer.url}/address/${address}` : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={t('nav.viewOnExplorer')}
+                aria-disabled={!address}
+                className="addr-btn"
+                style={{
+                  cursor: address ? 'pointer' : 'default',
+                  padding: '2px',
+                  borderRadius: '4px',
+                  color: COLORS.textSubtle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'color 0.15s, background 0.15s',
+                  pointerEvents: address ? 'auto' : 'none',
+                }}
+              >
+                <IconSearch />
+              </a>
             </div>
 
             {/* Network badge */}

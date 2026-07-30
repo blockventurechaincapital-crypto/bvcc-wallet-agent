@@ -29,8 +29,10 @@ export const nav = {
       // Badges
       comingSoon: 'Coming soon',
 
-      // Copy address tooltip
+      // Address row tooltips
       copyAddress: 'Copy address',
+      copiedAddress: 'Copied',
+      viewOnExplorer: 'View on the block explorer',
 
       // Disconnect
       disconnect: 'Disconnect',
@@ -66,8 +68,10 @@ export const nav = {
       // Badges
       comingSoon: 'Próximamente',
 
-      // Copy address tooltip
+      // Address row tooltips
       copyAddress: 'Copiar dirección',
+      copiedAddress: 'Copiada',
+      viewOnExplorer: 'Ver en el explorador',
 
       // Disconnect
       disconnect: 'Desconectar',

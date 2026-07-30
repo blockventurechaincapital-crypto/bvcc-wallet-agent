@@ -67,3 +67,44 @@ export function amountsForLiquidity(sqrtP: bigint, tickLower: number, tickUpper:
   }
   return { amount0, amount1 }
 }
+
+// ── Rango de una posición: ticks → precio legible ───────────────────────────
+// Todo lo de abajo es para MOSTRAR, no para calcular importes: usa Number, no
+// bigint. Los extremos de un full range se van a ~1e38 y ahí solo importa el
+// orden de magnitud, no la precisión.
+
+/** Límites de tick del protocolo (v3 y v4 comparten estos valores). */
+export const MIN_TICK = -887272
+export const MAX_TICK = 887272
+
+/** Ticks extremos alineados al tickSpacing — los que usa una posición full-range. */
+export function usableTicks(spacing: number): { min: number; max: number } {
+  const s = spacing > 0 ? spacing : 1
+  return { min: Math.ceil(MIN_TICK / s) * s, max: Math.floor(MAX_TICK / s) * s }
+}
+
+/** true si la posición cubre todo el rango del pool. */
+export function isFullRange(tickLower: number, tickUpper: number, spacing: number): boolean {
+  const { min, max } = usableTicks(spacing)
+  return tickLower <= min && tickUpper >= max
+}
+
+/**
+ * Precio de 1 token0 medido en token1 en ese tick: 1.0001^tick corregido por la
+ * diferencia de decimales. Se calcula en log para no desbordar en los extremos.
+ */
+export function priceAtTick(tick: number, decimals0: number, decimals1: number): number {
+  return Math.exp(tick * Math.log(1.0001) + (decimals0 - decimals1) * Math.LN10)
+}
+
+/**
+ * tickSpacing de un pool v3 a partir de su fee tier. v4 lo trae en la PoolKey, así
+ * que esto es solo para v3, donde leerlo del pool costaría otra llamada RPC.
+ */
+export function v3TickSpacing(fee: number): number {
+  if (fee === 100) return 1
+  if (fee === 500) return 10
+  if (fee === 3000) return 60
+  if (fee === 10000) return 200
+  return 60
+}

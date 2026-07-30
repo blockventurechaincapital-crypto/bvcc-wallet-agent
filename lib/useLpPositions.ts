@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPublicClient, http, getAddress, keccak256, encodeAbiParameters, formatUnits, type Address, type Hex } from 'viem'
 import { useNetwork } from './NetworkContext'
 import { V3_NFPM, V4_PM, V3_FACTORY, V4_STATEVIEW, TOPIC } from './defiContracts'
-import { amountsForLiquidity, feesFromGrowth, v3FeeGrowthInside } from './tickMath'
+import { amountsForLiquidity, feesFromGrowth, v3FeeGrowthInside, v3TickSpacing } from './tickMath'
 
 export type LpPosition = {
   version: 3 | 4
@@ -18,9 +18,19 @@ export type LpPosition = {
   decimals1: number
   fee: number
   inRange: boolean
+  // Rango de la posición y precio actual, en ticks. Ya se leían para calcular los
+  // montos y el inRange; se exponen para poder mostrar el rango en precio, si es
+  // full-range y a qué distancia está el precio del borde.
+  tickLower: number
+  tickUpper: number
+  tickCurrent: number
+  tickSpacing: number
+  liquidity: bigint   // hace falta para cerrar un % de la posición
   fees0: bigint   // comisiones sin cobrar (reclamables)
   fees1: bigint
   usd?: number      // valor total de la liquidez en USD
+  usd0?: number     // parte del valor que está en token0
+  usd1?: number     // …y en token1: juntos enseñan cómo se ha desequilibrado
   usdFees?: number  // valor de las comisiones reclamables en USD
 }
 
@@ -159,7 +169,8 @@ export function useLpPositions(owner: string | null) {
             } catch { return }
             const { amount0, amount1 } = amountsForLiquidity(sqrtP, tickLower, tickUpper, liquidity)
             const [m0, m1] = await Promise.all([resolve(token0), resolve(token1)])
-            out.push({ version: 3, tokenId, token0, token1, symbol0: m0.symbol, symbol1: m1.symbol, amount0, amount1, decimals0: m0.decimals, decimals1: m1.decimals, fee, inRange: curTick >= tickLower && curTick < tickUpper, fees0, fees1 })
+            out.push({ version: 3, tokenId, token0, token1, symbol0: m0.symbol, symbol1: m1.symbol, amount0, amount1, decimals0: m0.decimals, decimals1: m1.decimals, fee, inRange: curTick >= tickLower && curTick < tickUpper,
+              tickLower, tickUpper, tickCurrent: curTick, tickSpacing: v3TickSpacing(fee), liquidity, fees0, fees1 })
           }))
         } catch { /* NFPM ilegible → ignorar */ }
       }
@@ -182,7 +193,7 @@ export function useLpPositions(owner: string | null) {
               const poolInfo = await client.readContract({ address: v4, abi: V4_ABI, functionName: 'getPoolAndPositionInfo', args: [tokenId] }) as readonly [PoolKey, bigint]
               const pk = poolInfo[0], info = poolInfo[1]
               const tickLower = toInt24(info >> 8n), tickUpper = toInt24(info >> 32n)
-              let amount0 = 0n, amount1 = 0n, inRange = false, fees0 = 0n, fees1 = 0n
+              let amount0 = 0n, amount1 = 0n, inRange = false, fees0 = 0n, fees1 = 0n, tickCurrent = 0
               if (stateView) {
                 try {
                   const poolId = keccak256(encodeAbiParameters([{ type: 'tuple', components: POOLKEY_COMPONENTS }], [pk]))
@@ -196,13 +207,15 @@ export function useLpPositions(owner: string | null) {
                   const a = amountsForLiquidity(sqrtP, tickLower, tickUpper, liq)
                   amount0 = a.amount0; amount1 = a.amount1
                   inRange = curTick >= tickLower && curTick < tickUpper
+                  tickCurrent = curTick
                   // posInfo = [liquidity, feeGrowthInside0Last, feeGrowthInside1Last]
                   fees0 = feesFromGrowth(inside[0], posInfo[1], liq)
                   fees1 = feesFromGrowth(inside[1], posInfo[2], liq)
                 } catch { /* sin precio/fees → 0 */ }
               }
               const [m0, m1] = await Promise.all([resolve(pk.currency0), resolve(pk.currency1)])
-              out.push({ version: 4, tokenId, token0: pk.currency0, token1: pk.currency1, symbol0: m0.symbol, symbol1: m1.symbol, amount0, amount1, decimals0: m0.decimals, decimals1: m1.decimals, fee: Number(pk.fee), inRange, fees0, fees1 })
+              out.push({ version: 4, tokenId, token0: pk.currency0, token1: pk.currency1, symbol0: m0.symbol, symbol1: m1.symbol, amount0, amount1, decimals0: m0.decimals, decimals1: m1.decimals, fee: Number(pk.fee), inRange,
+                tickLower, tickUpper, tickCurrent, tickSpacing: Number(pk.tickSpacing), liquidity: liq, fees0, fees1 })
             } catch { /* tokenId quemado → omitir */ }
           }))
         } catch { /* sin explorer → sin v4 */ }
@@ -228,7 +241,9 @@ export function useLpPositions(owner: string | null) {
         if (native > 0 || Object.keys(prices).length > 0) {
           for (const p of out) {
             const pr0 = priceFor(p.token0), pr1 = priceFor(p.token1)
-            p.usd = Number(formatUnits(p.amount0, p.decimals0)) * pr0 + Number(formatUnits(p.amount1, p.decimals1)) * pr1
+            p.usd0 = Number(formatUnits(p.amount0, p.decimals0)) * pr0
+            p.usd1 = Number(formatUnits(p.amount1, p.decimals1)) * pr1
+            p.usd = p.usd0 + p.usd1
             p.usdFees = Number(formatUnits(p.fees0, p.decimals0)) * pr0 + Number(formatUnits(p.fees1, p.decimals1)) * pr1
           }
         }

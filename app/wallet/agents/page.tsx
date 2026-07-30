@@ -266,6 +266,27 @@ export default function AgentsPage() {
     }
   }
 
+  // The bundler replies as soon as the UserOp is accepted, not when it is mined, so
+  // reading the wallet straight after `sendUserOp` returns the pre-transaction state —
+  // which is why a green tx used to leave the old limits on screen. Wait for the
+  // receipt, then re-read.
+  async function settleAndReload(txHash: string) {
+    try {
+      await publicClient.waitForTransactionReceipt({ hash: txHash as Hex, timeout: 60_000 })
+    } catch {
+      // A slow or dropped receipt must not leave the list stale: re-read anyway.
+    }
+    await loadAgents()
+  }
+
+  // Closing the modal after a successful action re-reads the wallet, so the changes are
+  // on screen without navigating away and back.
+  function closeModal() {
+    const wasSuccess = actionStatus === 'success'
+    setModal({ type: 'none' })
+    if (wasSuccess) void loadAgents()
+  }
+
   // Load aliases from localStorage
   useEffect(() => {
     if (!walletAddress) return
@@ -527,7 +548,7 @@ export default function AgentsPage() {
       const txHash = await sendUserOp([innerCallData, ...policyCalls])
       setActionTxHash(txHash)
       setActionStatus('success')
-      await loadAgents()
+      await settleAndReload(txHash)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t('common.error'))
       setActionStatus('error')
@@ -548,7 +569,7 @@ export default function AgentsPage() {
       const txHash = await sendUserOp(innerCallData)
       setActionTxHash(txHash)
       setActionStatus('success')
-      await loadAgents()
+      await settleAndReload(txHash)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t('common.error'))
       setActionStatus('error')
@@ -590,7 +611,7 @@ export default function AgentsPage() {
       const txHash = await sendUserOp(innerCallData)
       setActionTxHash(txHash)
       setActionStatus('success')
-      await loadAgents()
+      await settleAndReload(txHash)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t('common.error'))
       setActionStatus('error')
@@ -1315,7 +1336,7 @@ export default function AgentsPage() {
       {/* ── Modal overlay ───────────────────────────────────────────────────── */}
       {(modal.type === 'authorize' || modal.type === 'increase') && (
         <div
-          onClick={e => { if (e.target === e.currentTarget) setModal({ type: 'none' }) }}
+          onClick={e => { if (e.target === e.currentTarget) closeModal() }}
           style={{
             position: 'fixed', inset: 0,
             backgroundColor: 'rgba(0,0,0,0.7)',
@@ -1481,7 +1502,7 @@ export default function AgentsPage() {
                 {/* Buttons */}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                   <button
-                    onClick={() => setModal({ type: 'none' })}
+                    onClick={closeModal}
                     style={{
                       flex: 1, padding: '12px', backgroundColor: 'transparent',
                       border: `1px solid ${C.border}`, borderRadius: '6px',
@@ -1568,7 +1589,7 @@ export default function AgentsPage() {
 
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
-                    onClick={() => setModal({ type: 'none' })}
+                    onClick={closeModal}
                     style={{
                       flex: 1, padding: '12px', backgroundColor: 'transparent',
                       border: `1px solid ${C.border}`, borderRadius: '6px',
