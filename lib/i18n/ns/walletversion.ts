@@ -9,6 +9,10 @@ export const walletversion = {
       outdatedNewAddress: 'Your V4 address will be',
       outdatedCta: 'Create V4 wallet',
       outdatedLater: 'Later',
+      recoveryMissingTitle: 'Recovery is not set up',
+      recoveryMissingBody:
+        'This wallet has no guardians registered, so if you lose your passkey there is no way to recover it. Setting them takes one signature.',
+      recoveryMissingCta: 'Set up now',
     },
   },
   es: {
@@ -21,6 +25,10 @@ export const walletversion = {
       outdatedNewAddress: 'Tu dirección V4 será',
       outdatedCta: 'Crear wallet V4',
       outdatedLater: 'Más tarde',
+      recoveryMissingTitle: 'La recuperación no está configurada',
+      recoveryMissingBody:
+        'Esta wallet no tiene guardianes registrados, así que si pierdes la passkey no hay forma de recuperarla. Configurarlos es una sola firma.',
+      recoveryMissingCta: 'Configurar ahora',
     },
   },
 } as const

@@ -277,6 +277,108 @@ export async function authenticateWebAuthn(
   }
 }
 
+/** Raised when the picked passkey is not the one that owns the wallet. */
+export class WrongPasskeyError extends Error {
+  constructor() {
+    super('WRONG_PASSKEY')
+    this.name = 'WrongPasskeyError'
+  }
+}
+
+/**
+ * Asks the authenticator which passkey it holds for this domain, and proves the one the
+ * user picked is the wallet's owner before returning its id.
+ *
+ * Registration uses `residentKey: 'required'`, so credentials are discoverable: a get()
+ * with no allowCredentials makes the browser list them and hand back whichever the user
+ * picks. That is the only way back for someone whose localStorage was cleared and whose
+ * wallet never registered its credential on-chain — setGuardians is what writes it there,
+ * so a wallet that never ran it cannot be asked.
+ *
+ * The picker cannot be narrowed to a single wallet, so instead of making the user guess
+ * right, the assertion is verified against the P-256 key the contract reports as its
+ * owner. A wrong pick is rejected here — cheaply, and before anything is signed for real.
+ */
+export async function discoverCredentialId(
+  expected: { pubKeyX: bigint; pubKeyY: bigint },
+): Promise<string> {
+  const assertion = (await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)).buffer as ArrayBuffer,
+      rpId: getRpId(),
+      userVerification: 'required',
+      timeout: 60000,
+    },
+  })) as PublicKeyCredential | null
+
+  if (!assertion) throw new Error('No se selecciono ninguna passkey')
+
+  const response = assertion.response as AuthenticatorAssertionResponse
+  const ok = await assertionMatchesPubKey(
+    new Uint8Array(response.authenticatorData),
+    new Uint8Array(response.clientDataJSON),
+    new Uint8Array(response.signature),
+    expected.pubKeyX,
+    expected.pubKeyY,
+  )
+  if (!ok) throw new WrongPasskeyError()
+
+  return assertion.id
+}
+
+/** Left-pads a P-256 scalar to the fixed 32 bytes WebCrypto expects. */
+function scalarTo32(n: bigint): Uint8Array {
+  const hex = n.toString(16).padStart(64, '0')
+  return new Uint8Array(hex.match(/.{2}/g)!.map(b => parseInt(b, 16)))
+}
+
+/**
+ * WebAuthn signs `authenticatorData || sha256(clientDataJSON)` with ECDSA/P-256, so the
+ * same check the wallet does on-chain can be done here for free.
+ */
+async function assertionMatchesPubKey(
+  authenticatorData: Uint8Array,
+  clientDataJSON: Uint8Array,
+  derSignature: Uint8Array,
+  pubKeyX: bigint,
+  pubKeyY: bigint,
+): Promise<boolean> {
+  try {
+    const clientDataHash = new Uint8Array(
+      await crypto.subtle.digest('SHA-256', clientDataJSON.buffer as ArrayBuffer),
+    )
+    const signedData = new Uint8Array(authenticatorData.length + clientDataHash.length)
+    signedData.set(authenticatorData, 0)
+    signedData.set(clientDataHash, authenticatorData.length)
+
+    // Uncompressed point: 0x04 || X || Y.
+    const point = new Uint8Array(65)
+    point[0] = 0x04
+    point.set(scalarTo32(pubKeyX), 1)
+    point.set(scalarTo32(pubKeyY), 33)
+
+    const key = await crypto.subtle.importKey(
+      'raw', point.buffer as ArrayBuffer,
+      { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
+    )
+
+    // WebCrypto wants the raw r||s pair, not the DER the authenticator returns. No low-S
+    // normalisation here: that is a contract-side convention, and applying it would turn
+    // a valid high-S signature into one that fails to verify.
+    const { r, s } = derToRS(derSignature)
+    const rawSignature = new Uint8Array(64)
+    rawSignature.set(scalarTo32(r), 0)
+    rawSignature.set(scalarTo32(s), 32)
+
+    return await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' }, key,
+      rawSignature.buffer as ArrayBuffer, signedData.buffer as ArrayBuffer,
+    )
+  } catch {
+    return false // a malformed key or signature is simply not a match
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers de localStorage
 // ---------------------------------------------------------------------------

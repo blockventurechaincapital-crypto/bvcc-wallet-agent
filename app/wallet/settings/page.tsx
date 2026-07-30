@@ -8,6 +8,9 @@ import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride } from '@/lib/wcCalls'
+import GuardianSetup from '@/components/GuardianSetup'
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
 const COLORS = {
   bg: '#06080f',
@@ -220,6 +223,11 @@ export default function SettingsPage() {
   const [chainError, setChainError] = useState(false)
   const [atomicEnabled, setAtomicEnabled] = useState(false)
   const [maxGas, setMaxGas] = useState('')
+  const [reloadGuardians, setReloadGuardians] = useState(0)
+
+  // Every slot readable and empty — the wallet is deployed but its recovery was never
+  // registered. A failed read leaves nulls instead, and must not be mistaken for this.
+  const guardiansUnset = guardians.every(g => g !== null && g.toLowerCase() === ZERO_ADDRESS)
 
   // Lectura de localStorage tras montar (evita mismatch de hidratación SSR)
   useEffect(() => {
@@ -280,7 +288,7 @@ export default function SettingsPage() {
       })
       .catch(() => setChainError(true))
       .finally(() => setLoadingChain(false))
-  }, [isLoaded, walletAddress])
+  }, [isLoaded, walletAddress, reloadGuardians]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSignOut = () => {
     localStorage.removeItem('bvcc_active_wallet')
@@ -434,6 +442,13 @@ export default function SettingsPage() {
                   </div>
                 </Row>
               ))}
+              {!loadingChain && guardiansUnset && walletAddress && (
+                <GuardianSetup
+                  walletAddress={walletAddress as Address}
+                  credentialId={credentialId}
+                  onDone={() => setReloadGuardians(n => n + 1)}
+                />
+              )}
               <div style={{
                 padding: '12px 20px',
                 borderTop: `1px solid rgba(255,255,255,0.04)`,

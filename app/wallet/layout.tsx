@@ -9,6 +9,7 @@ import { useNetwork } from '@/lib/NetworkContext'
 import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import OutdatedWalletNotice from '@/components/OutdatedWalletNotice'
+import RecoveryMissingNotice from '@/components/RecoveryMissingNotice'
 
 const COLORS = {
   bg: '#06080f',
@@ -348,9 +349,20 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             padding: '24px 20px 20px',
             borderBottom: `1px solid ${COLORS.border}`,
           }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '18px', fontWeight: '700', color: COLORS.gold, letterSpacing: '-0.02em' }}>BVCC</span>
-              <span style={{ fontSize: '13px', fontWeight: '400', color: COLORS.textSubtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Wallet</span>
+            {/* The artwork fills only the middle of its square (68.8% wide, 42.4% tall —
+                the rest is transparent margin), so it sits oversized in a short box that
+                crops the padding away and lets the mark itself read big. */}
+            <div style={{
+              height: '98px', marginBottom: '14px', overflow: 'hidden',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <img
+                src="/bvcc_w.png"
+                alt="BVCC Wallet"
+                width={190}
+                height={190}
+                style={{ width: '190px', height: '190px', objectFit: 'contain', flexShrink: 0 }}
+              />
             </div>
 
             {/* Address row — the address itself copies; the lens opens the explorer */}
@@ -538,6 +550,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             <ConnectButton />
           </div>
           <OutdatedWalletNotice />
+          <RecoveryMissingNotice />
           <div className="wallet-main" style={{ flex: 1, overflowY: 'auto' }}>
             {children}
           </div>
