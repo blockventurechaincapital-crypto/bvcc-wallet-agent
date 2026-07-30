@@ -108,8 +108,9 @@ const jsonLd = {
         'Experimental non-custodial smart wallet for WebAuthn account abstraction and permission-limited AI agent execution. Give an AI agent a wallet with on-chain limits it cannot cross: period budget, allowed tokens, recipient whitelist, and instant pause. Connect any MCP client (Hermes, Claude, Cursor, LM Studio).',
       featureList: [
         'Non-custodial self-custody with WebAuthn / passkeys (Face ID, fingerprint, security key)',
-        'AI-agent permissions enforced on-chain: period budget, allowed tokens, recipient whitelist, instant pause',
-        'MCP integration with Hermes, Claude, Cursor, and LM Studio',
+        'AI-agent permissions enforced on-chain: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, instant pause',
+        'MCP integration with Hermes, Claude, Cursor, and LM Studio — 53 tools registered in one command',
+        'Agent DeFi actions within those limits: token transfers, Uniswap v3/v4 swaps, Aave v3 lending, Uniswap v3/v4 liquidity positions',
         'ERC-4337 account abstraction and ERC-7821 batch execution',
         'No KYC, no email',
         'Open source and self-hostable',
@@ -135,7 +136,7 @@ const jsonLd = {
           name: 'What limits can I set on an AI agent?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'You define four limits enforced on-chain: a spending budget per period, an allowed-tokens list, a recipient whitelist, and an instant pause. The agent holds its own keypair and can never exceed them — BVCC never sees the agent keys.',
+            text: 'You define the limits and the contract enforces them on-chain: spending caps (per transaction, daily, per period and total, in the native token and per ERC-20), an allowed-tokens list, the protocols it may call, an optional recipient whitelist, an expiry date, and an instant pause. The agent holds its own keypair and can never exceed them — BVCC never sees the agent keys.',
           },
         },
         {
@@ -143,7 +144,7 @@ const jsonLd = {
           name: 'Which AI agents and MCP clients can connect?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'Any MCP (Model Context Protocol) client connects in one command, including Hermes, Claude, Cursor and LM Studio. The wallet exposes tools the agent calls to transact within its limits.',
+            text: 'Any MCP (Model Context Protocol) client connects in one command, including Hermes, Claude, Cursor and LM Studio. The server registers 53 tools the agent calls to transact within its limits: transfers, Uniswap v3 and v4 swaps, Aave v3 lending, and Uniswap liquidity positions. Read-only mode and per-feature module filters let you expose fewer.',
           },
         },
         {

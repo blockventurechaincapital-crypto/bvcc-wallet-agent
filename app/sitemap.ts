@@ -8,6 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '',
     '/docs',
     '/docs/connect-ai',
+    '/docs/agent-permissions',
     '/docs/agent-integration',
     '/docs/self-hosting',
     '/docs/contracts',

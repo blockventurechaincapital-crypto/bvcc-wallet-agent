@@ -71,7 +71,7 @@ export const marketing = {
       connectPoint3Title: 'The agent owns its keys',
       connectPoint3Body: 'You generate the agent\'s keypair and authorise its address. No custodial API key in someone else\'s cloud.',
       connectTermTitle: 'your AI assistant → BVCC Agent Wallet',
-      connectTerm1: '▸ 16 tools registered — send · swap · balances · limits',
+      connectTerm1: '▸ 53 tools registered — send · swap · lend · provide liquidity',
       connectTerm2: '▸ Works in Hermes · Claude · Cursor · LM Studio',
       connectTerm3: '▸ Build your own bot on the same on-chain limits',
 
@@ -271,7 +271,7 @@ export const marketing = {
       connectPoint3Title: 'El agente tiene sus claves',
       connectPoint3Body: 'Tú generas el par de claves del agente y autorizas su dirección. Sin API key custodial en la nube de otro.',
       connectTermTitle: 'tu asistente IA → BVCC Agent Wallet',
-      connectTerm1: '▸ 16 tools registradas — enviar · swap · saldos · límites',
+      connectTerm1: '▸ 53 tools registradas — enviar · swap · prestar · liquidez',
       connectTerm2: '▸ Funciona en Hermes · Claude · Cursor · LM Studio',
       connectTerm3: '▸ Crea tu propio bot sobre los mismos límites on-chain',
 

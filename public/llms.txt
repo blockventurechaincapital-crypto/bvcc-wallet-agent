@@ -1,17 +1,30 @@
 # BVCC Agent Wallet
 
-> BVCC Agent Wallet is an experimental, non-custodial smart wallet (ERC-4337 account abstraction with WebAuthn / passkeys) that lets you give an AI agent a wallet with on-chain limits it cannot cross: period budget, allowed tokens, recipient whitelist, and instant pause. Connect any MCP client (Hermes, Claude, Cursor, LM Studio) in one command. Self-custody, no KYC, open source.
+> BVCC Agent Wallet is an experimental, non-custodial smart wallet (ERC-4337 account abstraction with WebAuthn / passkeys) that lets you give an AI agent a wallet with on-chain limits it cannot cross: period budget, allowed tokens, allowed protocols, recipient whitelist, and instant pause. Connect any MCP client (Hermes, Claude, Cursor, LM Studio) in one command and the assistant gets 53 tools — transfers, Uniswap v3/v4 swaps, Aave v3 lending and Uniswap liquidity positions — every one of them bounded by the contract, not by the server. Self-custody, no KYC, open source.
 
 ## Main pages
 - [Home](https://bvccwallet.blockventurechaincapital.com/): What the wallet is, how AI-agent permissions work, and how to connect.
 
 ## Documentation
 - [Docs](https://bvccwallet.blockventurechaincapital.com/docs): Documentation overview.
-- [Connect an AI](https://bvccwallet.blockventurechaincapital.com/docs/connect-ai): Connect Hermes, Claude, Cursor, or LM Studio over MCP.
+- [Connect an AI](https://bvccwallet.blockventurechaincapital.com/docs/connect-ai): Connect Hermes, Claude, Cursor, or LM Studio over MCP — install, configure, authorize, verify.
+- [How agent permissions work](https://bvccwallet.blockventurechaincapital.com/docs/agent-permissions): Capabilities vs addresses, the four permission layers, call policies.
 - [Agent integration](https://bvccwallet.blockventurechaincapital.com/docs/agent-integration): How an agent transacts within on-chain limits.
 - [Self-hosting](https://bvccwallet.blockventurechaincapital.com/docs/self-hosting): Run the wallet yourself.
 - [Contracts](https://bvccwallet.blockventurechaincapital.com/docs/contracts): Smart-contract details.
 - [Bundler API](https://bvccwallet.blockventurechaincapital.com/docs/bundler-api): ERC-4337 bundler API.
+
+## Packages and source
+- [@bvcc/agent-mcp](https://www.npmjs.com/package/@bvcc/agent-mcp): MCP server. `npx -y @bvcc/agent-mcp` registers the tools in any MCP client. Bundles the SDK.
+- [@bvcc/agent-sdk](https://www.npmjs.com/package/@bvcc/agent-sdk): TypeScript SDK for building your own bot against the same on-chain limits.
+- [Wallet source](https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent): App and smart contracts.
+- [MCP server source](https://github.com/blockventurechaincapital-crypto/bvcc-agent-mcp)
+- [SDK source](https://github.com/blockventurechaincapital-crypto/bvcc-agent-sdk)
+
+## Security
+- [Security report (English)](https://bvccwallet.blockventurechaincapital.com/audits/BVCC-Agent-Wallet-Security-Report.pdf): Internal security review — findings register, threat model, remediation and on-chain verification.
+- [Informe de seguridad (Spanish)](https://bvccwallet.blockventurechaincapital.com/audits/BVCC-Agent-Wallet-Informe-Seguridad.pdf)
+- The review is internal. No independent party has audited this code. Status: Public Beta.
 
 ## Legal
 - [Terms](https://bvccwallet.blockventurechaincapital.com/legal/terms)
@@ -25,8 +38,11 @@
 - Non-custodial: BVCC never receives or stores private keys, cannot recover wallets, and cannot reverse transactions. Ethereum is the only record of your account.
 - Authentication: WebAuthn / passkeys (Face ID, fingerprint, or security key), P256. No emails, no KYC, no forms.
 - Standards: ERC-4337 (account abstraction) and ERC-7821 (batch execution); WalletConnect for dApps.
-- AI-agent limits enforced on-chain: period budget, allowed tokens, recipient whitelist, instant pause. The agent holds its own keypair; BVCC never sees it.
+- AI-agent limits enforced on-chain: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, instant pause. The agent holds its own keypair; BVCC never sees it.
 - MCP clients: Hermes, Claude, Cursor, LM Studio.
+- What an agent can do: send native and ERC-20 tokens, swap on Uniswap v3 and v4, supply/borrow/repay on Aave v3 (including closing, deleveraging and swapping collateral or debt), and open, collect, reduce and close Uniswap v3 and v4 liquidity positions.
+- MCP surface: 53 tools — 12 read, 15 simulate, 26 write — plus 4 operating guides. Most writes have a matching dry-run. `BVCC_MCP_READONLY=true` exposes only the 27 read/simulate tools; `BVCC_MCP_MODULES` narrows by feature group (`core`, `aave`, `lp`).
+- Fees: a 0.15% BVCC agent fee is charged on-chain on agent actions, separate from gas and from the agent's budget.
 - Networks: Ethereum, Arbitrum, Base, BNB Chain, Polygon. Active testnet: Arbitrum Sepolia.
 - Open source and self-hostable. Status: Public Beta.
 

@@ -35,7 +35,7 @@ export const connectAi: LocalizedDoc = {
   en: {
     title: 'Connect an AI Assistant (MCP)',
     intro:
-      'Connect Hermes, Claude, Cursor or LM Studio to a BVCC Agent Wallet over MCP. One command exposes 16 tools (send, swap, balances, limits) that the assistant calls on your behalf — every spend limit, allowed token and recipient is enforced on-chain, not by the MCP. The MCP adds no powers: the agent can only do what you authorized in the dashboard.',
+      'Connect Hermes, Claude, Cursor or LM Studio to a BVCC Agent Wallet over MCP. One command exposes 53 tools — transfers, swaps, Aave v3 lending and Uniswap v3/v4 liquidity — that the assistant calls on your behalf; every spend limit, allowed token and recipient is enforced on-chain, not by the MCP. The MCP adds no powers: the agent can only do what you authorized in the dashboard.',
     blocks: [
       {
         type: 'callout',
@@ -52,6 +52,22 @@ export const connectAi: LocalizedDoc = {
           'The agent is a normal EOA with its **own keypair** that signs `executeAsAgent` and pays its own gas.',
           'The **contract** is the source of truth: a blocked action reverts and the tool returns a `humanMessage` + `suggestedAction`.',
         ],
+      },
+
+      { type: 'h2', text: 'What the tools cover' },
+      {
+        type: 'table',
+        headers: ['Group', 'Tools', 'What it does'],
+        rows: [
+          ['`core`', '18', 'Agent status and remaining limits, balances, native and token transfers, approvals, Uniswap v3/v4 swaps.'],
+          ['`aave`', '19', 'Aave v3: supply, borrow, repay, collateral and e-mode — plus close, deleverage, collateral swap and debt swap.'],
+          ['`lp`', '14', 'Uniswap v3 & v4 liquidity: open a position, collect fees, reduce and burn.'],
+          ['`meta`', '2', '`listGuides` / `getGuide` — operating playbooks per area. Always exposed.'],
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Each tool is tagged by class: 🟢 read (12), 🟡 simulate (15), 🔴 write (26). Most writes have a matching `dryRun*` / `*Plan*` tool that reports what would happen without sending anything — ask for that first. Writes carry the MCP `destructiveHint` annotation, so clients that support it can ask you to confirm.',
       },
 
       { type: 'h2', text: 'Before you connect (on-chain, once)' },
@@ -93,16 +109,17 @@ export const connectAi: LocalizedDoc = {
         rows: [
           ['`AGENT_PRIVATE_KEY`', '✅', 'The agent EOA private key from step 2 (`0x` + 64 hex).'],
           ['`WALLET_ADDRESS`', '✅', 'The Agent Wallet from step 1.'],
-          ['`CHAIN_ID`', '✅', 'Default chain: `1` Ethereum · `56` BNB · `42161` Arbitrum One · `8453` Base · `421614` Arbitrum Sepolia.'],
+          ['`CHAIN_ID`', '✅', 'Default chain: `1` Ethereum · `56` BNB · `42161` Arbitrum One · `8453` Base · `137` Polygon · `421614` Arbitrum Sepolia.'],
           ['`RPC_URL` / `RPC_URL_<id>`', '—', 'Your own RPC(s). Comma-separate several for failover. Else public defaults are used.'],
-          ['`BVCC_MCP_READONLY`', '—', '`true` exposes only the 11 read/simulate tools (never moves funds).'],
+          ['`BVCC_MCP_READONLY`', '—', '`true` exposes only the 27 read/simulate tools (never moves funds).'],
+          ['`BVCC_MCP_MODULES`', '—', 'Comma-separated groups to expose: `core`, `aave`, `lp`. Unset = all.'],
         ],
       },
       { type: 'p', text: 'Example `agent.env`:' },
       { type: 'code', lang: 'bash', code: CODE_ENV },
       {
         type: 'p',
-        text: 'The server is **multi-network**: every tool takes an optional `network` (chain id or name), so you can say "swap on bsc" without restarting — provided the agent is authorized on that chain. The 4 mainnets ship with a backup public RPC, so basic failover works with zero config.',
+        text: 'The server is **multi-network**: every tool takes an optional `network` (chain id or name), so you can say "swap on bsc" without restarting — provided the agent is authorized on that chain. Ethereum, BNB, Arbitrum and Base ship with a backup public RPC, so basic failover works with zero config.',
       },
 
       { type: 'h2', text: 'Register it in your assistant' },
@@ -130,13 +147,22 @@ export const connectAi: LocalizedDoc = {
       {
         type: 'callout',
         tone: 'warn',
-        text: 'Pasting the full `{ "mcpServers": { … } }` wrapper here gives `MCP server has no \'command\' in config`. Paste only `{ command, args, env }`. Then **Save server → Reload MCP**. The first launch is slow (npx downloads the package). The tools won\'t appear under "Skills & Tools" — that tab is for built-in tools — but the model has them (the log shows `registered 16 tool(s)`).',
+        text: 'Pasting the full `{ "mcpServers": { … } }` wrapper here gives `MCP server has no \'command\' in config`. Paste only `{ command, args, env }`. Then **Save server → Reload MCP**. The first launch is slow (npx downloads the package). The tools won\'t appear under "Skills & Tools" — that tab is for built-in tools — but the model has them (the log shows `registered 53 tool(s)`).',
       },
 
-      { type: 'h2', text: 'Read-only mode' },
+      { type: 'h2', text: 'Narrowing the surface' },
       {
         type: 'p',
-        text: 'Set `BVCC_MCP_READONLY=true` to expose only the 11 read/simulate tools (status, balances, quotes, dry-runs) and hide the 5 that move funds. Good for a first connection, dashboards, or untrusted models. To let the model actually swap or send, use the full entry **without** that variable.',
+        text: 'Set `BVCC_MCP_READONLY=true` to expose only the 27 read/simulate tools (status, balances, quotes, dry-runs) and hide the 26 that move funds. Good for a first connection, dashboards, or untrusted models. To let the model actually swap or send, use the full entry **without** that variable.',
+      },
+      {
+        type: 'p',
+        text: '`BVCC_MCP_MODULES` narrows it by feature and combines with the above: `core` alone is 20 tools, `aave` 21, `lp` 16, and `core` + read-only leaves 13. If an agent will never touch lending, leaving those tools out is one less thing it can get wrong. The two guide tools are always exposed on top, so a restricted agent can still read how to use what it has.',
+      },
+      {
+        type: 'callout',
+        tone: 'info',
+        text: 'Neither variable is a security boundary — the contract is. They only reduce what a confused model can reach for.',
       },
 
       { type: 'h2', text: 'Verify' },
@@ -169,7 +195,7 @@ export const connectAi: LocalizedDoc = {
   es: {
     title: 'Conecta un asistente IA (MCP)',
     intro:
-      'Conecta Hermes, Claude, Cursor o LM Studio a una BVCC Agent Wallet vía MCP. Un solo comando expone 16 tools (enviar, swap, saldos, límites) que el asistente llama por ti — cada límite de gasto, token permitido y destinatario se impone on-chain, no en el MCP. El MCP no añade poderes: el agente solo puede hacer lo que autorizaste en el dashboard.',
+      'Conecta Hermes, Claude, Cursor o LM Studio a una BVCC Agent Wallet vía MCP. Un solo comando expone 53 tools — transferencias, swaps, préstamos en Aave v3 y liquidez en Uniswap v3/v4 — que el asistente llama por ti; cada límite de gasto, token permitido y destinatario se impone on-chain, no en el MCP. El MCP no añade poderes: el agente solo puede hacer lo que autorizaste en el dashboard.',
     blocks: [
       {
         type: 'callout',
@@ -186,6 +212,22 @@ export const connectAi: LocalizedDoc = {
           'El agente es una EOA normal con su **propio par de claves** que firma `executeAsAgent` y paga su propio gas.',
           'El **contrato** es la fuente de verdad: una acción bloqueada revierte y la tool devuelve `humanMessage` + `suggestedAction`.',
         ],
+      },
+
+      { type: 'h2', text: 'Qué cubren las tools' },
+      {
+        type: 'table',
+        headers: ['Grupo', 'Tools', 'Qué hace'],
+        rows: [
+          ['`core`', '18', 'Estado del agente y límites restantes, saldos, envíos de nativo y tokens, approvals, swaps en Uniswap v3/v4.'],
+          ['`aave`', '19', 'Aave v3: depositar, pedir prestado, repagar, colateral y e-mode — más cerrar posición, desapalancar y cambiar colateral o deuda.'],
+          ['`lp`', '14', 'Liquidez en Uniswap v3 y v4: abrir posición, cobrar comisiones, reducir y quemar.'],
+          ['`meta`', '2', '`listGuides` / `getGuide` — guías de uso por área. Siempre expuestas.'],
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Cada tool va etiquetada por clase: 🟢 lectura (12), 🟡 simulación (15), 🔴 escritura (26). Casi todas las escrituras tienen su `dryRun*` / `*Plan*` que cuenta lo que pasaría sin enviar nada — pídelo primero. Las escrituras llevan la anotación MCP `destructiveHint`, así que los clientes que la soportan pueden pedirte confirmación.',
       },
 
       { type: 'h2', text: 'Antes de conectar (on-chain, una vez)' },
@@ -227,16 +269,17 @@ export const connectAi: LocalizedDoc = {
         rows: [
           ['`AGENT_PRIVATE_KEY`', '✅', 'La clave privada de la EOA del agente del paso 2 (`0x` + 64 hex).'],
           ['`WALLET_ADDRESS`', '✅', 'La Agent Wallet del paso 1.'],
-          ['`CHAIN_ID`', '✅', 'Red por defecto: `1` Ethereum · `56` BNB · `42161` Arbitrum One · `8453` Base · `421614` Arbitrum Sepolia.'],
+          ['`CHAIN_ID`', '✅', 'Red por defecto: `1` Ethereum · `56` BNB · `42161` Arbitrum One · `8453` Base · `137` Polygon · `421614` Arbitrum Sepolia.'],
           ['`RPC_URL` / `RPC_URL_<id>`', '—', 'Tus propios RPC. Separa varios por comas para failover. Si no, se usan los públicos por defecto.'],
-          ['`BVCC_MCP_READONLY`', '—', '`true` expone solo las 11 tools de lectura/simulación (nunca mueve fondos).'],
+          ['`BVCC_MCP_READONLY`', '—', '`true` expone solo las 27 tools de lectura/simulación (nunca mueve fondos).'],
+          ['`BVCC_MCP_MODULES`', '—', 'Grupos a exponer, separados por comas: `core`, `aave`, `lp`. Sin definir = todos.'],
         ],
       },
       { type: 'p', text: 'Ejemplo de `agent.env`:' },
       { type: 'code', lang: 'bash', code: CODE_ENV },
       {
         type: 'p',
-        text: 'El servidor es **multi-red**: cada tool acepta un `network` opcional (id o nombre), así que puedes decir "haz swap en bsc" sin reiniciar — siempre que el agente esté autorizado en esa red. Las 4 mainnets traen un RPC público de respaldo, así que el failover básico funciona sin configurar nada.',
+        text: 'El servidor es **multi-red**: cada tool acepta un `network` opcional (id o nombre), así que puedes decir "haz swap en bsc" sin reiniciar — siempre que el agente esté autorizado en esa red. Ethereum, BNB, Arbitrum y Base traen un RPC público de respaldo, así que el failover básico funciona sin configurar nada.',
       },
 
       { type: 'h2', text: 'Regístralo en tu asistente' },
@@ -264,13 +307,22 @@ export const connectAi: LocalizedDoc = {
       {
         type: 'callout',
         tone: 'warn',
-        text: 'Pegar el envoltorio completo `{ "mcpServers": { … } }` aquí da `MCP server has no \'command\' in config`. Pega solo `{ command, args, env }`. Luego **Save server → Reload MCP**. El primer arranque tarda (npx descarga el paquete). Las tools no aparecen en "Skills & Tools" — esa pestaña es para tools integradas — pero el modelo las tiene (el log muestra `registered 16 tool(s)`).',
+        text: 'Pegar el envoltorio completo `{ "mcpServers": { … } }` aquí da `MCP server has no \'command\' in config`. Pega solo `{ command, args, env }`. Luego **Save server → Reload MCP**. El primer arranque tarda (npx descarga el paquete). Las tools no aparecen en "Skills & Tools" — esa pestaña es para tools integradas — pero el modelo las tiene (el log muestra `registered 53 tool(s)`).',
       },
 
-      { type: 'h2', text: 'Modo solo-lectura' },
+      { type: 'h2', text: 'Reducir la superficie' },
       {
         type: 'p',
-        text: 'Pon `BVCC_MCP_READONLY=true` para exponer solo las 11 tools de lectura/simulación (estado, saldos, cotizaciones, dry-runs) y ocultar las 5 que mueven fondos. Útil para una primera conexión, dashboards o modelos no confiables. Para que el modelo pueda hacer swaps o enviar de verdad, usa la entrada completa **sin** esa variable.',
+        text: 'Pon `BVCC_MCP_READONLY=true` para exponer solo las 27 tools de lectura/simulación (estado, saldos, cotizaciones, dry-runs) y ocultar las 26 que mueven fondos. Útil para una primera conexión, dashboards o modelos no confiables. Para que el modelo pueda hacer swaps o enviar de verdad, usa la entrada completa **sin** esa variable.',
+      },
+      {
+        type: 'p',
+        text: '`BVCC_MCP_MODULES` recorta por funcionalidad y se combina con lo anterior: `core` solo son 20 tools, `aave` 21, `lp` 16, y `core` + solo-lectura deja 13. Si un agente no va a tocar préstamos, dejar esas tools fuera es una cosa menos que puede hacer mal. Las dos tools de guías se exponen siempre por encima, así que un agente restringido sigue pudiendo leer cómo usar lo que tiene.',
+      },
+      {
+        type: 'callout',
+        tone: 'info',
+        text: 'Ninguna de las dos variables es la frontera de seguridad — esa es el contrato. Solo reducen a qué puede echar mano un modelo confundido.',
       },
 
       { type: 'h2', text: 'Verificar' },
