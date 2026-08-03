@@ -2,7 +2,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { dict, Lang } from './translations'
 
-type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (key: string) => string }
+type Vars = Record<string, string | number>
+type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: (key: string, vars?: Vars) => string }
 const I18nContext = createContext<Ctx | null>(null)
 
 const get = (obj: unknown, key: string): unknown =>
@@ -27,11 +28,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const t = useCallback(
-    (key: string) => {
+    (key: string, vars?: Vars) => {
       const v = get(dict[lang], key)
-      if (typeof v === 'string') return v
-      const fallback = get(dict.en, key)
-      return typeof fallback === 'string' ? fallback : key
+      const fallback = typeof v === 'string' ? v : get(dict.en, key)
+      const str = typeof fallback === 'string' ? fallback : key
+      if (!vars) return str
+      return str.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? String(vars[name]) : m))
     },
     [lang]
   )

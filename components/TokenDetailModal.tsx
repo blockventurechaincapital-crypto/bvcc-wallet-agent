@@ -54,7 +54,7 @@ export default function TokenDetailModal({ token, onClose }: { token: WalletToke
   const up = tfChange >= 0
   const color = up ? GREEN : RED
 
-  const canSend = token.isNative || token.symbol === 'USDC'
+  const canSend = token.isNative || !!token.address
 
   const go = (path: string) => {
     if (token.network.chainId !== network.chainId) setNetworkByChainId(token.network.chainId)
@@ -157,7 +157,7 @@ export default function TokenDetailModal({ token, onClose }: { token: WalletToke
         {/* Acciones */}
         <div style={{ display: 'flex', gap: '8px' }}>
           {canSend && (
-            <button onClick={() => go(`/wallet/send?token=${token.isNative ? token.symbol : 'USDC'}`)} className="action-btn"
+            <button onClick={() => go(`/wallet/send?token=${token.isNative ? 'native' : token.address}`)} className="action-btn"
               style={{ flex: 1, padding: '10px 0', background: '#D4AF37', border: 'none', borderRadius: '7px', color: '#000', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
               {t('dashboard.send')}
             </button>

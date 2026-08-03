@@ -19,11 +19,6 @@ export const components = {
       networkGroupTestnets: 'Testnets',
       networkGroupMainnets: 'Mainnets',
       networkSoon: 'soon',
-
-      // FeePreview
-      feeSends: 'You send',
-      feeBvcc: 'BVCC fee (0.01%)',
-      feeReceives: 'Recipient gets',
     },
   },
   es: {
@@ -46,11 +41,6 @@ export const components = {
       networkGroupTestnets: 'Testnets',
       networkGroupMainnets: 'Mainnets',
       networkSoon: 'soon',
-
-      // FeePreview
-      feeSends: 'Envias',
-      feeBvcc: 'Fee BVCC (0.01%)',
-      feeReceives: 'Recibe',
     },
   },
 }

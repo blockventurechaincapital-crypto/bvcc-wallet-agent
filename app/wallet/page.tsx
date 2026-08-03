@@ -99,10 +99,11 @@ export default function WalletPage() {
   const { address: walletAddr, isLoaded } = useWalletAddress()
   const { t } = useI18n()
 
-  // Enviar un token: si vive en otra red, cambiar la red de acción primero
+  // Enviar un token: si vive en otra red, cambiar la red de acción primero.
+  // Los ERC-20 viajan por contrato — el símbolo no es único entre redes.
   const goSend = (tk: WalletToken) => {
     if (tk.network.chainId !== network.chainId) setNetworkByChainId(tk.network.chainId)
-    router.push(`/wallet/send?token=${tk.isNative ? tk.symbol : 'USDC'}`)
+    router.push(`/wallet/send?token=${tk.isNative ? 'native' : tk.address}`)
   }
 
   const publicClient = useMemo(
@@ -308,7 +309,7 @@ export default function WalletPage() {
                             )}
                           </div>
                         </div>
-                        {(tk.isNative || tk.symbol === 'USDC') && (
+                        {(tk.isNative || !!tk.address) && (
                           <button
                             onClick={(e) => { e.stopPropagation(); goSend(tk) }}
                             style={{ padding: '4px 10px', fontSize: '11px', fontWeight: '500', color: '#D4AF37', backgroundColor: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.2)', borderRadius: '4px', cursor: 'pointer', flexShrink: 0 }}

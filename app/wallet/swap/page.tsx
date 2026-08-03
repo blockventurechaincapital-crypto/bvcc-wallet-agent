@@ -13,6 +13,8 @@ import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import type { NetworkConfig } from '@/lib/networks'
 import { useTokenBalance } from '@/lib/useTokenBalance'
+import { useWalletType } from '@/lib/useWalletType'
+import { feeNumerator, feeRateLabel, FEE_DENOMINATOR } from '@/lib/fees'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 
@@ -216,6 +218,13 @@ function SwapPageInner() {
   const nativeSym    = network.nativeToken.symbol
   const wrappedSym   = `W${nativeSym}`
   const usdcDecimals = network.tokens.usdcDecimals
+
+  // Fee del protocolo BVCC. Un swap es Caso 3 en el contrato: el fee NO se cobra
+  // sobre lo que envías, sino sobre el incremento de balance del token que
+  // recibes (BVCCWallet.sol _collectFeesOnIncrease). Y depende del tipo de wallet.
+  const { walletType } = useWalletType()
+  const bvccFeeNum   = feeNumerator(walletType)
+  const bvccFeeRate  = feeRateLabel(bvccFeeNum)
 
   const [direction, setDirection] = useState<SwapDirection>('ETH_TO_USDC')
   const [amount, setAmount] = useState('')
@@ -693,11 +702,14 @@ function SwapPageInner() {
                     </span>
                   </div>
                 )}
-                {direction === 'ETH_TO_USDC' && (
+                {quote && status !== 'quoting' && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '11px', color: '#4a5568' }}>{t('swap.feeBvcc')}</span>
+                    <span style={{ fontSize: '11px', color: '#4a5568' }}>
+                      {t('swap.feeBvcc', { rate: bvccFeeRate })}
+                    </span>
                     <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#D4AF37' }}>
-                      {(Number(amountIn) * 500 / 1_000_000 / 1e18).toFixed(8)} {nativeSym}
+                      {(parseFloat(quote) * Number(bvccFeeNum) / Number(FEE_DENOMINATOR))
+                        .toFixed(direction === 'ETH_TO_USDC' ? 6 : 8)} {toLabel}
                     </span>
                   </div>
                 )}

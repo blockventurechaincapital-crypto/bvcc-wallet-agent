@@ -1,13 +1,6 @@
 import { createPublicClient, http, parseEther } from 'viem'
 import { base } from 'viem/chains'
 
-// Calcula el fee BVCC de una cantidad
-// 0.01% = 100 / 1_000_000
-export function calculateFee(amount: bigint): { fee: bigint; amountAfterFee: bigint } {
-  const fee = (amount * 100n) / 1_000_000n
-  return { fee, amountAfterFee: amount - fee }
-}
-
 // Convierte ETH string a wei bigint con validacion
 export function parseEthAmount(amount: string): bigint {
   try {

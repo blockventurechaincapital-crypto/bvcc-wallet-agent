@@ -21,13 +21,16 @@
   <a href="docs/bundler-api.md">Bundler API</a>
 </p>
 
-## Screenshots
+## Screenshots & demo
 
 ### Dashboard — balances, assets & recent activity
 ![Dashboard](assets/1.png)
 
 ### AI Agents — on-chain spending limits
-![AI Agents](assets/2.png)
+
+[![Demo: an AI agent using the wallet on Aave and Uniswap under on-chain limits](https://img.youtube.com/vi/dWUTaWBk68A/maxresdefault.jpg)](https://www.youtube.com/watch?v=dWUTaWBk68A)
+
+▶️ [Watch the demo](https://www.youtube.com/watch?v=dWUTaWBk68A) — an AI agent moving funds on Aave and Uniswap, with the limits enforced by the contract.
 
 | Create wallet (Face ID) | Guardian recovery (2-of-3) |
 |:---:|:---:|
