@@ -9,6 +9,15 @@ import type { SubmitUserOpPayload } from './useSubmitUserOp'
 // Una llamada del batch ERC-7821 (target + value + calldata).
 export type ExecCall = { target: Address; value?: bigint; callData?: Hex }
 
+// Presupuesto de gas del userOp. Exportado porque el EntryPoint cobra el prefund
+// (maxFeePerGas x este total) del saldo de la propia wallet: quien tenga que dejarla
+// financiada necesita el mismo numero, y si se duplicara acabarian divergiendo.
+export const USEROP_VERIFICATION_GAS = 400_000n
+export const USEROP_CALL_GAS = 500_000n
+export const USEROP_PREVERIFICATION_GAS = 80_000n
+export const USEROP_TOTAL_GAS =
+  USEROP_VERIFICATION_GAS + USEROP_CALL_GAS + USEROP_PREVERIFICATION_GAS
+
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
 }
@@ -32,7 +41,7 @@ export async function executeWithFaceId(opts: {
   callGasLimit?: bigint
 }): Promise<string> {
   const { network, walletAddress, credentialId, calls, submitUserOp } = opts
-  if (!calls.length) throw new Error('No hay llamadas que ejecutar')
+  if (!calls.length) throw new Error('Nothing to execute')
 
   const publicClient = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
 
@@ -59,8 +68,8 @@ export async function executeWithFaceId(opts: {
     nonce,
     initCode: '0x' as Hex,
     callData,
-    accountGasLimits: packBytes32(400_000n, opts.callGasLimit ?? 500_000n),
-    preVerificationGas: 80_000n,
+    accountGasLimits: packBytes32(USEROP_VERIFICATION_GAS, opts.callGasLimit ?? USEROP_CALL_GAS),
+    preVerificationGas: USEROP_PREVERIFICATION_GAS,
     gasFees: packBytes32(maxPriorityFeePerGas, maxFeePerGas),
     paymasterAndData: '0x' as Hex,
     signature: '0x' as Hex,

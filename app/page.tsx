@@ -1,13 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { isAddress, type Address } from 'viem'
+import { isAddress, createPublicClient, http, formatEther, type Address } from 'viem'
 import {
   useConnect,
   useAccount,
   useSwitchChain,
   useWriteContract,
   useWaitForTransactionReceipt,
+  useSendTransaction,
 } from 'wagmi'
 import { QRCodeSVG } from 'qrcode.react'
 import { registerWebAuthn, saveCredential, hasCredential, credentialIdToBytes } from '@/lib/webauthn'
@@ -15,6 +16,7 @@ import { getWalletAddress, getAgentWalletAddress, getCredentialIdFromChain } fro
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from '@/lib/abis'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { getPrefundNeed } from '@/lib/prefund'
 import { encodeFunctionData } from 'viem'
 import { useNetwork } from '@/lib/NetworkContext'
 import { NETWORKS } from '@/lib/networks'
@@ -111,6 +113,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [regData, setRegData] = useState<RegistrationData | null>(null)
   const [configuring, setConfiguring] = useState(false)
+  const [setupPhase, setSetupPhase] = useState<'idle' | 'funding' | 'signing'>('idle')
   const submitUserOp = useSubmitUserOp()
   const [guardians, setGuardians] = useState<[string, string, string]>(['', '', ''])
   const [addressInput, setAddressInput] = useState('')
@@ -132,6 +135,23 @@ export default function Home() {
   } = useWriteContract()
   const { isLoading: isTxConfirming, isSuccess: isTxConfirmed } =
     useWaitForTransactionReceipt({ hash: deployTxHash })
+  const { sendTransactionAsync } = useSendTransaction()
+
+  // What the wallet will need for its own first signature, shown on the confirm screen so
+  // the second MetaMask prompt is expected rather than a surprise.
+  const [prefundHint, setPrefundHint] = useState<bigint | null>(null)
+  useEffect(() => {
+    if (step !== 'confirm' || !regData) return
+    let cancelled = false
+    const resolver = selectedWalletType === 'agent'
+      ? getAgentWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+      : getWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+    resolver
+      .then(addr => getPrefundNeed(addr, network))
+      .then(need => { if (!cancelled) setPrefundHint(need.missing) })
+      .catch(() => { /* the deploy screen works fine without the hint */ })
+    return () => { cancelled = true }
+  }, [step, regData, selectedWalletType, network.chainId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setWalletExists(hasCredential()) }, [])
 
@@ -152,8 +172,30 @@ export default function Home() {
     resolver.then(async walletAddress => {
       saveCredential(regData.credentialId, walletAddress)
       localStorage.setItem('bvcc_guardians', JSON.stringify(guardians))
+      setConfiguring(true)
+
+      // Leave the wallet able to pay for the signature that comes next. setGuardians
+      // travels as a userOp and the EntryPoint charges the prefund to the account, not to
+      // whoever relays it — so a wallet that was just created, holding nothing, fails
+      // validation with AA21 before its call ever runs. Funding it here is what makes the
+      // second step possible at all; it is the user's own money, in their own wallet.
       try {
-        setConfiguring(true)
+        setSetupPhase('funding')
+        const { missing } = await getPrefundNeed(walletAddress, network)
+        if (missing > 0n) {
+          const hash = await sendTransactionAsync({
+            to: walletAddress, value: missing, chainId: network.chainId,
+          })
+          const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+          await client.waitForTransactionReceipt({ hash })
+        }
+      } catch {
+        // Declined, or the transfer failed. Try the signature anyway — the wallet may
+        // already have funds from elsewhere — and let the catch below handle the fallout.
+      }
+
+      try {
+        setSetupPhase('signing')
         await registerRecovery(walletAddress, regData.credentialId)
         router.push('/wallet')
       } catch (err) {
@@ -742,6 +784,18 @@ export default function Home() {
             >
               {isTxConfirming ? t('appshell.confirmConfirmingBtn') : isDeploying ? t('appshell.confirmDeployingBtn') : isTxConfirmed ? t('appshell.confirmDeployedBtn') : t('appshell.confirmDeployBtn')}
             </button>
+          )}
+
+          {configuring ? (
+            <p style={{ margin: '10px 0 0', fontSize: '12px', color: C.gold, lineHeight: 1.6, textAlign: 'center' }}>
+              {setupPhase === 'funding' ? t('appshell.confirmFundingStep') : t('appshell.confirmSigningStep')}
+            </p>
+          ) : prefundHint !== null && prefundHint > 0n && (
+            <p style={{ margin: '10px 0 0', fontSize: '11.5px', color: C.muted, lineHeight: 1.6, textAlign: 'center' }}>
+              {t('appshell.confirmTwoTxNotice')
+                .replace('{amount}', formatEther(prefundHint))
+                .replace('{symbol}', network.nativeToken.symbol)}
+            </p>
           )}
 
           <button

@@ -5,6 +5,7 @@ import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { credentialIdToBytes, discoverCredentialId, saveCredential, WrongPasskeyError } from '@/lib/webauthn'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { getPrefundNeed } from '@/lib/prefund'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 
@@ -21,11 +22,6 @@ const COLORS = {
 const SIGNER_ABI = [{
   type: 'function', name: 'signer', stateMutability: 'view',
   inputs: [], outputs: [{ type: 'uint256' }, { type: 'uint256' }],
-}] as const
-
-const DEPOSIT_ABI = [{
-  type: 'function', name: 'balanceOf', stateMutability: 'view',
-  inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }],
 }] as const
 
 /**
@@ -105,20 +101,10 @@ export default function GuardianSetup({
   // freshly deployed wallet holding nothing fails validation with AA21 before the call
   // ever runs. Say so up front instead of letting the user burn a passkey prompt on it.
   useEffect(() => {
-    const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
     let cancelled = false
-    Promise.all([
-      client.getBalance({ address: walletAddress }),
-      client.readContract({
-        address: network.contracts.entryPoint, abi: DEPOSIT_ABI,
-        functionName: 'balanceOf', args: [walletAddress],
-      }).catch(() => 0n),
-      client.estimateFeesPerGas().catch(() => ({ maxFeePerGas: null })),
-    ]).then(([balance, deposit, fees]) => {
-      if (cancelled) return
-      const maxFee = fees.maxFeePerGas ?? 0n
-      setUnderfunded(balance + (deposit as bigint) < 800_000n * maxFee)
-    }).catch(() => { /* the send itself will surface any real problem */ })
+    getPrefundNeed(walletAddress, network)
+      .then(need => { if (!cancelled) setUnderfunded(need.available < need.required) })
+      .catch(() => { /* the send itself will surface any real problem */ })
     return () => { cancelled = true }
   }, [walletAddress, network.chainId]) // eslint-disable-line react-hooks/exhaustive-deps
 
