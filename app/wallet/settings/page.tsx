@@ -6,6 +6,9 @@ import { createPublicClient, http, type Address } from 'viem'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
+import { useWalletIdentity } from '@/lib/useWalletIdentity'
+import { useWalletType } from '@/lib/useWalletType'
+import { feeNumerator, feeRateLabel } from '@/lib/fees'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride } from '@/lib/wcCalls'
 import GuardianSetup from '@/components/GuardianSetup'
@@ -115,13 +118,15 @@ function Row({ children, last }: { children: React.ReactNode; last?: boolean }) 
 function AddressRow({
   label,
   address,
-  arbiscanUrl,
+  explorerUrl,
+  explorerName,
   copyLabel,
   notAvailableLabel,
 }: {
   label?: string
   address: string | null
-  arbiscanUrl?: string
+  explorerUrl?: string
+  explorerName: string
   copyLabel: string
   notAvailableLabel: string
 }) {
@@ -174,12 +179,12 @@ function AddressRow({
               {copied ? <IconCheck /> : <IconCopy />}
               {copied ? '✓' : copyLabel}
             </button>
-            {arbiscanUrl && (
+            {explorerUrl && (
               <a
-                href={arbiscanUrl}
+                href={explorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Arbiscan"
+                title={explorerName}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '3px',
                   padding: '4px 8px',
@@ -196,7 +201,7 @@ function AddressRow({
                 onMouseLeave={e => (e.currentTarget.style.color = COLORS.textSubtle)}
               >
                 <IconExternal />
-                Arbiscan
+                {explorerName}
               </a>
             )}
           </>
@@ -206,18 +211,27 @@ function AddressRow({
   )
 }
 
+/** Deploy date, in the reader's locale. Day precision is enough — nobody needs the minute. */
+function formatDate(unixSeconds: number, lang: string): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  })
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { network } = useNetwork()
   const { address: walletAddress, credentialId, isLoaded } = useWalletAddress()
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
+
+  const identity = useWalletIdentity(walletAddress)
+  const { walletType: walletTypeValue } = useWalletType()
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  const [feeWallet, setFeeWallet] = useState<string | null>(null)
   const [guardians, setGuardians] = useState<(string | null)[]>([null, null, null])
   const [loadingChain, setLoadingChain] = useState(false)
   const [chainError, setChainError] = useState(false)
@@ -253,12 +267,9 @@ export default function SettingsPage() {
     setLoadingChain(true)
     setChainError(false)
 
+    // Only the guardians are read here. BVCC_FEE_WALLET used to be fetched alongside
+    // them and never rendered — the same address for every wallet, so nothing to show.
     Promise.all([
-      publicClient.readContract({
-        address: walletAddress as Address,
-        abi: BVCC_WALLET_ABI,
-        functionName: 'BVCC_FEE_WALLET',
-      }).catch(() => null),
       publicClient.readContract({
         address: walletAddress as Address,
         abi: BVCC_WALLET_ABI,
@@ -278,8 +289,7 @@ export default function SettingsPage() {
         args: [2n],
       }).catch(() => null),
     ])
-      .then(([fee, g0, g1, g2]) => {
-        setFeeWallet(fee as string | null)
+      .then(([g0, g1, g2]) => {
         setGuardians([
           g0 as string | null,
           g1 as string | null,
@@ -308,7 +318,10 @@ export default function SettingsPage() {
     ? `${credentialId.slice(0, 20)}...`
     : t('settings.notAvailable')
 
-  const arbiscanBase = 'https://sepolia.arbiscan.io/address/'
+  // Explorer of the ACTIVE network. This was hardcoded to Arbitrum Sepolia, so on any
+  // other chain the links pointed at a testnet explorer where the address holds nothing —
+  // which reads as "your wallet is empty", the opposite of what a verify link is for.
+  const explorerBase = `${network.blockExplorer.url}/address/`
 
   return (
     <>
@@ -362,8 +375,8 @@ export default function SettingsPage() {
               <Row>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#38a169', display: 'block', flexShrink: 0 }} />
-                    <span style={{ fontSize: '14px', fontWeight: '500', color: COLORS.textPrimary }}>Arbitrum Sepolia</span>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: network.color, display: 'block', flexShrink: 0 }} />
+                    <span style={{ fontSize: '14px', fontWeight: '500', color: COLORS.textPrimary }}>{network.name}</span>
                   </div>
                   <span style={{
                     fontSize: '11px', fontFamily: 'IBM Plex Mono, monospace',
@@ -371,37 +384,84 @@ export default function SettingsPage() {
                     backgroundColor: 'rgba(255,255,255,0.03)',
                     border: `1px solid ${COLORS.border}`, borderRadius: '4px',
                   }}>
-                    Chain ID 421614
+                    Chain ID {network.chainId}
                   </span>
                 </div>
               </Row>
+              {/* Your own address comes first: it is the one thing here that is yours,
+                  and the one you need to copy to receive funds. It used to be missing
+                  from this page entirely, visible only inside the explorer link. */}
               <Row>
-                <p style={{ margin: '0 0 4px', fontSize: '11px', color: COLORS.textSubtle }}>{t('settings.entryPoint')}</p>
-                <span style={{ fontSize: '12px', fontFamily: 'IBM Plex Mono, monospace', color: COLORS.textSecondary, wordBreak: 'break-all' }}>
-                  0x433709009B8330FDa32311DF1C2AFA402eD8D009
-                </span>
-              </Row>
-              <Row last>
                 {walletAddress ? (
-                  <a
-                    href={`${arbiscanBase}${walletAddress}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      fontSize: '13px', fontWeight: '500', color: COLORS.gold,
-                      textDecoration: 'none', transition: 'opacity 0.15s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-                  >
-                    <IconExternal />
-                    {t('settings.viewOnArbiscan')}
-                  </a>
+                  <AddressRow
+                    label={t('settings.yourWallet')}
+                    address={walletAddress}
+                    explorerUrl={`${explorerBase}${walletAddress}`}
+                    explorerName={network.blockExplorer.name}
+                    copyLabel={t('settings.copyBtn')}
+                    notAvailableLabel={t('settings.notAvailable')}
+                  />
                 ) : (
                   <span style={{ fontSize: '13px', color: COLORS.textSubtle }}>{t('settings.noActiveWallet')}</span>
                 )}
               </Row>
+              {/* Which contract this actually is. Wallets cannot be upgraded in place, so
+                  the generation decides whether the owner needs to migrate — and it was
+                  not shown anywhere. Read from the deployed bytecode, not from config. */}
+              {walletAddress && (
+                <Row>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: '0 0 2px', fontSize: '11px', color: COLORS.textSubtle }}>{t('settings.contract')}</p>
+                      <span style={{ fontSize: '12px', fontFamily: 'IBM Plex Mono, monospace', color: COLORS.textSecondary }}>
+                        {identity.isLoading
+                          ? t('settings.loading')
+                          : identity.contractName ?? t('settings.notAvailable')}
+                      </span>
+                      {identity.createdAt && (
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: COLORS.textSubtle }}>
+                          {t('settings.createdOn', { date: formatDate(identity.createdAt, lang) })}
+                        </p>
+                      )}
+                    </div>
+                    {identity.isCurrent !== null && (
+                      <span style={{
+                        flexShrink: 0, fontSize: '10.5px', fontWeight: 600,
+                        letterSpacing: '0.06em', textTransform: 'uppercase',
+                        padding: '3px 8px', borderRadius: '4px',
+                        color: identity.isCurrent ? '#68d391' : '#f6ad55',
+                        backgroundColor: identity.isCurrent ? 'rgba(56,161,105,0.08)' : 'rgba(246,173,85,0.08)',
+                        border: `1px solid ${identity.isCurrent ? 'rgba(56,161,105,0.22)' : 'rgba(246,173,85,0.28)'}`,
+                      }}>
+                        {identity.isCurrent ? t('settings.upToDate') : t('settings.outdated')}
+                      </span>
+                    )}
+                  </div>
+                  {identity.isCurrent === false && (
+                    <p style={{ margin: '8px 0 0', fontSize: '11.5px', lineHeight: 1.5, color: '#f6ad55' }}>
+                      {t('settings.migrateNotice')}
+                    </p>
+                  )}
+                </Row>
+              )}
+              {/* The EntryPoint address used to sit here. It is identical on all six
+                  networks and for every user, so it said nothing about *this* wallet —
+                  hex noise on a user-facing page. It is in docs/contracts.md and on the
+                  explorer for anyone who needs it. The fee actually depends on the
+                  wallet's own type, so it earns the row. */}
+              {walletAddress && identity.generation && (
+                <Row last>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' }}>
+                    <p style={{ margin: 0, fontSize: '11px', color: COLORS.textSubtle }}>{t('settings.feeRate')}</p>
+                    <span style={{ fontSize: '12.5px', fontFamily: 'IBM Plex Mono, monospace', color: COLORS.textSecondary }}>
+                      {feeRateLabel(feeNumerator(walletTypeValue))}%
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: COLORS.textSubtle, lineHeight: 1.5 }}>
+                    {t('settings.feeRateNote')}
+                  </p>
+                </Row>
+              )}
             </Card>
           </div>
 
@@ -433,7 +493,8 @@ export default function SettingsPage() {
                       ) : (
                         <AddressRow
                           address={g}
-                          arbiscanUrl={g ? `${arbiscanBase}${g}` : undefined}
+                          explorerUrl={g ? `${explorerBase}${g}` : undefined}
+                          explorerName={network.blockExplorer.name}
                           copyLabel={t('settings.copyBtn')}
                           notAvailableLabel={t('settings.notAvailable')}
                         />

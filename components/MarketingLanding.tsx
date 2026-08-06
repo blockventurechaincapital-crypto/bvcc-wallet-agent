@@ -142,19 +142,30 @@ export default function MarketingLanding({
           <a className="brand" href="#top" aria-label="BVCC Wallet">
             <img className="nav-logo" src="/bvcc_w.png" alt="BVCC Wallet" width={96} height={96} />
           </a>
+          {/* Four links, not eight. Seven of the eight were anchors into this same page,
+              taking 57% of the bar's width to index a page you are already scrolling —
+              and competing with the one button that matters. Philosophy, Open Source,
+              Networks and About moved to an Explore column in the footer. */}
           <nav className="nav-links">
             <a href="#agentes">{t('marketing.navAgents')}</a>
             <a href="#connect">{t('marketing.navConnect')}</a>
-            <a href="#manifiesto">{t('marketing.navPhilosophy')}</a>
-            <a href="#codigo">{t('marketing.navOpenSource')}</a>
-            <a href="#redes">{t('marketing.navNetworks')}</a>
             <a href="#faq">{t('marketing.navFaq')}</a>
-            <a href="#about">{t('marketing.navAbout')}</a>
             <a href="/docs">Docs</a>
           </nav>
           <div className="nav-cta">
-            <LanguageSwitcher className="nav-lang" />
-            <a className="link-btn gh" href="https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent" target="_blank" rel="noreferrer">{t('marketing.navGithub')}</a>
+            <LanguageSwitcher className="nav-lang" compact />
+            <a
+              className="icon-btn"
+              href="https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent"
+              target="_blank"
+              rel="noreferrer"
+              title={t('marketing.navGithub')}
+              aria-label={t('marketing.navGithub')}
+            >
+              <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-2.92-.89-2.92-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2 -.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.15 3.75-2.93 3.95.3.26.56.76.56 1.54 0 1.11-.01 2.01-.01 2.29 0 .21.15.46.55.38A7.99 7.99 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+              </svg>
+            </a>
             {walletExists ? (
               <button className="link-btn" onClick={onDirectAccess}>
                 {t('marketing.navEnter')}
@@ -588,6 +599,15 @@ export default function MarketingLanding({
             <a className="footer-link" href="https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent" target="_blank" rel="noreferrer">GitHub ↗</a>
             <Link className="footer-link" href="/docs">Developer Docs</Link>
           </nav>
+          {/* Home for the anchors dropped from the header. Without this they would only
+              be reachable by scrolling, which is not the same as being navigable. */}
+          <nav className="footer-col">
+            <span className="footer-h">{t('marketing.footerExplore')}</span>
+            <a className="footer-link" href="#manifiesto">{t('marketing.navPhilosophy')}</a>
+            <a className="footer-link" href="#codigo">{t('marketing.navOpenSource')}</a>
+            <a className="footer-link" href="#redes">{t('marketing.navNetworks')}</a>
+            <a className="footer-link" href="#about">{t('marketing.navAbout')}</a>
+          </nav>
           <nav className="footer-col">
             <span className="footer-h">{t('marketing.footerStandards')}</span>
             <span className="footer-static mono">ERC-4337</span>
@@ -673,6 +693,10 @@ const styles = `
 .bvcc-mk .btn-gold:hover .btn-arrow { transform:translateX(4px); }
 .bvcc-mk .link-btn { background:none; border:none; color:var(--dim); font-size:14px; font-weight:500; padding:6px 4px; transition:color .2s; }
 .bvcc-mk .link-btn:hover { color:var(--text); }
+/* GitHub as a mark, not a word: the label bought nothing and cost ~70px in a bar
+   that was already 89% full. Title + aria-label keep it named for assistive tech. */
+.bvcc-mk .icon-btn { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:8px; color:var(--dim); border:1px solid transparent; transition:color .2s, background .2s, border-color .2s; }
+.bvcc-mk .icon-btn:hover { color:var(--text); background:rgba(255,255,255,.05); border-color:var(--line); }
 .bvcc-mk .underline-btn { background:none; border:none; color:var(--gold); font:inherit; padding:0; text-decoration:underline; text-underline-offset:3px; }
 .bvcc-mk .underline-btn:hover { color:var(--gold-hi); }
 
@@ -914,7 +938,7 @@ const styles = `
 }
 @media (max-width:720px){
   .bvcc-mk .nav-links{ display:none; }
-  .bvcc-mk .nav-cta .gh{ display:none; }
+  .bvcc-mk .nav-cta .icon-btn{ display:none; }
   .bvcc-mk .oss{ padding-left:20px; padding-right:20px; }
   .bvcc-mk .faq{ padding-left:20px; padding-right:20px; }
   .bvcc-mk .term-body{ font-size:11px; }

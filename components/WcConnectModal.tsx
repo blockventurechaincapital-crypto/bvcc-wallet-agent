@@ -8,6 +8,7 @@ import {
   classifyCall, buildKnownSet, getAtomicBatchEnabled, getMaxGas, newBatchId, recordBatch,
   getApproveInfo, encodeApproveAmount, MAX_UINT256,
   type WcCall, type CallRisk, type RiskLevel,
+  type Tr,
 } from '@/lib/wcCalls'
 import { hashMessage as hashMessage7739, wrapTypedDataSignature } from 'viem/experimental/erc7739'
 import { erc7739TypedDataDigest } from '@/lib/erc7739'
@@ -80,7 +81,7 @@ function ExplorerAddress({ addr, explorerBase }: { addr: string; explorerBase?: 
 }
 
 // Una fila de call con su badge de riesgo (usada en tx única y en batch).
-function CallRow({ index, risk, explorerBase }: { index?: number; risk: CallRisk; explorerBase?: string }) {
+function CallRow({ index, risk, explorerBase, t }: { index?: number; risk: CallRisk; explorerBase?: string; t: Tr }) {
   return (
     <div style={{ borderTop: index && index > 0 ? '1px solid rgba(255,255,255,0.04)' : undefined, paddingTop: index ? '8px' : 0, marginTop: index ? '8px' : 0 }}>
       {risk.summary && (
@@ -92,7 +93,7 @@ function CallRow({ index, risk, explorerBase }: { index?: number; risk: CallRisk
         <span style={{ color: '#4a5568', minWidth: 0 }}>
           {index !== undefined ? `#${index + 1} ` : ''}→ <ExplorerAddress addr={risk.target} explorerBase={explorerBase} />{' '}
           <span style={{ color: risk.targetKnown ? '#48bb78' : '#fc8181', fontSize: '10px' }}>
-            ({risk.targetKnown ? 'conocido' : 'desconocido'})
+            ({t(risk.targetKnown ? 'connect.known' : 'connect.unknownTarget')})
           </span>
         </span>
         <span style={{ color: RISK_COLOR[risk.level] }}>{risk.summary ? '' : RISK_DOT[risk.level] + ' '}{risk.fn}</span>
@@ -126,21 +127,22 @@ function GasInput({ label, value, onChange, disabled }: {
   )
 }
 
-// Traduce reverts/errores crudos a algo legible para el usuario.
-function friendlyError(raw: string): string {
+// Turns a raw revert into something a person can read. Takes `t` because it lives
+// outside the component — its strings were Spanish-only regardless of the interface.
+function friendlyError(raw: string, t: Tr): string {
   const m = raw.toLowerCase()
   if (m.includes('insufficient balance for fee') || m.includes('tokenfeefailed'))
-    return 'Saldo insuficiente para cubrir el fee de la wallet (0.05% / 0.15%).'
+    return t('connect.errInsufficientFee')
   if (m.includes('prefund') || m.includes('aa21') || m.includes("didn't pay"))
-    return 'La wallet no tiene suficiente ETH para pagar el gas de esta operación.'
+    return t('connect.errNoGas')
   if (m.includes('aa23') || m.includes('aa40') || m.includes('out of gas') || m.includes('overflow'))
-    return 'La operación necesitó más gas del estimado. Reinténtala.'
+    return t('connect.errMoreGas')
   if (m.includes('isvalidsignature') || m.includes('1626ba7e'))
     return raw // ya es específico (firma ERC-1271/7739)
   if (m.includes('user rejected') || m.includes('cancel') || m.includes('canceló') || m.includes('notallowed'))
-    return 'Operación cancelada.'
+    return t('connect.errCancelled')
   if (m.includes('unrecognized chain') || m.includes('4902'))
-    return 'La dApp pidió una red que esta wallet no soporta.'
+    return t('connect.errWrongChain')
   return raw
 }
 
@@ -201,7 +203,7 @@ export default function WcConnectModal({
   const origin =
     (request as any).verifyContext?.verified?.origin ||
     request.params.chainId ||
-    'dApp desconocida'
+    t('connect.unknownDapp')
 
   const isTypedData = method === 'eth_signTypedData_v4' || method === 'eth_signTypedData'
   const txData = method === 'eth_sendTransaction' ? params[0] : null
@@ -228,7 +230,7 @@ export default function WcConnectModal({
     try { return { ...c, data: encodeApproveAmount(c, ov) } } catch { return c }
   }), [allCalls, approveOverrides])
 
-  const risks = useMemo(() => effectiveCalls.map((c) => classifyCall(c, known)), [effectiveCalls, known])
+  const risks = useMemo(() => effectiveCalls.map((c) => classifyCall(c, known, t)), [effectiveCalls, known])
 
   // ¿Hay que marcar el checkbox de riesgo? En secuencial, según la call actual;
   // en atómico / tx única, si cualquiera es peligrosa.
@@ -355,7 +357,7 @@ export default function WcConnectModal({
   // envía. Sirve tanto para eth_sendTransaction (1 call) como para wallet_sendCalls.
   // `override` = valores de gas editados a mano por el usuario (panel Avanzado).
   async function buildAndSubmitBatch(calls: WcCall[], override?: GasParams): Promise<string> {
-    if (!calls.length) throw new Error('No hay llamadas que ejecutar')
+    if (!calls.length) throw new Error(t('connect.errNoCalls'))
 
     const exec = toExec(calls)
     const executionData = encodeAbiParameters(
@@ -527,7 +529,7 @@ export default function WcConnectModal({
         throw new Error(`Método no soportado: ${method}`)
       }
     } catch (err: unknown) {
-      setErrorMsg(friendlyError(err instanceof Error ? err.message : String(err)))
+      setErrorMsg(friendlyError(err instanceof Error ? err.message : String(err), t))
     } finally {
       setLoading(false)
       setLoadingMsg('')
@@ -542,7 +544,7 @@ export default function WcConnectModal({
     const ov = approveOverrides[i]
     const effective = ov ?? info.amount
     const effectiveLabel = effective >= (1n << 128n)
-      ? 'Ilimitado'
+      ? t('connect.unlimited')
       : `${formatUnits(effective, info.decimals)} ${info.symbol}`
     const applyCustom = () => {
       const raw = (approveInput[i] ?? '').trim().replace(',', '.')
@@ -562,7 +564,7 @@ export default function WcConnectModal({
             value={approveInput[i] ?? ''}
             onChange={(e) => setApproveInput({ ...approveInput, [i]: e.target.value })}
             onKeyDown={(e) => { if (e.key === 'Enter') applyCustom() }}
-            placeholder={info.unlimited ? 'Ilimitado' : formatUnits(info.amount, info.decimals)}
+            placeholder={info.unlimited ? t('connect.unlimited') : formatUnits(info.amount, info.decimals)}
             inputMode="decimal"
             style={{ flex: 1, minWidth: '90px', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0d1017', color: '#f0f4f8', fontSize: '12px' }}
           />
@@ -659,7 +661,7 @@ export default function WcConnectModal({
               {risks[0] && (
                 <>
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.04)', margin: '8px 0' }} />
-                  <CallRow risk={risks[0]} explorerBase={network.blockExplorer.url} />
+                  <CallRow risk={risks[0]} explorerBase={network.blockExplorer.url} t={t} />
                   {approveEditor(0)}
                 </>
               )}
@@ -679,8 +681,8 @@ export default function WcConnectModal({
                 </span>
               </div>
               {seqMode
-                ? (risks[seqIndex] && <>{<CallRow risk={risks[seqIndex]} explorerBase={network.blockExplorer.url} />}{approveEditor(seqIndex)}</>)
-                : risks.map((r, i) => <div key={i}><CallRow index={i} risk={r} explorerBase={network.blockExplorer.url} />{approveEditor(i)}</div>)}
+                ? (risks[seqIndex] && <>{<CallRow risk={risks[seqIndex]} explorerBase={network.blockExplorer.url} t={t} />}{approveEditor(seqIndex)}</>)
+                : risks.map((r, i) => <div key={i}><CallRow index={i} risk={r} explorerBase={network.blockExplorer.url} t={t} />{approveEditor(i)}</div>)}
             </>
           )}
 
@@ -840,7 +842,7 @@ export default function WcConnectModal({
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {seqMode
-                  ? `Firmar #${seqIndex + 1} con biometría`
+                  ? t('connect.signNumber', { n: seqIndex + 1 })
                   : t('connect.approveWithFaceId')}
               </>
             )}

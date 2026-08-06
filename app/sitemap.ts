@@ -6,6 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date()
   const pages = [
     '',
+    '/press',
     '/docs',
     '/docs/connect-ai',
     '/docs/agent-permissions',
@@ -25,6 +26,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: `${BASE}${path}`,
     lastModified: now,
     changeFrequency: path === '' ? 'weekly' : 'monthly',
-    priority: path === '' ? 1 : 0.6,
+    priority: path === '' ? 1 : path === '/press' ? 0.8 : 0.6,
   }))
 }

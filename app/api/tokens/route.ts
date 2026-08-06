@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeChainId, safeAddress } from '@/lib/apiGuard'
 
 // Descubre los tokens ERC-20 que una wallet ha tocado alguna vez, vía
 // Etherscan V2 (multichain con una sola key). Solo metadata — el balance
@@ -21,11 +22,15 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = req.nextUrl
-  const address = searchParams.get('address')
-  const chainId = searchParams.get('chainId') ?? DEFAULT_CHAIN_ID
+  // Validated before they reach the Etherscan URL — see lib/apiGuard.
+  const address = safeAddress(searchParams.get('address'))
+  const chainId = safeChainId(searchParams.get('chainId'), DEFAULT_CHAIN_ID)
 
   if (!address) {
     return NextResponse.json({ error: 'NO_ADDRESS', tokens: [] })
+  }
+  if (!chainId) {
+    return NextResponse.json({ error: 'BAD_CHAIN', tokens: [] })
   }
 
   const url = `${ETHERSCAN_V2}?module=account&action=tokentx&chainid=${chainId}&address=${address}&sort=desc&page=1&offset=2000&apikey=${apiKey}`

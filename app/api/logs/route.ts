@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeChainId, safeAddress, safeTopic } from '@/lib/apiGuard'
 
 // Proxy genérico a Etherscan v2 `getLogs` con filtros de topic. Lo usan el gestor
 // de allowances (eventos Approval/ApprovalForAll del owner) y las posiciones LP
@@ -9,12 +10,14 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.ARBISCAN_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'NO_API_KEY', result: [] })
 
+  // Validated, not raw: these are interpolated into the Etherscan URL below, so an
+  // unescaped `&` would let a caller append their own module/action. See lib/apiGuard.
   const sp = req.nextUrl.searchParams
-  const chainId = sp.get('chainId')
-  const topic0 = sp.get('topic0')
-  const address = sp.get('address') // filtro opcional por contrato emisor
-  const topic1 = sp.get('topic1')   // 1er indexed (p.ej. owner en Approval)
-  const topic2 = sp.get('topic2')   // 2º indexed (p.ej. to en Transfer)
+  const chainId = safeChainId(sp.get('chainId'))
+  const topic0 = safeTopic(sp.get('topic0'))
+  const address = safeAddress(sp.get('address')) // filtro opcional por contrato emisor
+  const topic1 = safeTopic(sp.get('topic1'))     // 1er indexed (p.ej. owner en Approval)
+  const topic2 = safeTopic(sp.get('topic2'))     // 2º indexed (p.ej. to en Transfer)
 
   if (!chainId || !topic0) return NextResponse.json({ error: 'BAD_PARAMS', result: [] })
 

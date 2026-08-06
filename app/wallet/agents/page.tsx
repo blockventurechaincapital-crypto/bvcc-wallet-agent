@@ -377,7 +377,7 @@ export default function AgentsPage() {
   // (owner functions require msg.sender == wallet). One Face ID signature covers the
   // whole batch, so authorizeAgent + setCallPolicy(...) go together atomically.
   async function sendUserOp(inner: Hex | Hex[]): Promise<string> {
-    if (!walletAddress || !credentialId) throw new Error('No hay wallet activa')
+    if (!walletAddress || !credentialId) throw new Error(t('connect.errNoWallet'))
 
     const innerCalls = Array.isArray(inner) ? inner : [inner]
 

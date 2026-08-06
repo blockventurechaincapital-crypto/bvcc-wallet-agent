@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeChainId, safeAddress, safeInt } from '@/lib/apiGuard'
 
 export type TxItem = {
   hash: string
@@ -24,13 +25,17 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = req.nextUrl
-  const address = searchParams.get('address')
-  const page = searchParams.get('page') ?? '1'
-  const offset = searchParams.get('offset') ?? '20'
-  const chainId = searchParams.get('chainId') ?? DEFAULT_CHAIN_ID
+  // Validated before they reach the Etherscan URL — see lib/apiGuard.
+  const address = safeAddress(searchParams.get('address'))
+  const page = safeInt(searchParams.get('page'), 1, 100)
+  const offset = safeInt(searchParams.get('offset'), 20, 200)
+  const chainId = safeChainId(searchParams.get('chainId'), DEFAULT_CHAIN_ID)
 
   if (!address) {
     return NextResponse.json({ error: 'NO_ADDRESS', items: [] })
+  }
+  if (!chainId) {
+    return NextResponse.json({ error: 'BAD_CHAIN', items: [] })
   }
 
   const commonParams = `chainid=${chainId}&address=${address}&sort=desc&page=${page}&offset=${offset}&apikey=${apiKey}`

@@ -177,7 +177,9 @@ export default function ConnectButton() {
           <span style={{ color: COLORS.gold, display: 'flex', alignItems: 'center' }}>
             <IconWallet />
           </span>
-          {t('connect.connectWallet')}
+          {/* Hidden on mobile by the wallet layout — the icon carries it there, and the
+              full label wrapped onto two lines at 390px. */}
+          <span data-connect-label>{t('connect.connectWallet')}</span>
         </button>
       ) : (
         <button

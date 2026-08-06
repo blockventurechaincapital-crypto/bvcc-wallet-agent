@@ -1,26 +1,19 @@
+/* Global stylesheet.
+ *
+ * Deliberately almost empty. Component styling lives in scoped <style> blocks
+ * inside each component (see MarketingLanding, PressPage, LegalPage) and in
+ * inline styles, so there is no global cascade to fight.
+ *
+ * Tailwind is imported because LanguageSwitcher.tsx uses a handful of utilities
+ * (flex, gap-2, h-6, w-6, rounded-full, relative). It is the only component that
+ * does. Don't remove the import without checking that file first.
+ */
+
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* layout.tsx sets the background inline on <body>, which covers the normal page.
+ * html needs it too, otherwise overscroll on mobile rubber-bands to white. */
+html {
+  background: #06080f;
+  color-scheme: dark;
 }

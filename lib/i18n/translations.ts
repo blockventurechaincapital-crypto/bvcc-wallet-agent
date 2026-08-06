@@ -23,13 +23,15 @@ import { legal } from './ns/legal'
 import { walletversion } from './ns/walletversion'
 import { allowances } from './ns/allowances'
 import { positions } from './ns/positions'
+import { press } from './ns/press'
+import { wcdecode } from './ns/wcdecode'
 
 export type Lang = 'en' | 'es'
 
 const parts = [
   common, nav, appshell, marketing, dashboard, send, swap, receive, bridge,
   transactions, addressbook, settings, recovery, agents, dapps, connect, components,
-  disclaimer, legal, allowances, positions, walletversion,
+  disclaimer, legal, allowances, positions, walletversion, press, wcdecode,
 ]
 
 function build(lang: Lang): Record<string, unknown> {

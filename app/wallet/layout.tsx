@@ -325,6 +325,39 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             display: block;
           }
         }
+        /* ── Mobile top bar ──────────────────────────────────────────────
+           Below 768px the sidebar is gone, so the bar carries the mark. The
+           artwork is a square with the logo in the middle third, so it is
+           oversized inside a short clipping box to make the mark itself read. */
+        .topbar-logo {
+          position: relative; display: block;
+          height: 32px; width: 39px; overflow: hidden; flex-shrink: 0;
+          margin-right: auto;
+        }
+        /* Mark only, no wordmark. Measured off the source: in the 1254px square the
+           mark sits at x 448-846, y 340-724 and the words at y 756-871. At a 52px bar
+           the words are unreadable anyway, and keeping them cost ~65px the row did not
+           have — the logo came out clipped to "VCC Wallet". Scaling the whole image to
+           98px puts the 30px mark (y 26.5-56.4) inside a 32px window starting at 25 —
+           the wordmark begins at 58.9, so it stays out. At 38px it peeked through. */
+        .topbar-logo img {
+          position: absolute; width: 98px; height: 98px; max-width: none;
+          left: -31px; top: -25px;
+        }
+        @media (min-width: 768px) {
+          .topbar-logo { display: none; }
+        }
+        /* One flag instead of two: 26px back, and the language is set once. */
+        .topbar-lang-full { display: none; }
+        @media (min-width: 768px) {
+          .topbar-lang { display: none; }
+          .topbar-lang-full { display: flex; }
+        }
+        /* "Connect wallet" wrapped onto two lines at 390px and made the bar look
+           cramped. On mobile the wallet icon already says what it does. */
+        @media (max-width: 767px) {
+          .wallet-topbar [data-connect-label] { display: none; }
+        }
       `}</style>
 
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: COLORS.bg }}>
@@ -533,7 +566,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
         {/* Main content area */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Topbar */}
-          <div style={{
+          <div className="wallet-topbar" style={{
             height: '52px',
             borderBottom: `1px solid ${COLORS.border}`,
             display: 'flex',
@@ -541,10 +574,19 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             justifyContent: 'flex-end',
             padding: '0 24px',
             gap: '12px',
+            // marginRight:auto on the logo pushes the rest right, so flex-end still holds
+            // for the controls while the mark anchors the left edge.
             flexShrink: 0,
             backgroundColor: COLORS.bg,
           }}>
-            <LanguageSwitcher />
+            {/* The logo lives in the sidebar, which is hidden below 768px — so on mobile
+                the app showed no mark at all while the bar's left half sat empty. This
+                copy is mobile-only; on desktop the sidebar already has it. */}
+            <a href="/wallet" className="topbar-logo" aria-label="BVCC Wallet">
+              <img src="/bvcc_w.png" alt="BVCC Wallet" width={132} height={132} />
+            </a>
+            <LanguageSwitcher compact className="topbar-lang" />
+            <LanguageSwitcher className="topbar-lang-full" />
             <WalletConnectButton />
             <NetworkSelector />
             <ConnectButton />

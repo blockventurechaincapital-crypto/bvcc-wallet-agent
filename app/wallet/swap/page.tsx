@@ -358,8 +358,8 @@ function SwapPageInner() {
     setErrorMsg('')
 
     try {
-      if (!walletAddress) throw new Error('No hay wallet activa. Vuelve al inicio.')
-      if (!swapAvailable) throw new Error('Swap no disponible en esta red')
+      if (!walletAddress) throw new Error(t('connect.errNoWallet'))
+      if (!swapAvailable) throw new Error(t('connect.errSwapUnavailable'))
       const _router = SWAP_ROUTER as `0x${string}`
       const _usdc2  = USDC_ADDRESS as `0x${string}`
 
@@ -390,7 +390,7 @@ function SwapPageInner() {
         for (const q of qs) {
           if (q.status === 'fulfilled' && (b === null || q.value.amountOut > b.amountOut)) b = q.value
         }
-        if (!b || b.amountOut === 0n) throw new Error('No hay pool con liquidez para este par')
+        if (!b || b.amountOut === 0n) throw new Error(t('connect.errNoPool'))
         swapFee = b.fee
         // amountOutMinimum = salida cotizada − slippage (protección de precio)
         const slippageBps = BigInt(Math.round(slippage * 100)) // 0.5% → 50 bps

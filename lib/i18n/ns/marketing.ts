@@ -161,6 +161,7 @@ export const marketing = {
       footerBvcc: 'BVCC',
       footerMainSite: 'Main site',
       footerAnalytics: 'Analytics',
+      footerExplore: 'Explore',
       footerStandards: 'Standards',
       footerEthereum: 'Ethereum is the database.',
 
@@ -361,6 +362,7 @@ export const marketing = {
       footerBvcc: 'BVCC',
       footerMainSite: 'Web principal',
       footerAnalytics: 'Analytics',
+      footerExplore: 'Explora',
       footerStandards: 'Estándares',
       footerEthereum: 'Ethereum es la base de datos.',
 

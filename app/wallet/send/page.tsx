@@ -177,8 +177,8 @@ function SendPageInner() {
     setErrorMsg('')
 
     try {
-      if (!walletAddress) throw new Error('No hay wallet activa. Vuelve al inicio.')
-      if (!token) throw new Error('No hay token seleccionado.')
+      if (!walletAddress) throw new Error(t('connect.errNoWallet'))
+      if (!token) throw new Error(t('connect.errNoToken'))
 
       // ── 1. Nonce ────────────────────────────────────────────────────────────
       const nonce = await publicClient.readContract({

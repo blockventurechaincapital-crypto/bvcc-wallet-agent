@@ -19,14 +19,16 @@ const COLORS = {
   red: '#e53e3e',
 }
 
-function timeAgo(timestamp: number): string {
-  const now = Math.floor(Date.now() / 1000)
-  const diff = now - timestamp
-  if (diff < 60) return 'hace un momento'
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`
-  if (diff < 2592000) return `hace ${Math.floor(diff / 86400)}d`
-  return `hace ${Math.floor(diff / 2592000)} mes${Math.floor(diff / 2592000) > 1 ? 'es' : ''}`
+/** Relative age of a transaction. Takes `t` because this sat outside i18n and printed
+ *  "hace 2d" under an English interface — the same bug the WalletConnect decoder had. */
+function timeAgo(timestamp: number, t: (k: string, v?: Record<string, string | number>) => string): string {
+  const diff = Math.floor(Date.now() / 1000) - timestamp
+  if (diff < 60) return t('transactions.agoNow')
+  if (diff < 3600) return t('transactions.agoMin', { n: Math.floor(diff / 60) })
+  if (diff < 86400) return t('transactions.agoHour', { n: Math.floor(diff / 3600) })
+  if (diff < 2592000) return t('transactions.agoDay', { n: Math.floor(diff / 86400) })
+  const months = Math.floor(diff / 2592000)
+  return t(months > 1 ? 'transactions.agoMonths' : 'transactions.agoMonth', { n: months })
 }
 
 function truncateHash(hash: string): string {
@@ -175,7 +177,7 @@ export default function RecentTransactions({ address, limit = 5 }: Props) {
                   {isSent ? '−' : '+'}{formatValue(tx.value, tx.tokenDecimal, tx.tokenSymbol)}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '10px', color: COLORS.textSubtle }}>{timeAgo(tx.timestamp)}</span>
+                  <span style={{ fontSize: '10px', color: COLORS.textSubtle }}>{timeAgo(tx.timestamp, t)}</span>
                   <span style={{
                     fontSize: '10px', padding: '1px 6px', borderRadius: '3px',
                     backgroundColor: tx.isError ? 'rgba(229,62,62,0.08)' : 'rgba(56,161,105,0.08)',

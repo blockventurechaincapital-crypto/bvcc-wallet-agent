@@ -16,8 +16,15 @@ export const settings = {
       maxGasDesc: 'Ceiling for the estimated gas limit of each operation. Leave empty for automatic per-network defaults (Ethereum L1: 3M · L2: 8M). Lower it if you want a tighter cap; it never overrides gas you set by hand in the Advanced panel.',
       maxGasAuto: 'Auto',
       // Network card
-      entryPoint: 'EntryPoint',
-      viewOnArbiscan: 'View wallet on Arbiscan',
+      viewOnExplorer: 'View wallet on {explorer}',
+      yourWallet: 'Your wallet address',
+      contract: 'Contract',
+      createdOn: 'Deployed {date}',
+      feeRate: 'BVCC fee on your transactions',
+      feeRateNote: 'Charged on-chain by the contract, separate from network gas. On a swap it applies to the token you receive.',
+      upToDate: 'Up to date',
+      outdated: 'Older generation',
+      migrateNotice: 'A deployed wallet cannot be upgraded. To move to the current generation, create a new wallet with the same passkey and transfer your funds.',
       noActiveWallet: 'No active wallet',
       // Guardians
       guardiansHint: '2 of 3 signatures required to start wallet recovery',
@@ -44,7 +51,7 @@ export const settings = {
       clearAll: 'Delete all local data',
       clearConfirm: 'Delete all local data? This will remove your session, biometric credential and address book. You will not be able to recover access without your original WebAuthn device.',
       // Footer
-      version: 'v1.0.9',
+      version: 'v1.1.0',
     },
   },
   es: {
@@ -64,8 +71,15 @@ export const settings = {
       maxGasDesc: 'Tope para el gas limit estimado de cada operación. Déjalo vacío para los valores automáticos por red (Ethereum L1: 3M · L2: 8M). Bájalo si quieres un límite más estricto; nunca sobrescribe el gas que pongas a mano en el panel Avanzado.',
       maxGasAuto: 'Auto',
       // Network card
-      entryPoint: 'EntryPoint',
-      viewOnArbiscan: 'Ver wallet en Arbiscan',
+      viewOnExplorer: 'Ver wallet en {explorer}',
+      yourWallet: 'Dirección de tu wallet',
+      contract: 'Contrato',
+      createdOn: 'Desplegada el {date}',
+      feeRate: 'Comisión BVCC en tus transacciones',
+      feeRateNote: 'La cobra el contrato on-chain, aparte del gas de la red. En un swap se aplica sobre el token que recibes.',
+      upToDate: 'Al día',
+      outdated: 'Generación anterior',
+      migrateNotice: 'Una wallet desplegada no se puede actualizar. Para pasar a la generación actual, crea una wallet nueva con la misma passkey y mueve tus fondos.',
       noActiveWallet: 'Sin wallet activa',
       // Guardians
       guardiansHint: 'Se requieren 2 de 3 firmas para iniciar la recuperación de tu wallet',
@@ -92,7 +106,7 @@ export const settings = {
       clearAll: 'Borrar todos los datos locales',
       clearConfirm: '¿Borrar todos los datos locales? Esta acción eliminará tu sesión, credencial biométrica y libreta de direcciones. No podrás recuperar acceso sin tu dispositivo WebAuthn original.',
       // Footer
-      version: 'v1.0.9',
+      version: 'v1.1.0',
     },
   },
 }

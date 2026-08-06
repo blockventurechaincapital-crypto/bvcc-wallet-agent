@@ -151,6 +151,10 @@ function tokenSym(addr?: string): string {
 // ───────────────────────────────────────────────────────────────────────────
 export type RiskLevel = 'safe' | 'caution' | 'danger'
 export type WcCall = { to?: string; target?: string; value?: string; data?: Hex }
+
+// This module has no React context, so the caller hands it the translator.
+// Same signature as useI18n().t — see lib/i18n/ns/wcdecode.ts for the strings.
+export type Tr = (key: string, vars?: Record<string, string | number>) => string
 export type CallRisk = {
   level: RiskLevel
   fn: string            // función técnica (selector legible)
@@ -214,17 +218,17 @@ function worse(a: RiskLevel, b: RiskLevel): RiskLevel { return RISK_ORDER[b] > R
 // Decodificamos la lista para saber la operación principal (primer byte) y, si es
 // crear/añadir posición, intentamos sacar los montos máximos.
 const V4_LABEL: Record<number, string> = {
-  0x00: 'Añadir liquidez a una posición (Uniswap v4)',
-  0x01: 'Retirar liquidez de una posición (Uniswap v4)',
-  0x02: 'Crear posición de liquidez (Uniswap v4)',
-  0x03: 'Cerrar posición (Uniswap v4)',
-  0x04: 'Añadir liquidez a una posición (Uniswap v4)',
-  0x05: 'Crear posición de liquidez (Uniswap v4)',
+  0x00: 'wc.v4Add',
+  0x01: 'wc.v4Remove',
+  0x02: 'wc.v4Create',
+  0x03: 'wc.v4Close',
+  0x04: 'wc.v4Add',
+  0x05: 'wc.v4Create',
 }
 
-function decodeV4(actions: Hex, params: readonly Hex[]): Decoded {
+function decodeV4(actions: Hex, params: readonly Hex[], t: Tr): Decoded {
   const first = actions.length >= 4 ? parseInt(actions.slice(2, 4), 16) : -1
-  let summary = V4_LABEL[first] ?? 'Gestionar liquidez (Uniswap v4)'
+  let summary = t(V4_LABEL[first] ?? 'wc.v4Manage')
   try {
     if ((first === 0x02 || first === 0x05) && params[0]) {
       // MINT_POSITION: (PoolKey, tickLower, tickUpper, liquidity, amount0Max, amount1Max, owner, hookData)
@@ -233,15 +237,15 @@ function decodeV4(actions: Hex, params: readonly Hex[]): Decoded {
         params[0],
       )
       const pk = d[0] as { currency0: string; currency1: string }
-      summary += ` · máx ${fmtAmt(d[4] as bigint, pk.currency0)} + ${fmtAmt(d[5] as bigint, pk.currency1)}`
+      summary += t('wc.v4Max', { a: fmtAmt(d[4] as bigint, pk.currency0), b: fmtAmt(d[5] as bigint, pk.currency1) })
     } else if ((first === 0x00 || first === 0x04) && params[0]) {
       // INCREASE_LIQUIDITY: (tokenId, liquidity, amount0Max, amount1Max, hookData)
       const d = decodeAbiParameters(parseAbiParameters('uint256 tokenId, uint256 liquidity, uint128 amount0Max, uint128 amount1Max, bytes hookData'), params[0])
-      summary += ` a la posición #${d[0]}`
+      summary += t('wc.v4ToPos', { id: String(d[0]) })
     } else if ((first === 0x01 || first === 0x03) && params[0]) {
       // DECREASE / BURN empiezan por tokenId (leemos solo el primer slot)
       const d = decodeAbiParameters(parseAbiParameters('uint256 tokenId'), params[0])
-      summary += ` (posición #${d[0]})`
+      summary += t('wc.v4Pos', { id: String(d[0]) })
     }
   } catch { /* si el desglose falla, dejamos solo la etiqueta de la acción */ }
   return { fn: 'modifyLiquidities', summary, level: 'safe' }
@@ -252,7 +256,7 @@ function decodeV4(actions: Hex, params: readonly Hex[]): Decoded {
 // los 6 bits bajos. Decodificamos swaps (v4/v3), wrap/unwrap y permit.
 const POOLKEY = '(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) poolKey'
 
-function urV4Swap(input: Hex): string {
+function urV4Swap(input: Hex, t: Tr): string {
   const [actions, params] = decodeAbiParameters(parseAbiParameters('bytes, bytes[]'), input)
   const acts = actions as Hex
   const a0 = acts.length >= 4 ? parseInt(acts.slice(2, 4), 16) : -1
@@ -262,19 +266,19 @@ function urV4Swap(input: Hex): string {
     const x = d[0] as { poolKey: { currency0: string; currency1: string }; zeroForOne: boolean; amountIn: bigint; amountOutMinimum: bigint }
     const tin = x.zeroForOne ? x.poolKey.currency0 : x.poolKey.currency1
     const tout = x.zeroForOne ? x.poolKey.currency1 : x.poolKey.currency0
-    return `Swap ${fmtAmt(x.amountIn, tin)} → ${tokenSym(tout)} (mín ${fmtAmt(x.amountOutMinimum, tout)})`
+    return t('wc.swapIn', { amt: fmtAmt(x.amountIn, tin), sym: tokenSym(tout), min: fmtAmt(x.amountOutMinimum, tout) })
   }
   if (a0 === 0x08) { // SWAP_EXACT_OUT_SINGLE
     const d = decodeAbiParameters(parseAbiParameters(`(${POOLKEY}, bool zeroForOne, uint128 amountOut, uint128 amountInMaximum, bytes hookData) p`), p)
     const x = d[0] as { poolKey: { currency0: string; currency1: string }; zeroForOne: boolean; amountOut: bigint; amountInMaximum: bigint }
     const tin = x.zeroForOne ? x.poolKey.currency0 : x.poolKey.currency1
     const tout = x.zeroForOne ? x.poolKey.currency1 : x.poolKey.currency0
-    return `Swap ${tokenSym(tin)} → ${fmtAmt(x.amountOut, tout)} (máx ${fmtAmt(x.amountInMaximum, tin)})`
+    return t('wc.swapOut', { sym: tokenSym(tin), amt: fmtAmt(x.amountOut, tout), max: fmtAmt(x.amountInMaximum, tin) })
   }
-  return 'Swap en Uniswap v4'
+  return t('wc.swapV4')
 }
 
-function urV3Swap(input: Hex, exactIn: boolean): string {
+function urV3Swap(input: Hex, exactIn: boolean, t: Tr): string {
   const d = decodeAbiParameters(parseAbiParameters('address recipient, uint256 amount, uint256 amountLimit, bytes path, bool payerIsUser'), input)
   const path = d[3] as Hex
   const a = ('0x' + path.slice(2, 42))                  // primer token del path
@@ -283,11 +287,11 @@ function urV3Swap(input: Hex, exactIn: boolean): string {
   // exactOut codifica el path al revés (tokenOut primero)
   const tin = exactIn ? a : b, tout = exactIn ? b : a
   return exactIn
-    ? `Swap ${fmtAmt(amount, tin)} → ${tokenSym(tout)} (mín ${fmtAmt(limit, tout)})`
-    : `Swap ${tokenSym(tin)} → ${fmtAmt(amount, tout)} (máx ${fmtAmt(limit, tin)})`
+    ? t('wc.swapIn', { amt: fmtAmt(amount, tin), sym: tokenSym(tout), min: fmtAmt(limit, tout) })
+    : t('wc.swapOut', { sym: tokenSym(tin), amt: fmtAmt(amount, tout), max: fmtAmt(limit, tin) })
 }
 
-function decodeUR(commands: Hex, inputs: readonly Hex[]): Decoded {
+function decodeUR(commands: Hex, inputs: readonly Hex[], t: Tr): Decoded {
   const parts: string[] = []
   const n = Math.max(0, (commands.length - 2) / 2)
   for (let i = 0; i < n; i++) {
@@ -296,18 +300,18 @@ function decodeUR(commands: Hex, inputs: readonly Hex[]): Decoded {
     let s = ''
     try {
       switch (cmd) {
-        case 0x10: s = urV4Swap(input); break          // V4_SWAP
-        case 0x00: s = urV3Swap(input, true); break     // V3_SWAP_EXACT_IN
-        case 0x01: s = urV3Swap(input, false); break    // V3_SWAP_EXACT_OUT
-        case 0x08: case 0x09: s = 'Swap en Uniswap v2'; break // V2 (path es address[], no detallamos montos)
-        case 0x0b: s = 'Envolver ETH → WETH'; break     // WRAP_ETH
-        case 0x0c: s = 'Desenvolver WETH → ETH'; break  // UNWRAP_WETH
-        case 0x0a: case 0x03: s = 'Permiso Permit2'; break
+        case 0x10: s = urV4Swap(input, t); break         // V4_SWAP
+        case 0x00: s = urV3Swap(input, true, t); break   // V3_SWAP_EXACT_IN
+        case 0x01: s = urV3Swap(input, false, t); break  // V3_SWAP_EXACT_OUT
+        case 0x08: case 0x09: s = t('wc.swapV2'); break  // V2 (path es address[], no detallamos montos)
+        case 0x0b: s = t('wc.wrapShort'); break          // WRAP_ETH
+        case 0x0c: s = t('wc.unwrapShort'); break        // UNWRAP_WETH
+        case 0x0a: case 0x03: s = t('wc.permit2'); break
       }
     } catch { /* comando no decodificable → se omite */ }
     if (s) parts.push(s)
   }
-  if (!parts.length) return { fn: 'execute', summary: 'Operación en Uniswap (Universal Router)', level: 'caution', warn: 'Comandos del Universal Router no detallados' }
+  if (!parts.length) return { fn: 'execute', summary: t('wc.urGeneric'), level: 'caution', warn: t('wc.warnUrGeneric') }
   return { fn: 'execute', summary: parts.join(' + '), level: 'safe' }
 }
 
@@ -316,7 +320,7 @@ type Decoded = { fn: string; summary?: string; level: RiskLevel; warn?: string }
 // Interpreta la calldata de UNA llamada (sin tener en cuenta el destino, que se
 // añade en classifyCall). `target` es el contrato llamado — en un multicall las
 // sub-llamadas se ejecutan sobre el mismo contrato, así que se propaga.
-function interpret(data: Hex, value: bigint, known: Set<string>, target?: string, depth = 0): Decoded {
+function interpret(data: Hex, value: bigint, known: Set<string>, t: Tr, target?: string, depth = 0): Decoded {
   try {
     const decoded = decodeFunctionData({ abi: ABI, data })
     const functionName = decoded.functionName
@@ -334,145 +338,145 @@ function interpret(data: Hex, value: bigint, known: Set<string>, target?: string
         const unlimited = amount >= UNLIMITED_THRESHOLD
         const sym = tokenSym(token)
         // Con monto: fmtAmt ya incluye el símbolo ("100 USDC"). Ilimitado: lo anteponemos.
-        const amtStr = unlimited ? `${sym} ILIMITADO` : fmtAmt(amount, token)
-        const fn = `approve · ${unlimited ? 'ILIMITADO' : amount.toString()}`
+        const amtStr = unlimited ? t('wc.unlimitedAmt', { sym }) : fmtAmt(amount, token)
+        const fn = `approve · ${unlimited ? t('wc.unlimited') : amount.toString()}`
         const spenderLabel = spender === '0x000000000022d473030f116ddee9f6b43ac78ba3'
-          ? 'Permit2 (Uniswap)'
-          : spenderKnown ? 'un contrato conocido' : 'una dirección desconocida'
-        const summary = `Aprobar ${amtStr} a ${spenderLabel}`
-        if (!spenderKnown) return { fn, summary, level: 'danger', warn: 'Aprobación a dirección DESCONOCIDA' }
-        if (unlimited) return { fn, summary, level: 'caution', warn: 'Aprobación ilimitada (a contrato conocido)' }
+          ? t('wc.spenderPermit2')
+          : t(spenderKnown ? 'wc.spenderKnown' : 'wc.spenderUnknown')
+        const summary = t('wc.approve', { amt: amtStr, spender: spenderLabel })
+        if (!spenderKnown) return { fn, summary, level: 'danger', warn: t('wc.warnApproveUnknown') }
+        if (unlimited) return { fn, summary, level: 'caution', warn: t('wc.warnApproveUnlimited') }
         return { fn, summary, level: 'safe' }
       }
       case 'increaseAllowance': {
         const spenderKnown = known_(args[0])
         return spenderKnown
-          ? { fn: 'increaseAllowance', summary: 'Aumentar allowance a un contrato conocido', level: 'caution' }
-          : { fn: 'increaseAllowance', summary: 'Aumentar allowance a dirección desconocida', level: 'danger', warn: 'Aumenta allowance a dirección desconocida' }
+          ? { fn: 'increaseAllowance', summary: t('wc.incAllowKnown'), level: 'caution' }
+          : { fn: 'increaseAllowance', summary: t('wc.incAllowUnknown'), level: 'danger', warn: t('wc.warnIncAllow') }
       }
       case 'setApprovalForAll': {
         const approved = args[1] as boolean
         return approved
-          ? { fn: 'setApprovalForAll(true)', summary: 'Dar control de TODOS tus NFTs de esta colección', level: 'danger', warn: 'Da control de TODOS tus NFTs de esta colección' }
-          : { fn: 'setApprovalForAll(false)', summary: 'Revocar control de los NFTs de esta colección', level: 'safe' }
+          ? { fn: 'setApprovalForAll(true)', summary: t('wc.nftApproveAll'), level: 'danger', warn: t('wc.warnNftApproveAll') }
+          : { fn: 'setApprovalForAll(false)', summary: t('wc.nftRevokeAll'), level: 'safe' }
       }
       case 'transfer': {
         const toKnown = known_(args[0])
-        const s = `Enviar ${fmtAmt(args[1] as bigint, target)} → ${toKnown ? 'destino conocido' : 'destino desconocido'}`
+        const s = t('wc.transfer', { amt: fmtAmt(args[1] as bigint, target), dest: t(toKnown ? 'wc.destKnown' : 'wc.destUnknown') })
         return toKnown
           ? { fn: 'transfer', summary: s, level: 'caution' }
-          : { fn: 'transfer', summary: s, level: 'danger', warn: 'Transfiere tokens a dirección desconocida' }
+          : { fn: 'transfer', summary: s, level: 'danger', warn: t('wc.warnTransferUnknown') }
       }
       case 'transferFrom': {
         const toKnown = known_(args[1])
-        const s = `Mover ${fmtAmt(args[2] as bigint, target)} → ${toKnown ? 'destino conocido' : 'destino desconocido'}`
+        const s = t('wc.transferFrom', { amt: fmtAmt(args[2] as bigint, target), dest: t(toKnown ? 'wc.destKnown' : 'wc.destUnknown') })
         return toKnown
           ? { fn: 'transferFrom', summary: s, level: 'caution' }
-          : { fn: 'transferFrom', summary: s, level: 'danger', warn: 'Mueve tokens a dirección desconocida' }
+          : { fn: 'transferFrom', summary: s, level: 'danger', warn: t('wc.warnTransferFromUnknown') }
       }
       // ── WETH ──
       case 'deposit':
-        return { fn: 'deposit', summary: `Envolver ${fmtAmt(value)} ETH → WETH`, level: 'safe' }
+        return { fn: 'deposit', summary: t('wc.wrap', { amt: fmtAmt(value) }), level: 'safe' }
 
       // ── Aave + WETH.withdraw (mismo nombre, distinto número de args) ──
       case 'withdraw': {
-        if (args.length === 1) return { fn: 'withdraw', summary: `Desenvolver ${fmtAmt(args[0] as bigint)} WETH → ETH`, level: 'safe' }
+        if (args.length === 1) return { fn: 'withdraw', summary: t('wc.unwrap', { amt: fmtAmt(args[0] as bigint) }), level: 'safe' }
         const asset = String(args[0])
-        return { fn: 'Aave withdraw', summary: `Retirar ${fmtAmt(args[1] as bigint, asset)} de Aave`, level: 'safe' }
+        return { fn: 'Aave withdraw', summary: t('wc.aaveWithdraw', { amt: fmtAmt(args[1] as bigint, asset) }), level: 'safe' }
       }
       case 'supply': {
         const asset = String(args[0])
-        return { fn: 'Aave supply', summary: `Depositar ${fmtAmt(args[1] as bigint, asset)} en Aave`, level: 'safe' }
+        return { fn: 'Aave supply', summary: t('wc.aaveSupply', { amt: fmtAmt(args[1] as bigint, asset) }), level: 'safe' }
       }
       case 'borrow': {
         const asset = String(args[0])
-        return { fn: 'Aave borrow', summary: `Pedir prestado ${fmtAmt(args[1] as bigint, asset)} en Aave`, level: 'caution', warn: 'Genera deuda en Aave' }
+        return { fn: 'Aave borrow', summary: t('wc.aaveBorrow', { amt: fmtAmt(args[1] as bigint, asset) }), level: 'caution', warn: t('wc.warnAaveBorrow') }
       }
       case 'repay': {
         const asset = String(args[0])
-        return { fn: 'Aave repay', summary: `Devolver ${fmtAmt(args[1] as bigint, asset)} a Aave`, level: 'safe' }
+        return { fn: 'Aave repay', summary: t('wc.aaveRepay', { amt: fmtAmt(args[1] as bigint, asset) }), level: 'safe' }
       }
 
       // ── Uniswap V3 — liquidez ──
       case 'mint': {
         const p = args[0] as { token0: string; token1: string; amount0Desired: bigint; amount1Desired: bigint }
-        return { fn: 'mint', summary: `Añadir liquidez · ${fmtAmt(p.amount0Desired, p.token0)} + ${fmtAmt(p.amount1Desired, p.token1)}`, level: 'safe' }
+        return { fn: 'mint', summary: t('wc.lpMint', { a: fmtAmt(p.amount0Desired, p.token0), b: fmtAmt(p.amount1Desired, p.token1) }), level: 'safe' }
       }
       case 'increaseLiquidity': {
         const p = args[0] as { tokenId: bigint }
-        return { fn: 'increaseLiquidity', summary: `Añadir liquidez a la posición #${p.tokenId}`, level: 'safe' }
+        return { fn: 'increaseLiquidity', summary: t('wc.lpIncrease', { id: String(p.tokenId) }), level: 'safe' }
       }
       case 'decreaseLiquidity': {
         const p = args[0] as { tokenId: bigint }
-        return { fn: 'decreaseLiquidity', summary: `Retirar liquidez de la posición #${p.tokenId}`, level: 'safe' }
+        return { fn: 'decreaseLiquidity', summary: t('wc.lpDecrease', { id: String(p.tokenId) }), level: 'safe' }
       }
       case 'collect': {
         const p = args[0] as { tokenId: bigint }
-        return { fn: 'collect', summary: `Cobrar comisiones de la posición #${p.tokenId}`, level: 'safe' }
+        return { fn: 'collect', summary: t('wc.lpCollect', { id: String(p.tokenId) }), level: 'safe' }
       }
       case 'burn':
-        return { fn: 'burn', summary: `Cerrar posición #${args[0]} (NFT de liquidez)`, level: 'safe' }
+        return { fn: 'burn', summary: t('wc.lpBurn', { id: String(args[0]) }), level: 'safe' }
 
       // ── Uniswap V3 — swaps ──
       case 'exactInputSingle': {
         const p = args[0] as { tokenIn: string; tokenOut: string; amountIn: bigint; amountOutMinimum: bigint }
-        return { fn: 'exactInputSingle', summary: `Swap ${fmtAmt(p.amountIn, p.tokenIn)} → ${tokenSym(p.tokenOut)} (mín ${fmtAmt(p.amountOutMinimum, p.tokenOut)})`, level: 'safe' }
+        return { fn: 'exactInputSingle', summary: t('wc.swapIn', { amt: fmtAmt(p.amountIn, p.tokenIn), sym: tokenSym(p.tokenOut), min: fmtAmt(p.amountOutMinimum, p.tokenOut) }), level: 'safe' }
       }
       case 'exactOutputSingle': {
         const p = args[0] as { tokenIn: string; tokenOut: string; amountOut: bigint; amountInMaximum: bigint }
-        return { fn: 'exactOutputSingle', summary: `Swap ${tokenSym(p.tokenIn)} → ${fmtAmt(p.amountOut, p.tokenOut)} (máx ${fmtAmt(p.amountInMaximum, p.tokenIn)})`, level: 'safe' }
+        return { fn: 'exactOutputSingle', summary: t('wc.swapOut', { sym: tokenSym(p.tokenIn), amt: fmtAmt(p.amountOut, p.tokenOut), max: fmtAmt(p.amountInMaximum, p.tokenIn) }), level: 'safe' }
       }
       case 'exactInput': {
         const p = args[0] as { amountIn: bigint; amountOutMinimum: bigint }
-        return { fn: 'exactInput', summary: `Swap (entrada ${fmtAmt(p.amountIn)}, salida mínima ${fmtAmt(p.amountOutMinimum)})`, level: 'safe' }
+        return { fn: 'exactInput', summary: t('wc.swapInPath', { amt: fmtAmt(p.amountIn), min: fmtAmt(p.amountOutMinimum) }), level: 'safe' }
       }
       case 'exactOutput': {
         const p = args[0] as { amountOut: bigint; amountInMaximum: bigint }
-        return { fn: 'exactOutput', summary: `Swap (salida ${fmtAmt(p.amountOut)}, entrada máx ${fmtAmt(p.amountInMaximum)})`, level: 'safe' }
+        return { fn: 'exactOutput', summary: t('wc.swapOutPath', { amt: fmtAmt(p.amountOut), max: fmtAmt(p.amountInMaximum) }), level: 'safe' }
       }
       case 'unwrapWETH9':
-        return { fn: 'unwrapWETH9', summary: `Desenvolver WETH → ETH (mín ${fmtAmt(args[0] as bigint)})`, level: 'safe' }
+        return { fn: 'unwrapWETH9', summary: t('wc.unwrapMin', { amt: fmtAmt(args[0] as bigint) }), level: 'safe' }
       case 'refundETH':
-        return { fn: 'refundETH', summary: 'Devolver el ETH sobrante', level: 'safe' }
+        return { fn: 'refundETH', summary: t('wc.refundEth'), level: 'safe' }
       case 'execute':
-        return decodeUR(args[0] as Hex, args[1] as Hex[])
+        return decodeUR(args[0] as Hex, args[1] as Hex[], t)
 
       // ── Uniswap V4 ──
       case 'modifyLiquidities': {
         const [actions, params] = decodeAbiParameters(parseAbiParameters('bytes actions, bytes[] params'), args[0] as Hex)
-        return decodeV4(actions as Hex, params as Hex[])
+        return decodeV4(actions as Hex, params as Hex[], t)
       }
       case 'modifyLiquiditiesWithoutUnlock':
-        return decodeV4(args[0] as Hex, args[1] as Hex[])
+        return decodeV4(args[0] as Hex, args[1] as Hex[], t)
 
       // ── multicall: desenrolla y agrega las sub-llamadas ──
       case 'multicall': {
         const inner = (args.length === 2 ? args[1] : args[0]) as Hex[]
-        if (depth > 2) return { fn: `multicall (${inner.length})`, level: 'caution' }
-        const subs = inner.map((d) => interpret(d, 0n, known, target, depth + 1))
+        if (depth > 2) return { fn: t('wc.multicall', { n: inner.length }), level: 'caution' }
+        const subs = inner.map((d) => interpret(d, 0n, known, t, target, depth + 1))
         const summary = subs.map((s) => s.summary || s.fn).filter(Boolean).join(' + ')
         const level = subs.reduce<RiskLevel>((acc, s) => worse(acc, s.level), 'safe')
         const warn = subs.map((s) => s.warn).filter(Boolean).join(' · ') || undefined
-        return { fn: `multicall (${inner.length})`, summary, level, warn }
+        return { fn: t('wc.multicall', { n: inner.length }), summary, level, warn }
       }
 
       // ── ENS ──
       case 'commit':
-        return { fn: 'commit', summary: 'Reservar un nombre ENS (paso 1/2)', level: 'safe' }
+        return { fn: 'commit', summary: t('wc.ensCommit'), level: 'safe' }
       case 'register':
-        return { fn: 'register', summary: `Registrar ${String(args[0])}.eth · ${(Number(args[2] as bigint) / YEAR).toFixed(1)} año(s)`, level: 'safe' }
+        return { fn: 'register', summary: t('wc.ensRegister', { name: String(args[0]), years: (Number(args[2] as bigint) / YEAR).toFixed(1) }), level: 'safe' }
       case 'renew':
-        return { fn: 'renew', summary: `Renovar ${String(args[0])}.eth · ${(Number(args[1] as bigint) / YEAR).toFixed(1)} año(s)`, level: 'safe' }
+        return { fn: 'renew', summary: t('wc.ensRenew', { name: String(args[0]), years: (Number(args[1] as bigint) / YEAR).toFixed(1) }), level: 'safe' }
 
       default:
         return { fn: functionName, level: 'caution' }
     }
   } catch {
-    return { fn: `acción no reconocida (${data.slice(0, 10)})`, level: 'caution', warn: 'Acción no reconocida' }
+    return { fn: t('wc.unrecognized', { sel: data.slice(0, 10) }), level: 'caution', warn: t('wc.warnUnrecognized') }
   }
 }
 
-export function classifyCall(call: WcCall, known: Set<string>): CallRisk {
+export function classifyCall(call: WcCall, known: Set<string>, t: Tr): CallRisk {
   const target = ((call.to ?? call.target) ?? '').toLowerCase()
   const targetKnown = known.has(target)
   const data = call.data
@@ -482,19 +486,19 @@ export function classifyCall(call: WcCall, known: Set<string>): CallRisk {
   if (!data || data === '0x' || data.length < 10) {
     if (value > 0n) {
       return targetKnown
-        ? { level: 'caution', fn: 'enviar ETH', summary: `Enviar ${fmtAmt(value)} ETH`, target, targetKnown }
-        : { level: 'danger', fn: 'enviar ETH', summary: `Enviar ${fmtAmt(value)} ETH a dirección desconocida`, target, targetKnown, warn: 'Envío de ETH a dirección desconocida' }
+        ? { level: 'caution', fn: t('wc.fnSendEth'), summary: t('wc.sendEth', { amt: fmtAmt(value) }), target, targetKnown }
+        : { level: 'danger', fn: t('wc.fnSendEth'), summary: t('wc.sendEthUnknown', { amt: fmtAmt(value) }), target, targetKnown, warn: t('wc.warnSendEthUnknown') }
     }
-    return { level: 'safe', fn: 'llamada vacía', target, targetKnown }
+    return { level: 'safe', fn: t('wc.emptyCall'), target, targetKnown }
   }
 
-  const d = interpret(data, value, known, target)
+  const d = interpret(data, value, known, t, target)
   let level = d.level
   let warn = d.warn
   // Acción reconocida como segura pero hacia un contrato que no conocemos → precaución.
   if (level === 'safe' && !targetKnown) {
     level = 'caution'
-    warn = warn ?? 'Interactúa con un contrato no reconocido'
+    warn = warn ?? t('wc.warnUnknownContract')
   }
   return { level, fn: d.fn, summary: d.summary, target, targetKnown, warn }
 }

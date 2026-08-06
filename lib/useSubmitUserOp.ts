@@ -49,8 +49,8 @@ export function useSubmitUserOp() {
     // ── 2. Fallback: la wallet conectada paga el gas ────────────────────────
     if (!walletClient) {
       throw new Error(
-        'No hay bundler configurado y no hay wallet conectada para relayear el UserOp. ' +
-        'Conecta una wallet (MetaMask/WalletConnect) con saldo de gas, o define BUNDLER_PRIVATE_KEY.'
+        'No bundler is configured and no wallet is connected to relay the UserOp. ' +
+        'Connect a wallet (MetaMask/WalletConnect) with gas, or set BUNDLER_PRIVATE_KEY.'
       )
     }
 

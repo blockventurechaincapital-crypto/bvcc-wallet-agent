@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" width="1200" height="520" font-family="Inter, system-ui, sans-serif">
+  <title>How a BVCC Agent Wallet transaction is checked</title>
+  <desc>An agent signs with its own key. The wallet contract checks budgets, then allowlists, then pins the calldata arguments. Anything outside the envelope reverts.</desc>
+
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5d76e"/>
+      <stop offset="0.55" stop-color="#d4af37"/>
+      <stop offset="1" stop-color="#ecc84a"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,1 L9,5 L0,9" fill="none" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,1 L9,5 L0,9" fill="none" stroke="#fc8181" stroke-width="1.6" stroke-linecap="round"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" fill="#06080f"/>
+
+  <text x="48" y="52" fill="#d4af37" font-family="'IBM Plex Mono', monospace" font-size="13" letter-spacing="2.4">
+    WHAT HAPPENS WHEN AN AGENT TRIES TO SPEND
+  </text>
+  <text x="48" y="82" fill="#8892a4" font-size="15">
+    Every check runs inside the wallet contract. There is no server in this path.
+  </text>
+
+  <!-- Agent -->
+  <g>
+    <rect x="48" y="140" width="182" height="112" rx="12" fill="#0d1117" stroke="rgba(255,255,255,.09)"/>
+    <text x="68" y="172" fill="#d4af37" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.6">AGENT</text>
+    <text x="68" y="200" fill="#f0f4f8" font-size="16" font-weight="700">Signs with</text>
+    <text x="68" y="222" fill="#f0f4f8" font-size="16" font-weight="700">its own key</text>
+    <text x="68" y="242" fill="#8892a4" font-size="12.5">EOA · never the owner’s</text>
+  </g>
+  <line x1="230" y1="196" x2="286" y2="196" stroke="#d4af37" stroke-width="1.6" marker-end="url(#arrow)" opacity=".7"/>
+
+  <!-- Contract envelope -->
+  <rect x="296" y="112" width="640" height="300" rx="16" fill="#0b0e16" stroke="rgba(212,175,55,.24)"/>
+  <text x="320" y="140" fill="#d4af37" font-family="'IBM Plex Mono', monospace" font-size="11" letter-spacing="1.6">
+    BVCCAgentWalletV4 · executeAsAgent()
+  </text>
+
+  <!-- Check 1 -->
+  <g>
+    <rect x="320" y="158" width="188" height="108" rx="10" fill="#0d1117" stroke="rgba(255,255,255,.09)"/>
+    <text x="338" y="182" fill="#d4af37" font-family="'IBM Plex Mono', monospace" font-size="10.5">01</text>
+    <text x="338" y="206" fill="#f0f4f8" font-size="14.5" font-weight="700">Budgets</text>
+    <text x="338" y="228" fill="#8892a4" font-size="12">Period · daily · per-tx</text>
+    <text x="338" y="246" fill="#8892a4" font-size="12">lifetime · per-token</text>
+  </g>
+  <line x1="508" y1="212" x2="536" y2="212" stroke="#d4af37" stroke-width="1.6" marker-end="url(#arrow)" opacity=".7"/>
+
+  <!-- Check 2 -->
+  <g>
+    <rect x="546" y="158" width="188" height="108" rx="10" fill="#0d1117" stroke="rgba(255,255,255,.09)"/>
+    <text x="564" y="182" fill="#d4af37" font-family="'IBM Plex Mono', monospace" font-size="10.5">02</text>
+    <text x="564" y="206" fill="#f0f4f8" font-size="14.5" font-weight="700">Allowlists</text>
+    <text x="564" y="228" fill="#8892a4" font-size="12">Token · protocol</text>
+    <text x="564" y="246" fill="#8892a4" font-size="12">recipient · expiry</text>
+  </g>
+  <line x1="734" y1="212" x2="762" y2="212" stroke="#d4af37" stroke-width="1.6" marker-end="url(#arrow)" opacity=".7"/>
+
+  <!-- Check 3 -->
+  <g>
+    <rect x="772" y="158" width="142" height="108" rx="10" fill="#0d1117" stroke="rgba(212,175,55,.3)"/>
+    <text x="790" y="182" fill="#d4af37" font-family="'IBM Plex Mono', monospace" font-size="10.5">03</text>
+    <text x="790" y="206" fill="#f0f4f8" font-size="14.5" font-weight="700">Calldata</text>
+    <text x="790" y="228" fill="#8892a4" font-size="12">Recipient pinned</text>
+    <text x="790" y="246" fill="#8892a4" font-size="12">to your wallet</text>
+  </g>
+
+  <!-- Note under the checks -->
+  <text x="320" y="300" fill="#8892a4" font-size="13">
+    Step 03 is the one most agent wallets skip. A budget caps how much moves.
+  </text>
+  <text x="320" y="322" fill="#8892a4" font-size="13">
+    Pinning the calldata decides where it is allowed to go.
+  </text>
+
+  <rect x="320" y="342" width="594" height="46" rx="9" fill="rgba(212,175,55,.07)" stroke="rgba(212,175,55,.22)"/>
+  <text x="340" y="370" fill="#f5d76e" font-family="'IBM Plex Mono', monospace" font-size="11.5">
+    34 adversarial tests · 42 validator tests · 48h timelock on new protocols
+  </text>
+
+  <!-- Outcomes -->
+  <line x1="936" y1="180" x2="992" y2="180" stroke="#d4af37" stroke-width="1.6" marker-end="url(#arrow)" opacity=".7"/>
+  <g>
+    <rect x="1002" y="146" width="150" height="70" rx="10" fill="#0d1117" stroke="rgba(34,197,94,.4)"/>
+    <text x="1020" y="176" fill="#22c55e" font-size="14.5" font-weight="700">Executes</text>
+    <text x="1020" y="196" fill="#8892a4" font-size="12">fee taken on-chain</text>
+  </g>
+
+  <line x1="936" y1="252" x2="992" y2="252" stroke="#fc8181" stroke-width="1.6" marker-end="url(#arrowRed)" opacity=".7"/>
+  <g>
+    <rect x="1002" y="218" width="150" height="70" rx="10" fill="#0d1117" stroke="rgba(252,129,129,.4)"/>
+    <text x="1020" y="248" fill="#fc8181" font-size="14.5" font-weight="700">Reverts</text>
+    <text x="1020" y="268" fill="#8892a4" font-family="'IBM Plex Mono', monospace" font-size="10.5">PinnedArgMismatch()</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="48" y="470" fill="#4a5568" font-size="12.5">
+    BVCC Agent Wallet · bvccwallet.blockventurechaincapital.com · Public beta, internally reviewed, not externally audited
+  </text>
+</svg>

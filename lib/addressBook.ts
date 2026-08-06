@@ -29,7 +29,7 @@ export const addressBook = {
 
   add(name: string, address: string): void {
     if (typeof window === 'undefined') return
-    if (!isAddress(address)) throw new Error('Dirección inválida')
+    if (!isAddress(address)) throw new Error('Invalid address')
     const checksum = getAddress(address)
     const entries = load()
     const existing = entries.findIndex(e => e.address.toLowerCase() === checksum.toLowerCase())

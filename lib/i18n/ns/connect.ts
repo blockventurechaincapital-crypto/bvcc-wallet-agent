@@ -1,6 +1,21 @@
 export const connect = {
   en: {
     connect: {
+      errNoWallet: 'No active wallet. Go back to the start.',
+      errNoToken: 'No token selected.',
+      errNoCalls: 'Nothing to execute.',
+      errNoPool: 'No pool with liquidity for this pair.',
+      errSwapUnavailable: 'Swap is not available on this network.',
+      errInsufficientFee: 'Not enough balance to cover the wallet fee (0.05% / 0.15%).',
+      errCancelled: 'Operation cancelled.',
+      errNoGas: 'The wallet does not have enough ETH to pay for this operation.',
+      errMoreGas: 'The operation needed more gas than estimated. Try again.',
+      errWrongChain: 'The dApp asked for a network this wallet does not support.',
+      unknownDapp: 'Unknown dApp',
+      known: 'known',
+      unknownTarget: 'unknown',
+      unlimited: 'Unlimited',
+      signNumber: 'Sign #{n} with biometrics',
       // ConnectButton
       connectWallet: 'Connect wallet',
       connectWith: 'Connect with',
@@ -39,6 +54,21 @@ export const connect = {
   },
   es: {
     connect: {
+      errNoWallet: 'No hay wallet activa. Vuelve al inicio.',
+      errNoToken: 'No hay token seleccionado.',
+      errNoCalls: 'No hay llamadas que ejecutar.',
+      errNoPool: 'No hay pool con liquidez para este par.',
+      errSwapUnavailable: 'El swap no está disponible en esta red.',
+      errInsufficientFee: 'Saldo insuficiente para cubrir el fee de la wallet (0,05 % / 0,15 %).',
+      errCancelled: 'Operación cancelada.',
+      errNoGas: 'La wallet no tiene suficiente ETH para pagar esta operación.',
+      errMoreGas: 'La operación necesitó más gas del estimado. Reinténtala.',
+      errWrongChain: 'La dApp pidió una red que esta wallet no soporta.',
+      unknownDapp: 'dApp desconocida',
+      known: 'conocido',
+      unknownTarget: 'desconocido',
+      unlimited: 'Ilimitado',
+      signNumber: 'Firmar #{n} con biometría',
       // ConnectButton
       connectWallet: 'Conectar wallet',
       connectWith: 'Conectar con',

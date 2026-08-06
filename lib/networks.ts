@@ -11,6 +11,7 @@ export type NetworkConfig = {
   rpcUrl: string
   blockExplorer: {
     url: string
+    name: string       // 'Arbiscan', 'BaseScan'… shown in links, so it must match the chain
     apiUrl: string     // Etherscan v2 API base
     apiChainId: string // chainid param
   }
@@ -51,6 +52,7 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
     blockExplorer: {
       url: 'https://sepolia.arbiscan.io',
+      name: 'Arbiscan',
       apiUrl: 'https://api.etherscan.io/v2/api',
       apiChainId: '421614',
     },
@@ -83,6 +85,7 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://mainnet.base.org',
     blockExplorer: {
       url: 'https://basescan.org',
+      name: 'BaseScan',
       apiUrl: 'https://api.etherscan.io/v2/api',
       apiChainId: '8453',
     },
@@ -114,6 +117,7 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://arb1.arbitrum.io/rpc',
     blockExplorer: {
       url: 'https://arbiscan.io',
+      name: 'Arbiscan',
       apiUrl: 'https://api.etherscan.io/v2/api',
       apiChainId: '42161',
     },
@@ -146,6 +150,7 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://ethereum-rpc.publicnode.com',
     blockExplorer: {
       url: 'https://etherscan.io',
+      name: 'Etherscan',
       apiUrl: 'https://api.etherscan.io/v2/api',
       apiChainId: '1',
     },
@@ -177,6 +182,7 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://bsc-dataseed.binance.org',
     blockExplorer: {
       url: 'https://bscscan.com',
+      name: 'BscScan',
       apiUrl: 'https://api.etherscan.io/v2/api',
       apiChainId: '56',
     },
@@ -209,6 +215,7 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://polygon-bor-rpc.publicnode.com',
     blockExplorer: {
       url: 'https://polygonscan.com',
+      name: 'PolygonScan',
       apiUrl: 'https://api.etherscan.io/v2/api',
       apiChainId: '137',
     },

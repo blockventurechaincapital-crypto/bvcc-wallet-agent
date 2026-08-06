@@ -1,9 +1,14 @@
 export const transactions = {
   en: {
     transactions: {
+      agoNow: 'just now',
+      agoMin: '{n}m ago',
+      agoHour: '{n}h ago',
+      agoDay: '{n}d ago',
+      agoMonth: '{n} month ago',
+      agoMonths: '{n} months ago',
       title: 'Transactions',
       backBtn: 'Back',
-      viewOnArbiscan: 'View on Arbiscan',
       filterAll: 'All',
       filterTokens: 'Tokens',
       configureApiKey: 'Configure {key} to view history',
@@ -23,9 +28,14 @@ export const transactions = {
   },
   es: {
     transactions: {
+      agoNow: 'hace un momento',
+      agoMin: 'hace {n}m',
+      agoHour: 'hace {n}h',
+      agoDay: 'hace {n}d',
+      agoMonth: 'hace {n} mes',
+      agoMonths: 'hace {n} meses',
       title: 'Transacciones',
       backBtn: 'Volver',
-      viewOnArbiscan: 'Ver en Arbiscan',
       filterAll: 'Todas',
       filterTokens: 'Tokens',
       configureApiKey: 'Configura {key} para ver el historial',
