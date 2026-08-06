@@ -8,11 +8,15 @@ remappings = [
     "@openzeppelin/community-contracts/=lib/openzeppelin-community-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
 ]
-# V3 build is FROZEN for deterministic CREATE2. Do not change solc/optimizer_runs/
+# V4 build is FROZEN for deterministic CREATE2. Do not change solc/optimizer_runs/
 # evm_version without re-baking VALIDATOR_REGISTRY (BVCCAgentWallet.sol) and the
 # EXPECTED_* addresses (DeployFactoriesMainnet.s.sol) — test/Create2Consistency.t.sol
 # guards this. solc 0.8.36 chosen deliberately: skips the via-IR pipeline bug range
-# 0.8.28–0.8.33; +30 bytes vs 0.8.30 is acceptable (293 bytes of factory margin).
+# 0.8.28–0.8.33.
+#
+# BVCCAgentWalletFactoryV4 runtime is 24,541 B against the 24,576 B EIP-170 limit:
+# 35 bytes of margin. Verify with `forge build --sizes` after ANY change here or in
+# BVCCAgentWallet.sol — a few extra bytes and the factory stops being deployable.
 solc = "0.8.36"
 via_ir = true
 evm_version = "cancun"

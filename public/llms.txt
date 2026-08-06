@@ -37,7 +37,9 @@
 ## Key facts
 - Non-custodial: BVCC never receives or stores private keys, cannot recover wallets, and cannot reverse transactions. Ethereum is the only record of your account.
 - Authentication: WebAuthn / passkeys (Face ID, fingerprint, or security key), P256. No emails, no KYC, no forms.
-- Standards: ERC-4337 (account abstraction) and ERC-7821 (batch execution); WalletConnect for dApps.
+- Standards: ERC-4337 (account abstraction) and ERC-7821 (batch execution); ERC-7739 (nested typed-data signatures); EIP-5792 (wallet_sendCalls); WalletConnect for dApps.
+- NFTs: the wallet implements the ERC-721 and ERC-1155 receiver hooks, so NFTs sent with safeTransferFrom (how marketplaces send) arrive, and the owner moves them out through the normal signed path.
+- Readable signing: when a dApp asks you to sign, the wallet decodes the calldata (32 functions across ERC-20, NFTs, WETH, Aave v3, ENS, Uniswap v3/v4, multicall and the Universal Router) and states what it does in one sentence, with a green/amber/red risk level. Red requires an explicit confirmation. Unlimited approvals can be edited down before signing — the calldata is re-encoded with your number. Batches are signed one call at a time by default; atomic batching is opt-in.
 - AI-agent limits enforced on-chain: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, instant pause. The agent holds its own keypair; BVCC never sees it.
 - MCP clients: Hermes, Claude, Cursor, LM Studio.
 - What an agent can do: send native and ERC-20 tokens, swap on Uniswap v3 and v4, supply/borrow/repay on Aave v3 (including closing, deleveraging and swapping collateral or debt), and open, collect, reduce and close Uniswap v3 and v4 liquidity positions.

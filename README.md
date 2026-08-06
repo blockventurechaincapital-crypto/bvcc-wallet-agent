@@ -14,7 +14,9 @@
 </p>
 
 <p align="center">
-  <a href="#documentation"><b>📚 Documentation</b></a> ·
+  <a href="#connect-an-ai-agent"><b>Connect an AI agent</b></a> ·
+  <a href="#signing-with-dapps"><b>Signing</b></a> ·
+  <a href="#documentation"><b>Documentation</b></a> ·
   <a href="docs/agent-integration.md">Agent Integration</a> ·
   <a href="docs/self-hosting.md">Self-Hosting</a> ·
   <a href="docs/contracts.md">Contracts</a> ·
@@ -36,6 +38,91 @@
 |:---:|:---:|
 | ![Create wallet](assets/0.png) | ![Guardian recovery](assets/3.png) |
 
+## Connect an AI agent
+
+The wallet ships with an MCP server, so any MCP client — Claude, Cursor, LM Studio,
+Hermes — can drive it with one command. No plugin, no adapter to write.
+
+```bash
+npx -y @bvcc/agent-mcp
+```
+
+That registers **53 tools**: transfers, Uniswap v3/v4 swaps, Aave v3 lending, and
+Uniswap liquidity positions. Twelve read, fifteen simulate, twenty-six write, plus four
+operating guides the model can read before it acts. Most writes have a matching dry-run.
+
+Want to look around first without any risk?
+
+```bash
+BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp
+```
+
+That drops every write tool and leaves the 27 read/simulate ones. It can check balances,
+quote a swap and simulate a transaction, and it cannot move anything. `BVCC_MCP_MODULES`
+narrows further by feature group (`core`, `aave`, `lp`).
+
+The important part: **the MCP server grants no authority.** It is a convenience layer over
+the same `executeAsAgent` path documented in [Agent Integration](docs/agent-integration.md).
+Every budget, allowed token, allowed protocol and recipient is checked by the contract on
+each call. If the model asks for something outside the envelope you authorized, the
+transaction reverts — no matter what the MCP server, or the model, decided to attempt.
+
+| Package | npm | Source | License |
+|---|---|---|---|
+| `@bvcc/agent-mcp` | [![npm](https://img.shields.io/npm/v/@bvcc/agent-mcp)](https://www.npmjs.com/package/@bvcc/agent-mcp) | [bvcc-agent-mcp](https://github.com/blockventurechaincapital-crypto/bvcc-agent-mcp) | MIT |
+| `@bvcc/agent-sdk` | [![npm](https://img.shields.io/npm/v/@bvcc/agent-sdk)](https://www.npmjs.com/package/@bvcc/agent-sdk) | [bvcc-agent-sdk](https://github.com/blockventurechaincapital-crypto/bvcc-agent-sdk) | MIT |
+
+Use the SDK directly if you are writing your own bot in TypeScript instead of wiring up an
+assistant. It is the same catalog and the same on-chain limits; the MCP server bundles it.
+
+Full walkthrough — creating the wallet, authorizing the agent, per-client config, and the
+Windows `npx.cmd` gotcha — is in [docs/connect-ai.md](docs/connect-ai.md), or
+[illustrated on the web](https://bvccwallet.blockventurechaincapital.com/docs/connect-ai).
+The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as
+`com.blockventurechaincapital/bvcc-agent-wallet`.
+
+## Signing with dApps
+
+Connect to any dApp over WalletConnect. The part worth knowing is what happens when one
+asks you to sign.
+
+Most wallets show you a target address and a blob of hex. Sign-blind is how approval
+draining works: the dApp displays something reassuring, the calldata says
+`approve(attacker, 2^256-1)`, and you find out later. So the wallet decodes the call
+before you see it and describes it in a sentence:
+
+```
+🟢  Swap 0.5 WETH → USDC (min 1,847.2 USDC)
+🟢  Deposit 100 USDC into Aave
+🟡  Borrow 50 USDC on Aave                  Creates debt on Aave
+🔴  Approve USDC UNLIMITED to 0x9f2c…       Approval to an UNKNOWN address
+```
+
+It understands 32 functions across ERC-20, ERC-721/1155, WETH, Aave v3, ENS, Uniswap v3
+and v4 — including `multicall`, which it unwraps and summarizes item by item, and the
+Universal Router's `execute`, where it decodes the command bytes into the individual swaps
+and wraps. Amounts are resolved to real token symbols and decimals, not raw integers.
+
+Each call gets a risk level. 🟢 safe, 🟡 worth reading, 🔴 requires ticking a box before the
+button unlocks. Anything it cannot decode is 🟡 by default, and a recognized-but-safe call
+to a contract it does not know is downgraded to 🟡 rather than passed as green.
+
+**Unlimited approvals are editable.** When a dApp asks for an infinite allowance, you can
+type the amount you actually want. The wallet re-encodes the calldata before signing, so
+what reaches the chain is the number you chose.
+
+The signing flow also implements EIP-5792 (`wallet_sendCalls`, `getCallsStatus`,
+`getCapabilities`). Batches are signed **one at a time by default**, Ledger-style, so you
+approve each step; atomic batching is opt-in from Settings.
+
+Underneath, typed-data signing uses **ERC-7739**: the app's message is nested inside a
+struct carrying the wallet's own EIP-712 domain, so a signature cannot be replayed against
+another account. It is what makes Uniswap's Permit2 flow work at all. The Solidity and
+TypeScript halves are pinned together by a cross-language test vector — see
+[docs/signing.md](docs/signing.md).
+
+Available in English and Spanish, summaries included.
+
 ## Repository contents
 
 This monorepo contains both halves of the project so judges can review them together:
@@ -43,7 +130,11 @@ This monorepo contains both halves of the project so judges can review them toge
 - **Frontend** — Next.js app (this repo root: `app/`, `components/`, `lib/`, `public/`).
 - **Contracts** — Foundry Solidity smart wallet + AI agent wallet contracts (`contracts/`, V4):
   `BVCCWallet` / `BVCCWalletFactory` (personal) and `BVCCAgentWallet` / `BVCCAgentWalletFactory` (AI-agent, on-chain spending limits + per-selector call policies), plus the security layer — `BVCCValidatorRegistry`, `BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`, `BVCCHookRegistry`, `IBVCCValidator`.
-- **Tests** — 303 Foundry tests (unit, fork & fuzz) in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
+- **Tests** — 312 Foundry tests (unit, fork & fuzz) in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
+- **Agent tooling** — the SDK and MCP server live in their own repos, published to npm as
+  [`@bvcc/agent-sdk`](https://github.com/blockventurechaincapital-crypto/bvcc-agent-sdk) and
+  [`@bvcc/agent-mcp`](https://github.com/blockventurechaincapital-crypto/bvcc-agent-mcp) (MIT).
+  See [Connect an AI agent](#connect-an-ai-agent).
 - **Status** — Experimental public beta; smart contracts internally tested, **not externally audited**.
 
 ## Documentation
@@ -52,7 +143,10 @@ Developer docs live in [`docs/`](docs/) and on the web at [bvccwallet.blockventu
 
 | Guide | What it covers |
 |---|---|
+| [Connect an AI](docs/connect-ai.md) | Wire any MCP client to the wallet — install, env vars, read-only mode, module filtering |
 | [Agent Integration](docs/agent-integration.md) | How an AI agent calls `executeAsAgent` — encoding, limits, whitelists, errors, Foundry + viem examples |
+| [Agent Permissions](https://bvccwallet.blockventurechaincapital.com/docs/agent-permissions) | Capabilities vs raw addresses, the four permission layers, call policies (web only) |
+| [Signing with dApps](docs/signing.md) | What the wallet shows before you approve — calldata decoding, risk levels, editable approvals, EIP-5792 batching |
 | [Setup & Self-Hosting](docs/self-hosting.md) | Clone, configure `.env.local`, optional bundler, PM2 + nginx deployment |
 | [Contract Reference](docs/contracts.md) | Wallets, factories, `AuthorizeParams`, deployed addresses, security notes |
 | [Bundler API](docs/bundler-api.md) | `POST /api/send-userop` spec, sender validation, fallback behavior |

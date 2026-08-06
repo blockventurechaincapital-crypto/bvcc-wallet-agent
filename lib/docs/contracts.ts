@@ -149,7 +149,7 @@ export const contracts: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'Internal security review, bilingual report in the monorepo’s `audits/` folder and linked from these docs. Four review rounds so far, thirteen findings with identifiers (`BVCC-01` … `BVCC-13`): 2 critical, 3 high, 5 medium, 1 low, 2 informational. Nine are remediated and live on all six networks — including a cross-function reentrancy that let a compromised agent bypass every limit, and guardian squatting through the factory. Four stay open or accepted by decision, each documented with its mitigation; the one that should change your behaviour is `BVCC-03`. The V4 suite is 303 Foundry tests (unit, fork & fuzz). No independent party has audited this code.',
+          'Internal security review, bilingual report in the monorepo’s `audits/` folder and linked from these docs. Four review rounds so far, thirteen findings with identifiers (`BVCC-01` … `BVCC-13`): 2 critical, 3 high, 5 medium, 1 low, 2 informational. Nine are remediated and live on all six networks — including a cross-function reentrancy that let a compromised agent bypass every limit, and guardian squatting through the factory. Four stay open or accepted by decision, each documented with its mitigation; the one that should change your behaviour is `BVCC-03`. The V4 suite is 312 Foundry tests (unit, fork & fuzz). No independent party has audited this code.',
           'V2 (June 2026) fixed a gas-griefing edge on Arbitrum: balance probes are capped at 100k gas (`PROBE_GAS_CAP`) so calldata that happens to contain a precompile address can’t burn the transaction’s gas. V3 keeps this fix.',
           'V3 (July 2026) closes an agent fund-exfiltration path: a stolen agent key could previously name its own address as the recipient/`to` of a swap or `Pool.withdraw` and move funds without touching the ETH/token budget. V3 makes case-3 calls default-deny per selector and pins the recipient to the wallet (or validates it on-chain). The owner’s biometric path is unaffected.',
         ],
@@ -257,7 +257,7 @@ export const contracts: LocalizedDoc = {
         ],
       },
 
-      { type: 'h2', text: 'Registries y validators (V3)' },
+      { type: 'h2', text: 'Registries y validators' },
       {
         type: 'list',
         items: [
@@ -272,7 +272,7 @@ export const contracts: LocalizedDoc = {
       {
         type: 'list',
         items: [
-          'Security review interna, informe bilingüe en la carpeta `audits/` del monorepo y enlazado desde esta documentación. Cuatro rondas hasta ahora, trece hallazgos con identificador (`BVCC-01` … `BVCC-13`): 2 críticos, 3 altos, 5 medios, 1 bajo, 2 informativos. Nueve están corregidos y desplegados en las seis redes — entre ellos una reentrada cruzada que permitía a un agente comprometido saltarse todos los límites, y la apropiación de guardianes vía la factory. Cuatro quedan abiertos o aceptados por decisión, cada uno con su mitigación documentada; el que debería cambiar tu forma de operar es `BVCC-03`. La suite V4 son 303 tests de Foundry (unit, fork y fuzz). Ningún tercero independiente ha auditado este código.',
+          'Security review interna, informe bilingüe en la carpeta `audits/` del monorepo y enlazado desde esta documentación. Cuatro rondas hasta ahora, trece hallazgos con identificador (`BVCC-01` … `BVCC-13`): 2 críticos, 3 altos, 5 medios, 1 bajo, 2 informativos. Nueve están corregidos y desplegados en las seis redes — entre ellos una reentrada cruzada que permitía a un agente comprometido saltarse todos los límites, y la apropiación de guardianes vía la factory. Cuatro quedan abiertos o aceptados por decisión, cada uno con su mitigación documentada; el que debería cambiar tu forma de operar es `BVCC-03`. La suite V4 son 312 tests de Foundry (unit, fork y fuzz). Ningún tercero independiente ha auditado este código.',
           'La V2 (junio 2026) corrigió un caso de gas-griefing en Arbitrum: las probes de balance van capadas a 100k de gas (`PROBE_GAS_CAP`) para que un calldata que casualmente contenga la dirección de un precompile no pueda quemar el gas de la transacción. V3 mantiene este fix.',
           'La V3 (julio 2026) cierra una vía de exfiltración de fondos del agente: una clave de agente robada podía antes poner su propia dirección como recipient/`to` de un swap o `Pool.withdraw` y mover fondos sin tocar el presupuesto de ETH/token. V3 hace las llamadas del caso 3 default-deny por selector y ancla el destinatario a la wallet (o lo valida on-chain). El camino biométrico del dueño no se ve afectado.',
         ],

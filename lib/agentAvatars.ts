@@ -1,5 +1,5 @@
 'use client'
-// Retratos de agentes IA — PNG 512x512 en public/agents/. Añade tus archivos ahí
+// Retratos de agentes IA — PNG cuadrados (1254x1254) en public/agents/. Añade los tuyos ahí
 // y registra los nombres en AGENT_AVATARS para que aparezcan en el selector.
 // La elección por agente se guarda en localStorage (sin DB, igual que los alias).
 

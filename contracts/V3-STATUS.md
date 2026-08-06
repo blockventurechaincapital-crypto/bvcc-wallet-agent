@@ -10,7 +10,7 @@
 > | BVCCValidatorRegistry | `…06` | `0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2` — **sin cambios** |
 >
 > Redes: Arbitrum One · Ethereum · BNB Chain · Base · Polygon · Arbitrum Sepolia.
-> Contratos renombrados a V4, dominio EIP-712 `BVCCSmartWalletV4`. `forge test` 303/303.
+> Contratos renombrados a V4, dominio EIP-712 `BVCCSmartWalletV4`. `forge test` 312/312.
 > Los validators se comparten entre generaciones → **no hay que re-registrar nada**.
 >
 > **Los 7 arreglos de V4:** reentrada cruzada (2 capas) · apropiación de guardianes ·
