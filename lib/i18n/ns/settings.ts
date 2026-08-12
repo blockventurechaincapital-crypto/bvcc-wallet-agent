@@ -9,6 +9,10 @@ export const settings = {
       sectionSecurity: 'Security',
       sectionSession: 'Session & data',
       // Security
+      bundlerTitle: 'Who pays the gas',
+      bundlerDesc: 'By default the BVCC relayer advances the gas and your wallet repays it. You can turn that off and pay the gas yourself with a connected wallet (MetaMask), the same way you did when you created the wallet. Either way the operation is still signed by your passkey — the connected wallet only relays and pays, it cannot move your funds.',
+      bundlerOn: 'On: the BVCC relayer pays and your wallet repays it.',
+      bundlerOff: 'Off: you need a connected wallet with gas on the network you are using. Nothing goes through the shared relayer, so a busy relayer never affects you.',
       atomicTitle: 'Atomic batch signing (EIP-5792)',
       atomicDesc: 'OFF (recommended): dApp batch requests are signed one by one, like a hardware wallet — one biometric confirmation per call, stopping if one fails. ON: the whole batch is signed with a single biometric confirmation and executed atomically (all-or-nothing). Useful for operations that must be indivisible (approve + action in one step, flash loans) and for fewer prompts.',
       atomicWarn: 'Risk: one signature authorizes several actions at once. A malicious dApp could hide a harmful action next to a legitimate one. Always review every call before approving.',
@@ -51,7 +55,7 @@ export const settings = {
       clearAll: 'Delete all local data',
       clearConfirm: 'Delete all local data? This will remove your session, biometric credential and address book. You will not be able to recover access without your original WebAuthn device.',
       // Footer
-      version: 'v1.1.0',
+      version: 'v1.1.1',
     },
   },
   es: {
@@ -64,6 +68,10 @@ export const settings = {
       sectionSecurity: 'Seguridad',
       sectionSession: 'Sesión y datos',
       // Security
+      bundlerTitle: 'Quién paga el gas',
+      bundlerDesc: 'Por defecto lo adelanta el relayer de BVCC y tu wallet se lo reembolsa. Puedes desactivarlo y pagar tú el gas con una wallet conectada (MetaMask), igual que al crear la wallet. En los dos casos la operación la firma tu passkey: la wallet conectada solo retransmite y paga, no puede mover tus fondos.',
+      bundlerOn: 'Activado: el relayer de BVCC paga y tu wallet se lo reembolsa.',
+      bundlerOff: 'Desactivado: necesitas una wallet conectada con gas en la red que uses. Nada pasa por el relayer compartido, así que si está ocupado no te afecta.',
       atomicTitle: 'Firmas en lote atómicas (EIP-5792)',
       atomicDesc: 'OFF (recomendado): las peticiones en lote de las dApps se firman una a una, como un hardware wallet — una confirmación biométrica por llamada, y si una falla se detiene. ON: todo el lote se firma con una sola confirmación biométrica y se ejecuta de forma atómica (todo o nada). Útil para operaciones que deben ser indivisibles (approve + acción en un paso, flash loans) y para menos confirmaciones.',
       atomicWarn: 'Riesgo: una sola firma autoriza varias acciones a la vez. Una dApp maliciosa podría colar una acción dañina junto a la legítima. Revisa siempre cada llamada antes de aprobar.',
@@ -106,7 +114,7 @@ export const settings = {
       clearAll: 'Borrar todos los datos locales',
       clearConfirm: '¿Borrar todos los datos locales? Esta acción eliminará tu sesión, credencial biométrica y libreta de direcciones. No podrás recuperar acceso sin tu dispositivo WebAuthn original.',
       // Footer
-      version: 'v1.1.0',
+      version: 'v1.1.1',
     },
   },
 }

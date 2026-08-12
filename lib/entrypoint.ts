@@ -64,6 +64,25 @@ export const ENTRYPOINT_ABI = [
     outputs: [{ type: 'uint256' }],
     stateMutability: 'view',
   },
+  // El único sitio donde se ve si la OPERACIÓN salió bien. Ojo, no es lo mismo
+  // que el recibo de la transacción: si la validación pasa pero la ejecución
+  // revierte (un swap con slippage, por ejemplo), la transacción se mina con
+  // `status: success` y el EntryPoint le cobra igual a la cuenta — pero aquí
+  // `success` viene en `false`. Mirar solo el recibo es decirle al usuario que
+  // su operación salió cuando no salió.
+  {
+    type: 'event',
+    name: 'UserOperationEvent',
+    inputs: [
+      { name: 'userOpHash', type: 'bytes32', indexed: true },
+      { name: 'sender', type: 'address', indexed: true },
+      { name: 'paymaster', type: 'address', indexed: true },
+      { name: 'nonce', type: 'uint256', indexed: false },
+      { name: 'success', type: 'bool', indexed: false },
+      { name: 'actualGasCost', type: 'uint256', indexed: false },
+      { name: 'actualGasUsed', type: 'uint256', indexed: false },
+    ],
+  },
   {
     type: 'error',
     name: 'FailedOp',

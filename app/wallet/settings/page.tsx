@@ -10,7 +10,7 @@ import { useWalletIdentity } from '@/lib/useWalletIdentity'
 import { useWalletType } from '@/lib/useWalletType'
 import { feeNumerator, feeRateLabel } from '@/lib/fees'
 import { useI18n } from '@/lib/i18n/I18nContext'
-import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride } from '@/lib/wcCalls'
+import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride, getUseBundler, setUseBundler } from '@/lib/wcCalls'
 import GuardianSetup from '@/components/GuardianSetup'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
@@ -236,6 +236,7 @@ export default function SettingsPage() {
   const [loadingChain, setLoadingChain] = useState(false)
   const [chainError, setChainError] = useState(false)
   const [atomicEnabled, setAtomicEnabled] = useState(false)
+  const [bundlerEnabled, setBundlerEnabled] = useState(true)
   const [maxGas, setMaxGas] = useState('')
   const [reloadGuardians, setReloadGuardians] = useState(0)
 
@@ -247,6 +248,7 @@ export default function SettingsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAtomicEnabled(getAtomicBatchEnabled())
+    setBundlerEnabled(getUseBundler())
     const mg = getMaxGasOverride()
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (mg) setMaxGas(mg.toString())
@@ -255,6 +257,13 @@ export default function SettingsPage() {
     const v = !atomicEnabled
     setAtomicBatchEnabled(v)
     setAtomicEnabled(v)
+  }
+  // Quien adelanta el gas. Apagado = lo paga la wallet conectada (MetaMask),
+  // igual que al crear la wallet. La passkey sigue firmando la operacion.
+  const toggleBundler = () => {
+    const v = !bundlerEnabled
+    setUseBundler(v)
+    setBundlerEnabled(v)
   }
   const saveMaxGas = (raw: string) => {
     const digits = raw.replace(/[^\d]/g, '')
@@ -544,6 +553,39 @@ export default function SettingsPage() {
           <div className="settings-section" style={{ marginBottom: '28px' }}>
             <SectionLabel>{t('settings.sectionSecurity')}</SectionLabel>
             <Card>
+              <Row>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: 600, color: COLORS.textPrimary }}>
+                      {t('settings.bundlerTitle')}
+                    </p>
+                    <p style={{ margin: '0 0 8px', fontSize: '11px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
+                      {t('settings.bundlerDesc')}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '11px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
+                      {bundlerEnabled ? t('settings.bundlerOn') : t('settings.bundlerOff')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={toggleBundler}
+                    role="switch"
+                    aria-checked={bundlerEnabled}
+                    style={{
+                      flexShrink: 0, width: '44px', height: '26px', borderRadius: '13px',
+                      border: 'none', cursor: 'pointer', position: 'relative',
+                      background: bundlerEnabled ? COLORS.gold : 'rgba(255,255,255,0.12)',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: '3px', left: bundlerEnabled ? '21px' : '3px',
+                      width: '20px', height: '20px', borderRadius: '50%',
+                      background: bundlerEnabled ? '#000' : '#f0f4f8',
+                      transition: 'left 0.15s',
+                    }} />
+                  </button>
+                </div>
+              </Row>
               <Row>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
                   <div style={{ flex: 1 }}>

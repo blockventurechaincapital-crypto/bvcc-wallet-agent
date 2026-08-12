@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { isAddress, createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei, parseUnits, formatUnits, type Address, type Hex } from 'viem'
+import { isAddress, createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseUnits, formatUnits, type Address, type Hex } from 'viem'
 import { authenticateWebAuthn } from '@/lib/webauthn'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
@@ -13,8 +13,16 @@ import { feeNumerator, feeRateLabel, previewSend, maxTokenAmount } from '@/lib/f
 import { addressBook, type AddressEntry } from '@/lib/addressBook'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { waitForUserOp, txUrl, type UserOpOutcome } from '@/lib/waitForUserOp'
+import { suggestGasFees, type GasFees } from '@/lib/gasFees'
+import { GasAdvanced } from '@/components/GasAdvanced'
 
-type SendStatus = 'idle' | 'building' | 'signing' | 'sending' | 'success' | 'error'
+// `sent` es el estado nuevo: la transacción salió pero todavía no sabemos si la
+// operación se hizo. Antes se pasaba directamente a `success` con el hash en la
+// mano, y eso era mentir: el hash solo dice que se envió.
+type SendStatus =
+  | 'idle' | 'building' | 'signing' | 'sending'
+  | 'sent' | 'success' | 'failed' | 'replaced' | 'unknown' | 'error'
 
 // Reserva de gas al pulsar MAX en el token nativo (el wallet paga el gas del UserOp)
 const NATIVE_GAS_RESERVE = 300_000_000_000_000n // 0.0003 ETH
@@ -94,6 +102,21 @@ function SendPageInner() {
   const [status, setStatus] = useState<SendStatus>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [txHash, setTxHash] = useState<string | null>(null)
+  // Guarda el desenlace para poder decir POR QUÉ falló: no es lo mismo que la
+  // red la rechazara antes de ejecutarla (no se mueve nada) que que se ejecutara
+  // y no se completara (el gas sí se cobra).
+  const [outcome, setOutcome] = useState<UserOpOutcome | null>(null)
+  const [gasSugerido, setGasSugerido] = useState<GasFees | null>(null)
+  const [gasOverride, setGasOverride] = useState<GasFees | null>(null)
+
+  // Se pide la sugerencia al entrar para poder enseñarla en el panel Avanzado.
+  useEffect(() => {
+    let vivo = true
+    suggestGasFees(publicClient, network.chainId)
+      .then((g) => { if (vivo) setGasSugerido(g) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [publicClient, network.chainId])
   const [suggestions, setSuggestions] = useState<AddressEntry[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const toInputRef = useRef<HTMLInputElement>(null)
@@ -225,9 +248,10 @@ function SendPageInner() {
       })
 
       // ── 3. Gas prices ───────────────────────────────────────────────────────
-      const feeData = await publicClient.estimateFeesPerGas()
-      const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
-      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+      // Si el usuario editó el panel Avanzado, manda lo suyo. El servidor valida
+      // la banda igualmente, así que un valor absurdo se rechaza con un 400.
+      const { maxFeePerGas, maxPriorityFeePerGas } =
+        gasOverride ?? await suggestGasFees(publicClient, network.chainId)
 
       // ── 4. UserOp ───────────────────────────────────────────────────────────
       const userOp = {
@@ -292,7 +316,19 @@ function SendPageInner() {
       })
 
       setTxHash(txHash)
-      setStatus('success')
+      setStatus('sent')
+
+      // ── 9. Esperar el desenlace de verdad ───────────────────────────────────
+      // El hash no basta. Puede minarse y fallar la operación dentro, o puede
+      // reemplazarla otra transacción del bundler (una sola EOA compartida).
+      const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address })
+      setOutcome(res)
+      setStatus(
+        res.estado === 'confirmada' ? 'success'
+        : res.estado === 'fallida' ? 'failed'
+        : res.estado === 'reemplazada' ? 'replaced'
+        : 'unknown',
+      )
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : String(err))
       setStatus('error')
@@ -306,27 +342,51 @@ function SendPageInner() {
     return t('send.confirmFaceId')
   }
 
-  // ── Success ─────────────────────────────────────────────────────────────────
-  if (status === 'success') {
+  // ── Resultado ───────────────────────────────────────────────────────────────
+  // Cuatro finales posibles, no uno. El hash aparece desde el primer momento y
+  // enlaza al explorador, como en MetaMask: el usuario puede seguirlo aunque
+  // aquí todavía no sepamos el desenlace.
+  if (status === 'sent' || status === 'success' || status === 'failed' || status === 'replaced' || status === 'unknown') {
+    const V = {
+      sent:     { icono: '⏳', color: '#D4AF37', titulo: t('send.sentTitle'),    nota: t('send.sentNote') },
+      success:  { icono: '✓',  color: '#D4AF37', titulo: t('send.successTitle'), nota: '' },
+      failed:   { icono: '✕',  color: '#fc8181', titulo: t('send.failedTitle'),
+                  nota: outcome?.estado === 'fallida' && outcome.donde === 'ejecucion'
+                    ? t('send.failedExecutionNote') : t('send.failedValidationNote') },
+      replaced: { icono: '↺',  color: '#f6ad55', titulo: t('send.replacedTitle'), nota: t('send.replacedNote') },
+      unknown:  { icono: '⏳', color: '#8892a4', titulo: t('send.unknownTitle'),  nota: t('send.unknownNote') },
+    }[status]
+
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#06080f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
-        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(212,175,55,0.15)', border: '2px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', marginBottom: '24px' }}>
-          ✓
+        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: `${V.color}26`, border: `2px solid ${V.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', marginBottom: '24px' }}>
+          {V.icono}
         </div>
-        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#f0f4f8', marginBottom: '8px' }}>{t('send.successTitle')}</h2>
+        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#f0f4f8', marginBottom: '8px' }}>{V.titulo}</h2>
         <p style={{ fontSize: '13px', color: '#8892a4', marginBottom: '8px', textAlign: 'center' }}>
           {amount} {symbol} → {to.slice(0, 6)}...{to.slice(-4)}
         </p>
-        {txHash && (
-          <p style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4a5568', marginBottom: '28px' }}>
-            TX: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+        {V.nota && (
+          <p style={{ fontSize: '12px', color: '#8892a4', marginBottom: '12px', textAlign: 'center', maxWidth: '340px', lineHeight: 1.5 }}>
+            {V.nota}
           </p>
         )}
+        {txHash && (
+          <a
+            href={txUrl(network, txHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '11px', fontFamily: 'monospace', color: '#63b3ed', marginBottom: '28px', textDecoration: 'none' }}
+          >
+            {txHash.slice(0, 10)}...{txHash.slice(-8)} ↗
+          </a>
+        )}
         <button
-          onClick={() => router.back()}
-          style={{ width: '100%', maxWidth: '360px', padding: '14px', backgroundColor: '#D4AF37', border: 'none', borderRadius: '6px', color: '#000', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+          onClick={() => (status === 'replaced' ? setStatus('idle') : router.back())}
+          disabled={status === 'sent'}
+          style={{ width: '100%', maxWidth: '360px', padding: '14px', backgroundColor: status === 'sent' ? '#2d3748' : '#D4AF37', border: 'none', borderRadius: '6px', color: status === 'sent' ? '#8892a4' : '#000', fontSize: '14px', fontWeight: '600', cursor: status === 'sent' ? 'default' : 'pointer' }}
         >
-          {t('common.back')}
+          {status === 'replaced' ? t('send.retryBtn') : t('common.back')}
         </button>
       </main>
     )
@@ -558,6 +618,8 @@ function SendPageInner() {
             <p style={{ margin: 0, fontSize: '12px', color: '#fc8181', wordBreak: 'break-word' }}>{errorMsg}</p>
           </div>
         )}
+
+        <GasAdvanced sugerida={gasSugerido} onChange={setGasOverride} />
 
         {/* Submit */}
         <button

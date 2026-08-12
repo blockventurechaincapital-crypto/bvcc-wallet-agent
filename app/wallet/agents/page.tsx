@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   isAddress, createPublicClient, http,
   encodeAbiParameters, encodeFunctionData,
-  parseGwei, parseEther, parseUnits, formatUnits,
+  parseEther, parseUnits, formatUnits,
   type Address, type Hex,
 } from 'viem'
 import { authenticateWebAuthn } from '@/lib/webauthn'
@@ -14,6 +14,7 @@ import { useNetwork } from '@/lib/NetworkContext'
 import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { waitForUserOp } from '@/lib/waitForUserOp'
 import { policyCallsFor, presetProtocolSuggestions } from '@/lib/callPolicies'
 import {
   composeFromCapabilities,
@@ -26,6 +27,7 @@ import { ExplorerAddress } from '@/components/ExplorerAddress'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import { AgentAvatar, AgentAvatarPicker } from '@/components/AgentAvatar'
 import type { NetworkConfig } from '@/lib/networks'
+import { suggestGasFees } from '@/lib/gasFees'
 
 const C = {
   bg: '#06080f',
@@ -271,12 +273,18 @@ export default function AgentsPage() {
   // which is why a green tx used to leave the old limits on screen. Wait for the
   // receipt, then re-read.
   async function settleAndReload(txHash: string) {
-    try {
-      await publicClient.waitForTransactionReceipt({ hash: txHash as Hex, timeout: 60_000 })
-    } catch {
-      // A slow or dropped receipt must not leave the list stale: re-read anyway.
-    }
+    // Esperar el recibo no bastaba: la transacción puede minarse con exito y la
+    // UserOperation haber fallado dentro, dejando "autorizado" un agente que no
+    // lo esta. Ver lib/waitForUserOp.ts.
+    const res = await waitForUserOp(txHash as Hex, network, {
+      wallet: walletAddress as Address, timeoutMs: 60_000,
+    })
     await loadAgents()
+    if (res.estado === 'fallida' || res.estado === 'reemplazada') {
+      throw new Error(res.estado === 'reemplazada'
+        ? 'Otra transaccion ocupo su lugar antes de confirmar. No se ha cambiado nada: vuelve a intentarlo.'
+        : 'La operacion no se completo. Revisa el estado del agente antes de volver a intentarlo.')
+    }
   }
 
   // Closing the modal after a successful action re-reads the wallet, so the changes are
@@ -403,9 +411,7 @@ export default function AgentsPage() {
       args: [BATCH_MODE, executionData],
     })
 
-    const feeData = await publicClient.estimateFeesPerGas()
-    const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+    const { maxFeePerGas, maxPriorityFeePerGas } = await suggestGasFees(publicClient, network.chainId)
 
     const userOp = {
       sender: walletAddress as Address,

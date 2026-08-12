@@ -20,6 +20,8 @@ import { useNetwork } from '@/lib/NetworkContext'
 import { getNetwork } from '@/lib/networks'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { waitForUserOp, txUrl } from '@/lib/waitForUserOp'
+import { suggestGasFees } from '@/lib/gasFees'
 
 const ERC1271_ABI = [{
   name: 'isValidSignature',
@@ -44,6 +46,11 @@ function hexToBytes(hex: Hex): Uint8Array {
 interface WcConnectModalProps {
   request: PendingRequestTypes.Struct
   onApprove: (result: string) => void
+  /** Responde a la dApp SIN cerrar el modal. La respuesta no puede depender de
+   *  que un humano pulse un boton: si el usuario se va, la operacion ya se hizo
+   *  y la dApp se quedaria creyendo que fallo. */
+  onRespond?: (result: string) => void
+  onClose?: () => void
   onReject: () => void
   walletAddress: string
   credentialId: string | null
@@ -160,6 +167,8 @@ function formatValue(value: string | undefined): string {
 export default function WcConnectModal({
   request,
   onApprove,
+  onRespond,
+  onClose,
   onReject,
   walletAddress,
   credentialId,
@@ -169,6 +178,21 @@ export default function WcConnectModal({
   const submitUserOp = useSubmitUserOp()
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
+  // Resultado confirmado, pendiente de que el usuario lo vea. Antes se llamaba a
+  // onApprove nada mas confirmar y el padre desmontaba el modal en el acto: la
+  // operacion salia bien y la ventana desaparecia sin decir nada.
+  const [resultado, setResultado] = useState<
+    { id: string; hash: Hex; estado: 'esperando' | 'confirmada' | 'pendiente' } | null>(null)
+  const respondido = useRef(false)
+
+  // Nada mas confirmar, se le contesta a la dApp. El panel de resultado se queda
+  // en pantalla despues, para que el usuario lo lea con calma.
+  useEffect(() => {
+    if (!resultado || respondido.current) return
+    respondido.current = true
+    if (onRespond) onRespond(resultado.id)
+    else onApprove(resultado.id)   // sin onRespond, comportamiento de antes
+  }, [resultado])   // eslint-disable-line react-hooks/exhaustive-deps
   const [errorMsg, setErrorMsg] = useState('')
   // Firma secuencial (modo una-a-una de wallet_sendCalls)
   const [seqIndex, setSeqIndex] = useState(0)
@@ -334,9 +358,7 @@ export default function WcConnectModal({
   // call (x2 margen por el fee snapshot); si alguna falla (approve+acción en
   // batch) → fallback generoso por nº de calls. Floor 500k, cap 8M.
   async function suggestGasParams(exec: ReturnType<typeof toExec>): Promise<GasParams> {
-    const feeData = await publicClient.estimateFeesPerGas()
-    const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+    const { maxFeePerGas, maxPriorityFeePerGas } = await suggestGasFees(publicClient, network.chainId)
     let callGasLimit = 0n
     let estimated = true
     for (const c of exec) {
@@ -446,8 +468,23 @@ export default function WcConnectModal({
       const gasOverride = gasOverrideFromFields()
 
       if (method === 'eth_sendTransaction') {
+        // La rama mas usada: casi cualquier dApp manda el swap por aqui. Antes
+        // devolvia el hash y cerraba en el acto, sin comprobar nada.
         const txHash = await buildAndSubmitBatch([effectiveCalls[0]], gasOverride)
-        onApprove(txHash)
+        // Se le contesta a la dApp con el hash EN CUANTO se emite, que es lo
+        // estandar en eth_sendTransaction: la dApp espera la confirmacion por su
+        // cuenta. Hacerla esperar aqui no aporta nada y en L1 son minutos.
+        setResultado({ id: txHash, hash: txHash as Hex, estado: 'esperando' })
+        const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address })
+        if (res.estado === 'fallida') {
+          throw new Error(res.donde === 'ejecucion'
+            ? 'La operación se ejecutó pero no se completó. El gas sí se cobró.'
+            : 'La red rechazó la operación antes de ejecutarla. No se ha movido nada.')
+        }
+        if (res.estado === 'reemplazada') {
+          throw new Error('Otra transacción ocupó su lugar antes de confirmar. No se ha movido nada: vuelve a intentarlo.')
+        }
+        setResultado({ id: txHash, hash: txHash as Hex, estado: res.estado === 'confirmada' ? 'confirmada' : 'pendiente' })
 
       } else if (method === 'wallet_sendCalls') {
         const calls = effectiveCalls
@@ -457,23 +494,43 @@ export default function WcConnectModal({
           // ── Modo ATÓMICO (opt-in): todas las calls en un userOp, una Face ID ──
           const txHash = await buildAndSubmitBatch(calls, gasOverride)
           const id = newBatchId()
+          setResultado({ id, hash: txHash as Hex, estado: 'esperando' })
+          // Antes se daba por aprobado con solo tener el hash. Un préstamo o un
+          // LP puede minarse y fallar por dentro: se lo estábamos diciendo a la
+          // dApp como bueno.
+          const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address })
+          if (res.estado === 'fallida') {
+            throw new Error(res.donde === 'ejecucion'
+              ? 'La operación se ejecutó pero no se completó. El gas sí se cobró.'
+              : 'La red rechazó la operación antes de ejecutarla. No se ha movido nada.')
+          }
+          if (res.estado === 'reemplazada') {
+            throw new Error('Otra transacción ocupó su lugar antes de confirmar. No se ha movido nada: vuelve a intentarlo.')
+          }
           recordBatch(id, network.chainId, [txHash as Hex])
-          onApprove(id)
+          setResultado({ id, hash: txHash as Hex, estado: res.estado === 'confirmada' ? 'confirmada' : 'pendiente' })
         } else {
           // ── Modo SECUENCIAL (por defecto): firma la call actual, espera a que
           //    mine, avanza. Paramos en fallo. Cada call es su propia Face ID. ──
           const txHash = await buildAndSubmitBatch([calls[seqIndex]], gasOverride) as Hex
           setLoadingMsg(t('connect.sendingTx'))
-          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+          // Mirar solo el recibo no basta: la transacción puede minarse con
+          // éxito y la UserOperation haber fallado dentro (ver lib/waitForUserOp).
+          const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address })
           seqHashes.current = [...seqHashes.current, txHash]
 
-          if (receipt.status === 'reverted') {
-            throw new Error('La llamada revirtió on-chain. El lote se detuvo aquí.')
+          if (res.estado === 'fallida') {
+            throw new Error(res.donde === 'ejecucion'
+              ? 'La llamada se ejecutó pero revirtió on-chain. El lote se detuvo aquí.'
+              : 'La red rechazó la llamada antes de ejecutarla. El lote se detuvo aquí.')
+          }
+          if (res.estado === 'reemplazada') {
+            throw new Error('Otra transacción ocupó su lugar antes de confirmar. El lote se detuvo aquí: vuelve a intentarlo.')
           }
           if (seqIndex + 1 >= calls.length) {
             const id = newBatchId()
             recordBatch(id, network.chainId, seqHashes.current)
-            onApprove(id)
+            setResultado({ id, hash: txHash as Hex, estado: res.estado === 'confirmada' ? 'confirmada' : 'pendiente' })
           } else {
             // Quedan calls: avanzar y dejar el modal abierto para la siguiente firma.
             // Reset de ack y gas para que la siguiente call se evalúe/estime de cero.
@@ -529,6 +586,9 @@ export default function WcConnectModal({
         throw new Error(`Método no soportado: ${method}`)
       }
     } catch (err: unknown) {
+      // Si ya se habia pintado el panel de espera y luego resulta que la
+      // operacion fallo, hay que retirarlo: si no, el error queda tapado detras.
+      setResultado(null)
       setErrorMsg(friendlyError(err instanceof Error ? err.message : String(err), t))
     } finally {
       setLoading(false)
@@ -579,6 +639,46 @@ export default function WcConnectModal({
         </div>
         <div style={{ marginTop: '6px', fontSize: '10px', color: '#8892a4' }}>
           Aprobarás: <span style={{ color: '#f0f4f8' }}>{effectiveLabel}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Resultado confirmado ────────────────────────────────────────────────────
+  // La operacion ya salio bien; se enseña unos segundos con el hash pinchable y
+  // luego se responde a la dApp. Antes esto no existia: se respondia y el modal
+  // desaparecia en el mismo instante, sin que el usuario viera nada.
+  if (resultado) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        backgroundColor: 'rgba(0,0,0,0.75)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+      }}>
+        <div style={{ backgroundColor: '#0d1117', border: '1px solid #1c2333', borderRadius: '12px', padding: '32px 24px', maxWidth: '380px', width: '100%', textAlign: 'center' }}>
+          <div style={{ width: '56px', height: '56px', margin: '0 auto 18px', borderRadius: '50%', backgroundColor: resultado.estado === 'confirmada' ? 'rgba(212,175,55,0.15)' : 'rgba(136,146,164,0.15)', border: `2px solid ${resultado.estado === 'confirmada' ? '#D4AF37' : '#8892a4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px' }}>
+            {resultado.estado === 'confirmada' ? '✓' : '⏳'}
+          </div>
+          <h3 style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 700, color: '#f0f4f8' }}>
+            {resultado.estado === 'confirmada' ? t('connect.doneTitle')
+              : resultado.estado === 'esperando' ? t('connect.waitingTitle')
+              : t('connect.stillPendingTitle')}
+          </h3>
+          <p style={{ margin: '0 0 16px', fontSize: '12px', color: '#8892a4', lineHeight: 1.5 }}>
+            {resultado.estado === 'confirmada' ? t('connect.doneNote')
+              : resultado.estado === 'esperando' ? t('connect.waitingNote')
+              : t('connect.stillPendingNote')}
+          </p>
+          <a href={txUrl(network, resultado.hash)} target="_blank" rel="noopener noreferrer"
+             style={{ display: 'block', marginBottom: '20px', fontSize: '11px', fontFamily: 'monospace', color: '#63b3ed', textDecoration: 'none' }}>
+            {resultado.hash.slice(0, 10)}...{resultado.hash.slice(-8)} ↗
+          </a>
+          <button
+            onClick={() => (onClose ? onClose() : onApprove(resultado.id))}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#D4AF37', border: 'none', borderRadius: '8px', color: '#000', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            {t('connect.doneBtn')}
+          </button>
         </div>
       </div>
     )

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import {
   createPublicClient, http,
   encodeAbiParameters, encodeFunctionData,
-  parseGwei, type Address, type Hex,
+  type Address, type Hex,
 } from 'viem'
 import { loadCredential, authenticateWebAuthn } from '@/lib/webauthn'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
@@ -12,6 +12,8 @@ import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { waitForUserOp } from '@/lib/waitForUserOp'
+import { suggestGasFees } from '@/lib/gasFees'
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
@@ -91,9 +93,7 @@ export default function CancelRecoveryPage() {
       })
 
       // 3. Gas
-      const feeData = await publicClient.estimateFeesPerGas()
-      const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
-      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+      const { maxFeePerGas, maxPriorityFeePerGas } = await suggestGasFees(publicClient, network.chainId)
 
       // 4. UserOp
       const userOp = {
@@ -157,6 +157,15 @@ export default function CancelRecoveryPage() {
       })
 
       setTxHash(txHash)
+      // Cancelar una recuperacion es de las cosas que MENOS se pueden dar por
+      // hechas sin confirmar: si no salio y el usuario cree que si, la
+      // recuperacion sigue viva.
+      const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address })
+      if (res.estado === 'fallida' || res.estado === 'reemplazada') {
+        throw new Error(res.estado === 'reemplazada'
+          ? 'Otra transaccion ocupo su lugar antes de confirmar. La recuperacion NO se ha cancelado: vuelve a intentarlo.'
+          : 'La operacion no se completo. La recuperacion NO se ha cancelado.')
+      }
       setStatus('success')
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : String(err))

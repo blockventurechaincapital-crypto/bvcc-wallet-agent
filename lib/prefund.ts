@@ -1,6 +1,7 @@
 'use client'
 import { createPublicClient, http, type Address } from 'viem'
 import { USEROP_TOTAL_GAS } from './executeUserOp'
+import { suggestGasFees } from './gasFees'
 import type { NetworkConfig } from './networks'
 
 /**
@@ -45,10 +46,13 @@ export async function getPrefundNeed(
       address: network.contracts.entryPoint, abi: DEPOSIT_ABI,
       functionName: 'balanceOf', args: [walletAddress],
     }).catch(() => 0n) as Promise<bigint>,
-    client.estimateFeesPerGas(),
+    // El MISMO calculo con el que se firma (lib/gasFees.ts). Si aqui se
+    // estimara por otro lado, se financiaria una wallet con menos de lo que el
+    // EntryPoint le va a reservar y fallaria con AA21 en su primera operacion.
+    suggestGasFees(client, network.chainId),
   ])
 
-  const required = USEROP_TOTAL_GAS * (fees.maxFeePerGas ?? 0n)
+  const required = USEROP_TOTAL_GAS * fees.maxFeePerGas
   const available = balance + deposit
   const target = required * SAFETY_FACTOR
 

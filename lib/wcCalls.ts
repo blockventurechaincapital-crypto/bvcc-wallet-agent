@@ -28,6 +28,32 @@ export function setAtomicBatchEnabled(on: boolean): void {
 // en el panel Avanzado, que siempre tiene prioridad.
 const MAX_GAS_KEY = 'bvcc_max_gas'
 
+// ───────────────────────────────────────────────────────────────────────────
+// Quien paga el gas
+// ───────────────────────────────────────────────────────────────────────────
+// Por defecto lo adelanta el relayer de BVCC (el "bundler") y la wallet se lo
+// reembolsa. Desactivandolo, el gas lo paga la wallet conectada (MetaMask), como
+// al crear la wallet.
+//
+// Por que alguien querria desactivarlo: el relayer es UNA SOLA cuenta compartida
+// por todos los usuarios de esa red. Si una de sus transacciones se queda sin
+// minar, bloquea la cola hasta que alguien la reemplace. Pagando tu el gas vas
+// por TU cuenta y eso no te afecta.
+//
+// Lo que NO cambia: la operacion la sigue firmando tu passkey. La wallet
+// conectada solo retransmite y paga; no puede mover tus fondos.
+const BUNDLER_KEY = 'bvcc_use_bundler'
+
+export function getUseBundler(): boolean {
+  if (typeof window === 'undefined') return true
+  return localStorage.getItem(BUNDLER_KEY) !== '0'
+}
+export function setUseBundler(on: boolean): void {
+  if (typeof window === 'undefined') return
+  if (on) localStorage.removeItem(BUNDLER_KEY)
+  else localStorage.setItem(BUNDLER_KEY, '0')
+}
+
 export function defaultMaxGas(chainId: number): bigint {
   return chainId === 1 ? 3_000_000n : 8_000_000n
 }

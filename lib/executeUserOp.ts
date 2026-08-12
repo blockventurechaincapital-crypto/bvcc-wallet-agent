@@ -1,10 +1,12 @@
 'use client'
-import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei, type Address, type Hex } from 'viem'
+import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, type Address, type Hex } from 'viem'
 import { authenticateWebAuthn } from './webauthn'
 import { BVCC_WALLET_ABI } from './abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from './entrypoint'
 import type { NetworkConfig } from './networks'
 import type { SubmitUserOpPayload } from './useSubmitUserOp'
+import { waitForUserOp } from './waitForUserOp'
+import { suggestGasFees } from './gasFees'
 
 // Una llamada del batch ERC-7821 (target + value + calldata).
 export type ExecCall = { target: Address; value?: bigint; callData?: Hex }
@@ -39,6 +41,8 @@ export async function executeWithFaceId(opts: {
   calls: ExecCall[]
   submitUserOp: (p: SubmitUserOpPayload) => Promise<{ txHash: string }>
   callGasLimit?: bigint
+  /** Por defecto espera el desenlace y lanza si la operación no salió. */
+  esperar?: boolean
 }): Promise<string> {
   const { network, walletAddress, credentialId, calls, submitUserOp } = opts
   if (!calls.length) throw new Error('Nothing to execute')
@@ -59,9 +63,7 @@ export async function executeWithFaceId(opts: {
   )
   const callData = encodeFunctionData({ abi: BVCC_WALLET_ABI, functionName: 'execute', args: [BATCH_MODE, executionData] })
 
-  const feeData = await publicClient.estimateFeesPerGas()
-  const maxFeePerGas = feeData.maxFeePerGas ?? parseGwei('2')
-  const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+  const { maxFeePerGas, maxPriorityFeePerGas } = await suggestGasFees(publicClient, network.chainId)
 
   const userOp = {
     sender: walletAddress,
@@ -105,5 +107,32 @@ export async function executeWithFaceId(opts: {
     chainId: network.chainId,
     userOp: { ...userOp, nonce: nonce.toString(), preVerificationGas: userOp.preVerificationGas.toString(), signature },
   })
+
+  // Tener el hash NO es haber hecho la operación. Antes se devolvía aquí y todos
+  // los que llaman a esto —LP, allowances, guardianes, agentes, alta— daban la
+  // operación por buena. Dos formas de equivocarse:
+  //   · la transacción la reemplaza otra del bundler (una sola EOA compartida)
+  //     y nunca llega a minarse
+  //   · se mina con `status: success` pero la UserOperation falla dentro (un
+  //     préstamo o un LP que revierte), y el EntryPoint cobra igual
+  // Se lanza excepción en vez de devolver el desenlace para no tener que tocar a
+  // los cinco que llaman: todos hacen `await` dentro de try/catch.
+  if (opts.esperar !== false) {
+    const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress })
+    if (res.estado === 'fallida') {
+      const e = new Error(res.donde === 'ejecucion'
+        ? 'The operation ran but did not complete. Gas was charged.'
+        : 'The network rejected the operation before running it. Nothing moved.')
+      ;(e as Error & { code?: string }).code = res.donde === 'ejecucion' ? 'OP_EXECUTION_FAILED' : 'OP_VALIDATION_FAILED'
+      throw e
+    }
+    if (res.estado === 'reemplazada') {
+      const e = new Error('Another transaction took its place before this one confirmed. Nothing moved — try again.')
+      ;(e as Error & { code?: string }).code = 'OP_REPLACED'
+      throw e
+    }
+    // `pendiente` no es un fallo: puede confirmar más tarde. Se devuelve el hash
+    // y quien llama decide; forzar un error aquí sería mentir al revés.
+  }
   return txHash
 }

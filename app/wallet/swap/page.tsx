@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   createPublicClient, http, encodeAbiParameters, encodeFunctionData,
-  parseGwei, parseUnits, formatUnits, type Address, type Hex,
+  parseUnits, formatUnits, type Address, type Hex,
 } from 'viem'
 import { parseEthAmount } from '@/lib/send'
 import { authenticateWebAuthn } from '@/lib/webauthn'
@@ -17,6 +17,9 @@ import { useWalletType } from '@/lib/useWalletType'
 import { feeNumerator, feeRateLabel, FEE_DENOMINATOR } from '@/lib/fees'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
+import { waitForUserOp, txUrl, type UserOpOutcome } from '@/lib/waitForUserOp'
+import { suggestGasFees, type GasFees } from '@/lib/gasFees'
+import { GasAdvanced } from '@/components/GasAdvanced'
 
 // Reserva de gas al pulsar MAX en ETH (el wallet paga el gas del UserOp)
 const ETH_GAS_RESERVE = 300_000_000_000_000n // 0.0003 ETH
@@ -74,7 +77,12 @@ const ERC20_ABI = [{
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type SwapDirection = 'ETH_TO_USDC' | 'USDC_TO_WETH'
-type SwapStatus = 'idle' | 'quoting' | 'building' | 'signing' | 'sending' | 'success' | 'error'
+// `sent` es el estado nuevo: la transaccion salio pero aun no sabemos si el swap
+// se hizo. Un swap puede minarse con exito y revertir por dentro (slippage), y
+// hasta ahora eso se enseñaba como "hecho".
+type SwapStatus =
+  | 'idle' | 'quoting' | 'building' | 'signing' | 'sending'
+  | 'sent' | 'success' | 'failed' | 'replaced' | 'unknown' | 'error'
 
 // Una red admite swap solo si: el wallet está desplegable allí (factory) Y
 // tiene Uniswap + USDC configurados. Cada red usa SUS propias direcciones.
@@ -235,6 +243,17 @@ function SwapPageInner() {
   const [status, setStatus] = useState<SwapStatus>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [txHash, setTxHash] = useState<string | null>(null)
+  const [outcome, setOutcome] = useState<UserOpOutcome | null>(null)
+  const [gasSugerido, setGasSugerido] = useState<GasFees | null>(null)
+  const [gasOverride, setGasOverride] = useState<GasFees | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    suggestGasFees(publicClient, network.chainId)
+      .then((g) => { if (vivo) setGasSugerido(g) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [publicClient, network.chainId])
 
   useEffect(() => {
     if (searchParams.get('direction') === 'USDC_TO_WETH') setDirection('USDC_TO_WETH')
@@ -446,9 +465,8 @@ function SwapPageInner() {
       })
 
       // ── 3. Gas ────────────────────────────────────────────────────────────
-      const feeData = await publicClient.estimateFeesPerGas()
-      const maxFeePerGas         = feeData.maxFeePerGas         ?? parseGwei('2')
-      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseGwei('0.1')
+      const { maxFeePerGas, maxPriorityFeePerGas } =
+        gasOverride ?? await suggestGasFees(publicClient, network.chainId)
 
       // ── 4. UserOp ─────────────────────────────────────────────────────────
       const userOp = {
@@ -513,7 +531,18 @@ function SwapPageInner() {
       })
 
       setTxHash(txHash)
-      setStatus('success')
+      setStatus('sent')
+
+      // El hash no basta: hay que leer el UserOperationEvent para saber si el
+      // swap se ejecuto de verdad. Ver lib/waitForUserOp.ts.
+      const res = await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address })
+      setOutcome(res)
+      setStatus(
+        res.estado === 'confirmada' ? 'success'
+        : res.estado === 'fallida' ? 'failed'
+        : res.estado === 'reemplazada' ? 'replaced'
+        : 'unknown',
+      )
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : String(err))
       setStatus('error')
@@ -533,26 +562,43 @@ function SwapPageInner() {
   }
 
   // ── Success ──────────────────────────────────────────────────────────────
-  if (status === 'success') {
+  if (status === 'sent' || status === 'success' || status === 'failed' || status === 'replaced' || status === 'unknown') {
+    const V = {
+      sent:     { icono: '⏳', color: '#D4AF37', titulo: t('send.sentTitle'),     nota: t('send.sentNote') },
+      success:  { icono: '✓',  color: '#D4AF37', titulo: t('swap.successTitle'),  nota: '' },
+      failed:   { icono: '✕',  color: '#fc8181', titulo: t('send.failedTitle'),
+                  nota: outcome?.estado === 'fallida' && outcome.donde === 'ejecucion'
+                    ? t('send.failedExecutionNote') : t('send.failedValidationNote') },
+      replaced: { icono: '↺',  color: '#f6ad55', titulo: t('send.replacedTitle'), nota: t('send.replacedNote') },
+      unknown:  { icono: '⏳', color: '#8892a4', titulo: t('send.unknownTitle'),  nota: t('send.unknownNote') },
+    }[status]
+
     return (
       <main style={{ minHeight: '100vh', backgroundColor: '#06080f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
-        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(212,175,55,0.15)', border: '2px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', marginBottom: '24px' }}>
-          ✓
+        <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: `${V.color}26`, border: `2px solid ${V.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', marginBottom: '24px' }}>
+          {V.icono}
         </div>
-        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#f0f4f8', marginBottom: '8px' }}>{t('swap.successTitle')}</h2>
+        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#f0f4f8', marginBottom: '8px' }}>{V.titulo}</h2>
         <p style={{ fontSize: '13px', color: '#8892a4', marginBottom: '8px', textAlign: 'center' }}>
           {amount} {fromLabel} → {toLabel}
         </p>
-        {txHash && (
-          <p style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4a5568', marginBottom: '28px' }}>
-            TX: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+        {V.nota && (
+          <p style={{ fontSize: '12px', color: '#8892a4', marginBottom: '12px', textAlign: 'center', maxWidth: '340px', lineHeight: 1.5 }}>
+            {V.nota}
           </p>
         )}
+        {txHash && (
+          <a href={txUrl(network, txHash)} target="_blank" rel="noopener noreferrer"
+             style={{ fontSize: '11px', fontFamily: 'monospace', color: '#63b3ed', marginBottom: '28px', textDecoration: 'none' }}>
+            {txHash.slice(0, 10)}...{txHash.slice(-8)} ↗
+          </a>
+        )}
         <button
-          onClick={() => router.back()}
-          style={{ width: '100%', maxWidth: '360px', padding: '14px', backgroundColor: '#D4AF37', border: 'none', borderRadius: '6px', color: '#000', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+          onClick={() => (status === 'replaced' ? setStatus('idle') : router.back())}
+          disabled={status === 'sent'}
+          style={{ width: '100%', maxWidth: '360px', padding: '14px', backgroundColor: status === 'sent' ? '#2d3748' : '#D4AF37', border: 'none', borderRadius: '6px', color: status === 'sent' ? '#8892a4' : '#000', fontSize: '14px', fontWeight: '600', cursor: status === 'sent' ? 'default' : 'pointer' }}
         >
-          {t('common.back')}
+          {status === 'replaced' ? t('send.retryBtn') : t('common.back')}
         </button>
       </main>
     )
@@ -729,6 +775,8 @@ function SwapPageInner() {
             <p style={{ margin: 0, fontSize: '12px', color: '#fc8181', wordBreak: 'break-word' }}>{errorMsg}</p>
           </div>
         )}
+
+        <GasAdvanced sugerida={gasSugerido} onChange={setGasOverride} />
 
         {/* Submit */}
         <button

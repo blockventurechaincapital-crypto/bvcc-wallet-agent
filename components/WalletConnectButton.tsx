@@ -300,6 +300,16 @@ export default function WalletConnectButton() {
             }
             setActiveRequest(null)
           }}
+          // Contestar a la dApp sin cerrar: el modal se queda enseñando el
+          // resultado hasta que el usuario lo cierre, pero la dApp ya tiene su
+          // respuesta y no depende de que nadie pulse nada.
+          onRespond={(result) => {
+            respondSuccess(activeRequest.topic, activeRequest.id, result)
+            if (activeRequest.params.request.method === 'eth_sendTransaction') {
+              trackTxUntilMined(result as Hex, activeRequest)
+            }
+          }}
+          onClose={() => setActiveRequest(null)}
           onReject={() => {
             respondError(activeRequest.topic, activeRequest.id, 'User rejected the request')
             setActiveRequest(null)

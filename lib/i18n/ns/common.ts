@@ -1,6 +1,16 @@
 // Shared strings reused across pages. Reference as t('common.<key>').
 export const common = {
   en: {
+    gas: {
+      advanced: 'Advanced — gas',
+      maxFee: 'Max fee (gwei)',
+      priority: 'Priority fee (gwei)',
+      note: 'The suggested value already leaves room for the network fee to rise. If you lower it too much the operation is rejected and you have to sign again.',
+      reset: 'Use the suggested value',
+      errInvalid: 'Invalid value',
+      errZero: 'The max fee must be greater than 0',
+      errTipOverMax: 'The priority fee cannot exceed the max fee',
+    },
     common: {
       cancel: 'Cancel',
       confirm: 'Confirm',
@@ -31,6 +41,16 @@ export const common = {
     },
   },
   es: {
+    gas: {
+      advanced: 'Avanzado — gas',
+      maxFee: 'Tarifa máxima (gwei)',
+      priority: 'Propina (gwei)',
+      note: 'El valor sugerido ya deja margen para que la tarifa de la red suba. Si lo bajas demasiado, la operación se rechaza y hay que firmar otra vez.',
+      reset: 'Usar el valor sugerido',
+      errInvalid: 'Valor inválido',
+      errZero: 'La tarifa máxima debe ser mayor que 0',
+      errTipOverMax: 'La propina no puede superar la tarifa máxima',
+    },
     common: {
       cancel: 'Cancelar',
       confirm: 'Confirmar',
