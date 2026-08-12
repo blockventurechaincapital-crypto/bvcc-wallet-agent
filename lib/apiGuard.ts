@@ -12,7 +12,8 @@ import { NETWORKS } from './networks'
  * These helpers are the whole defence: an allowlist for the chain and a strict shape
  * for the address leave nothing to inject. Rate limiting is deliberately NOT here —
  * an in-memory counter resets on deploy and does not span PM2 workers, so it belongs
- * in nginx, in front of Node. See the block in docs/self-hosting.md.
+ * in the reverse proxy in front of Node: Apache on our VPS, nginx in the self-hosting
+ * guide. See the block in docs/self-hosting.md.
  *
  * The key is read-only public chain data: it cannot move funds or sign anything. The
  * realistic damage is a drained daily quota, which breaks the allowances, LP positions
