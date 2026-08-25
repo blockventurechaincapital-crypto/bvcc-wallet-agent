@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   isAddress, createPublicClient, http,
   encodeAbiParameters, encodeFunctionData,
-  parseEther, parseUnits, formatUnits,
+  formatEther,
   type Address, type Hex,
 } from 'viem'
 import { authenticateWebAuthn } from '@/lib/webauthn'
@@ -16,6 +16,11 @@ import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { waitForUserOp } from '@/lib/waitForUserOp'
 import { policyCallsFor, presetProtocolSuggestions } from '@/lib/callPolicies'
+import {
+  formatEthDisplay, formatTokenDisplay, formatEthLimit, formatTokenLimit,
+  parseEthInput, parseTokenAmount,
+  prefillEth, prefillToken, getTokenDecimals,
+} from '@/lib/agentLimits'
 import {
   composeFromCapabilities,
   capabilitiesFromProtocols,
@@ -61,37 +66,6 @@ function shortAddr(addr: string) {
   return addr.length >= 10 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr
 }
 
-function formatEth(wei: bigint): string {
-  if (wei === 0n) return '0'
-  const eth = Number(wei) / 1e18
-  if (eth >= 1) return eth.toFixed(4).replace(/\.?0+$/, '')
-  return eth.toFixed(6).replace(/\.?0+$/, '')
-}
-
-function parseEthInput(val: string): bigint {
-  if (!val || val === '0' || val === '') return 0n
-  try { return parseEther(val) } catch { return 0n }
-}
-
-function getTokenDecimals(address: string, usdcAddress?: string | null): number {
-  if (usdcAddress && address.toLowerCase() === usdcAddress.toLowerCase()) return 6
-  return 18
-}
-
-function parseTokenAmount(val: string, decimals: number): bigint {
-  if (!val || val === '0' || val === '') return 0n
-  try { return parseUnits(val, decimals) } catch { return 0n }
-}
-
-function formatTokenAmount(wei: bigint, decimals: number): string {
-  if (wei === 0n) return '0'
-  try {
-    const val = Number(formatUnits(wei, decimals))
-    if (val >= 1) return val.toFixed(2).replace(/\.?0+$/, '')
-    return val.toFixed(6).replace(/\.?0+$/, '')
-  } catch { return '0' }
-}
-
 function getTokenLabel(address: string, network: NetworkConfig): string {
   if (network.tokens.usdc && address.toLowerCase() === network.tokens.usdc.toLowerCase()) return 'USDC'
   if (address.toLowerCase() === network.tokens.weth.toLowerCase()) return 'WETH'
@@ -133,6 +107,31 @@ interface TokenLimitForm {
   maxPerTx: string     // human-readable (e.g. "500" = 500 USDC)
   dailyLimit: string   // future contract field — stored in form, sent to contract when ready
   totalBudget: string  // future contract field
+}
+
+// Lo que se va a firmar, ya calculado, más la lista de lo que queda SIN tope.
+// `args` es exactamente lo que recibe `authorizeAgent`: la pantalla de repaso lee
+// de aquí, así que no puede enseñar una cosa y mandar otra.
+interface Revision {
+  args: AuthorizeArgs
+  /** Frases del tipo "gasto diario: sin límite". Vacío = todo tiene tope. */
+  sinTope: string[]
+}
+
+interface AuthorizeArgs {
+  agent: Address
+  maxPerTxWei: bigint
+  dailyLimitWei: bigint
+  totalBudgetWei: bigint
+  periodBudgetWei: bigint
+  periodDuration: bigint
+  expiry: bigint
+  allowedTokens: Address[]
+  tokenMaxAmounts: bigint[]
+  tokenDailyLimits: bigint[]
+  tokenTotalBudgets: bigint[]
+  allowedProtocols: Address[]
+  allowedRecipients: Address[]
 }
 
 type ActionStatus = 'idle' | 'building' | 'signing' | 'sending' | 'success' | 'error'
@@ -183,9 +182,17 @@ export default function AgentsPage() {
   const [fRecipients, setFRecipients] = useState<string[]>([])
   const [fRecipientInput, setFRecipientInput] = useState('')
   const [fExpiry, setFExpiry] = useState('')
+  // "El agente puede enviar a CUALQUIER dirección". Antes esto no era una decisión:
+  // era lo que pasaba si dejabas la lista de destinos vacía, que además es como
+  // arranca el formulario. Ahora es una casilla que hay que marcar a propósito.
+  const [fAnyRecipient, setFAnyRecipient] = useState(false)
   // Selected capabilities. The picker composes protocols/tokens/recipients from
   // these; the manual lists below hold only what the user typed by hand.
   const [fCaps, setFCaps] = useState<CapabilityId[]>([])
+  // Repaso previo a la firma: lo que se va a mandar al contrato, ya calculado.
+  // Se firma ESTO, no una segunda pasada del formulario, para que no pueda haber
+  // diferencia entre lo que el usuario leyó y lo que se envió.
+  const [revision, setRevision] = useState<Revision | null>(null)
   // What the agent already has ON-CHAIN when the edit modal opens (lowercased).
   // Suggestion chips use it to show green (already accepted on-chain) vs blue
   // (staged in this form, not yet signed). Empty when authorizing a new agent.
@@ -327,21 +334,28 @@ export default function AgentsPage() {
     setActionStatus('idle')
     setActionError('')
     setActionTxHash(null)
+    setRevision(null)
     if (editAgent) {
       const p = editAgent.perm
+      // Vacío on-chain significa "cualquier destino": se refleja tal cual, para no
+      // cambiarle los permisos a nadie por abrir la pantalla de edición.
+      setFAnyRecipient(p.allowedRecipients.length === 0)
       setFAgent(editAgent.address)
-      setFMaxPerTx(p.maxPerTxWei > 0n ? formatEth(p.maxPerTxWei) : '')
-      setFDailyLimit(p.dailyLimitWei > 0n ? formatEth(p.dailyLimitWei) : '')
-      setFTotalBudget(p.totalBudgetWei > 0n ? formatEth(p.totalBudgetWei) : '')
-      setFPeriodBudget(p.periodBudgetWei > 0n ? formatEth(p.periodBudgetWei) : '')
+      // Exacto, no `formatEthDisplay`: esto vuelve a `parseEther` al guardar. Abrir
+      // un agente, cambiar solo el nombre y guardar tiene que devolver al contrato
+      // el mismo número que había.
+      setFMaxPerTx(prefillEth(p.maxPerTxWei))
+      setFDailyLimit(prefillEth(p.dailyLimitWei))
+      setFTotalBudget(prefillEth(p.totalBudgetWei))
+      setFPeriodBudget(prefillEth(p.periodBudgetWei))
       setFPeriodDays(p.periodDuration > 0n ? String(Number(p.periodDuration) / 86400) : '')
       setFTokenLimits(p.allowedTokens.map((addr, i) => {
         const dec = getTokenDecimals(addr, network.tokens.usdc)
         return {
           address: addr,
-          maxPerTx: p.tokenMaxAmounts[i] > 0n ? formatTokenAmount(p.tokenMaxAmounts[i], dec) : '',
-          dailyLimit: (p.tokenDailyLimits?.[i] ?? 0n) > 0n ? formatTokenAmount(p.tokenDailyLimits[i], dec) : '',
-          totalBudget: (p.tokenTotalBudgets?.[i] ?? 0n) > 0n ? formatTokenAmount(p.tokenTotalBudgets[i], dec) : '',
+          maxPerTx: prefillToken(p.tokenMaxAmounts[i], dec),
+          dailyLimit: prefillToken(p.tokenDailyLimits?.[i] ?? 0n, dec),
+          totalBudget: prefillToken(p.tokenTotalBudgets?.[i] ?? 0n, dec),
         }
       }))
       // Split the on-chain lists into "covered by a capability" and "manual". The
@@ -364,6 +378,9 @@ export default function AgentsPage() {
       setFAgent(''); setFMaxPerTx(''); setFDailyLimit(''); setFTotalBudget('')
       setFPeriodBudget(''); setFPeriodDays('')
       setFTokenLimits([]); setFProtocols([]); setFRecipients([]); setFExpiry(''); setFCaps([])
+      // Agente nuevo: lista blanca ACTIVA. Antes el estado de arranque era el
+      // permisivo y había que saber que un campo vacío significaba "cualquiera".
+      setFAnyRecipient(false)
       setOnChainBaseline({ tokens: new Set(), protocols: new Set(), recipients: new Set() })
     }
     setFTokenInput('')
@@ -472,10 +489,35 @@ export default function AgentsPage() {
     return txHash
   }
 
+  // ── Tokens que exige una capacidad ─────────────────────────────────────────
+  // `swapNative` necesita WETH en `allowedTokens` para que el approve del swap
+  // pase. Eso se añadía solo, al final, con topes ilimitados y sin enseñarlo. Aquí
+  // se convierte en una fila normal del formulario en cuanto se elige la
+  // capacidad, prellenada con el tope nativo (WETH y ETH van 1:1) para que el
+  // usuario autorice un número y no un hueco. Si ya existe la fila, no se toca.
+  function alElegirCapacidades(caps: CapabilityId[]) {
+    setFCaps(caps)
+    const requeridos = composeFromCapabilities(network.chainId, caps).requiredTokens
+    if (requeridos.length === 0) return
+    setFTokenLimits(prev => {
+      const hay = new Set(prev.map(t => t.address.toLowerCase()))
+      const nuevos = requeridos
+        .filter(tk => !hay.has(tk.toLowerCase()))
+        .map(tk => ({
+          address: tk as string,
+          maxPerTx: getTokenDecimals(tk, network.tokens.usdc) === 18 ? fMaxPerTx : '',
+          dailyLimit: getTokenDecimals(tk, network.tokens.usdc) === 18 ? fDailyLimit : '',
+          totalBudget: getTokenDecimals(tk, network.tokens.usdc) === 18 ? fTotalBudget : '',
+        }))
+      return nuevos.length ? [...prev, ...nuevos] : prev
+    })
+  }
+
   // ── Submit authorize/edit ──────────────────────────────────────────────────
-  async function handleAuthorize() {
+  // Paso 1 de 2: validar y calcular. NO firma nada — deja el resultado en
+  // `revision` para que el usuario lea antes de poner la passkey.
+  function prepararAutorizacion() {
     if (!isAddress(fAgent)) { setActionError(t('agents.invalidAgent')); return }
-    setActionStatus('building')
     setActionError('')
     setActionTxHash(null)
     try {
@@ -485,6 +527,15 @@ export default function AgentsPage() {
       const periodBudget = parseEthInput(fPeriodBudget)
       const periodDuration = fPeriodDays ? BigInt(Math.round(parseFloat(fPeriodDays) * 86400)) : 0n
       const expiry = fExpiry ? BigInt(Math.floor(new Date(fExpiry).getTime() / 1000)) : 0n
+
+      // ── Lo que ya no se puede dejar en blanco ──────────────────────────────
+      // `0` en el contrato significa SIN LÍMITE, y el formulario arrancaba con
+      // todos los campos vacíos: aceptar en blanco era autorizar un agente sin
+      // tope de gasto y sin caducidad, sin que nadie lo dijera en voz alta.
+      if (maxPerTx <= 0n) { setActionError(t('agents.errMaxPerTxRequired')); return }
+      const ahora = BigInt(Math.floor(Date.now() / 1000))
+      if (expiry <= 0n) { setActionError(t('agents.errExpiryRequired')); return }
+      if (expiry <= ahora) { setActionError(t('agents.errExpiryPast')); return }
 
       // Compose what the selected capabilities entail, then merge with manual entries.
       const composed = composeFromCapabilities(network.chainId, fCaps)
@@ -496,14 +547,17 @@ export default function AgentsPage() {
       const tokenMaxAmounts = validTokenLimits.map(t => parseTokenAmount(t.maxPerTx, dec(t.address)))
       const tokenDailyLimits = validTokenLimits.map(t => parseTokenAmount(t.dailyLimit, dec(t.address)))
       const tokenTotalBudgets = validTokenLimits.map(t => parseTokenAmount(t.totalBudget, dec(t.address)))
-      // Tokens a capability requires (e.g. WETH) that the user hasn't listed → add
-      // with unlimited limits so the flow works; the user can tighten them later.
+      // Los tokens que arrastra una capacidad (WETH para `swapNative`) entraban
+      // aquí con 0n/0n/0n — es decir, SIN TOPE — porque se añadían después de leer
+      // el formulario y no había dónde apretarlos. Ahora `sincronizarTokensDeCapacidad`
+      // los mete como filas visibles y editables en cuanto se elige la capacidad,
+      // así que a estas alturas ya tienen que estar en la lista. Si alguno no está,
+      // no se cuela en silencio: se para.
       const haveTokens = new Set(validTokens.map(lc))
-      for (const tk of composed.requiredTokens) {
-        if (!haveTokens.has(lc(tk))) {
-          validTokens.push(tk); tokenMaxAmounts.push(0n); tokenDailyLimits.push(0n); tokenTotalBudgets.push(0n)
-          haveTokens.add(lc(tk))
-        }
+      const sinFila = composed.requiredTokens.filter(tk => !haveTokens.has(lc(tk)))
+      if (sinFila.length > 0) {
+        setActionError(t('agents.errRequiredTokenMissing', { tokens: sinFila.map(a => getTokenLabel(a, network)).join(', ') }))
+        return
       }
 
       // Protocols = manual ∪ composed (deduped).
@@ -514,46 +568,80 @@ export default function AgentsPage() {
         if (!seenP.has(lc(p))) { seenP.add(lc(p)); validProtocols.push(p) }
       }
 
-      // Recipients: only meaningful when the whitelist is active. If the user added
-      // any destination, fold in the contracts the capabilities need (Pool, Permit2,
-      // routers — their approve is a Case-2b call). If empty, leave it empty (= any).
+      // Destinatarios. Antes: lista vacía = cualquiera, y vacía es como arranca el
+      // formulario — o sea que el control estaba apagado por defecto, justo la
+      // precondición del fallo de `approve` que ya se corrigió (es un caso 2b que
+      // depende de `allowedRecipients`). Ahora "cualquiera" hay que marcarlo.
       const manualRecipients = fRecipients.filter(r => isAddress(r)) as Address[]
-      let validRecipients: Address[] = []
-      if (manualRecipients.length > 0) {
+      const validRecipients: Address[] = []
+      if (!fAnyRecipient) {
         const seenR = new Set<string>()
         for (const r of [...manualRecipients, ...composed.recipients]) {
           if (!seenR.has(lc(r))) { seenR.add(lc(r)); validRecipients.push(r) }
         }
+        // Lista activada y vacía no existe en el contrato: se leería como
+        // "cualquiera". O hay destinos, o se marca la casilla a propósito.
+        if (validRecipients.length === 0) { setActionError(t('agents.errRecipientsEmpty')); return }
       }
 
+      const args: AuthorizeArgs = {
+        agent: fAgent as Address,
+        maxPerTxWei: maxPerTx,
+        dailyLimitWei: dailyLimit,
+        totalBudgetWei: totalBudget,
+        periodBudgetWei: periodBudget,
+        periodDuration,
+        expiry,
+        allowedTokens: validTokens,
+        tokenMaxAmounts,
+        tokenDailyLimits,
+        tokenTotalBudgets,
+        allowedProtocols: validProtocols,
+        allowedRecipients: validRecipients,
+      }
+
+      // Lo que queda sin tope, escrito con todas las letras. El resto del
+      // formulario enseña huecos vacíos y un `∞` pequeño; aquí se dice en una frase,
+      // porque es lo último que el usuario lee antes de poner la passkey.
+      const sinTope: string[] = []
+      if (dailyLimit <= 0n) sinTope.push(t('agents.revNoDaily'))
+      if (totalBudget <= 0n) sinTope.push(t('agents.revNoTotal'))
+      if (fAnyRecipient) sinTope.push(t('agents.revAnyRecipient'))
+      for (let i = 0; i < validTokens.length; i++) {
+        const etiqueta = getTokenLabel(validTokens[i], network)
+        if (tokenMaxAmounts[i] <= 0n) sinTope.push(t('agents.revNoTokenMax', { token: etiqueta }))
+        if (tokenDailyLimits[i] <= 0n) sinTope.push(t('agents.revNoTokenDaily', { token: etiqueta }))
+      }
+
+      setRevision({ args, sinTope })
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t('common.error'))
+    }
+  }
+
+  // Paso 2 de 2: firma EXACTAMENTE lo que se enseñó en el repaso. Los argumentos
+  // vienen de `revision`, no de volver a leer el formulario: si se recalcularan
+  // aquí, lo firmado y lo leído podrían separarse.
+  async function handleAuthorize(rev: Revision) {
+    setActionStatus('building')
+    setActionError('')
+    setActionTxHash(null)
+    try {
       const innerCallData = encodeFunctionData({
         abi: BVCC_AGENT_WALLET_ABI,
         functionName: 'authorizeAgent',
-        args: [{
-          agent: fAgent as Address,
-          maxPerTxWei: maxPerTx,
-          dailyLimitWei: dailyLimit,
-          totalBudgetWei: totalBudget,
-          periodBudgetWei: periodBudget,
-          periodDuration,
-          expiry,
-          allowedTokens: validTokens,
-          tokenMaxAmounts,
-          tokenDailyLimits,
-          tokenTotalBudgets,
-          allowedProtocols: validProtocols,
-          allowedRecipients: validRecipients,
-        }],
+        args: [rev.args],
       })
 
       // V3: bundle the required setCallPolicy calls for whitelisted protocols that have
       // presets (SwapRouter02, Aave Pool). Without these, every Case-3 call reverts
       // SelectorNotAllowed. One Face ID signature covers authorize + policies.
-      const policyCalls = policyCallsFor(network.chainId, validProtocols)
+      const policyCalls = policyCallsFor(network.chainId, rev.args.allowedProtocols)
 
       const txHash = await sendUserOp([innerCallData, ...policyCalls])
       setActionTxHash(txHash)
       setActionStatus('success')
+      setRevision(null)
       await settleAndReload(txHash)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t('common.error'))
@@ -794,8 +882,8 @@ export default function AgentsPage() {
 
         {/* ETH Limits grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-          <Limit label={t('agents.maxPerTx')} value={p.maxPerTxWei > 0n ? `${formatEth(p.maxPerTxWei)} ETH` : t('agents.noLimit')} />
-          <Limit label={t('agents.dailyLimit')} value={p.dailyLimitWei > 0n ? `${formatEth(p.dailyLimitWei)} ETH` : t('agents.noLimit')} />
+          <Limit label={t('agents.maxPerTx')} value={p.maxPerTxWei > 0n ? `${formatEthLimit(p.maxPerTxWei)} ETH` : t('agents.noLimit')} />
+          <Limit label={t('agents.dailyLimit')} value={p.dailyLimitWei > 0n ? `${formatEthLimit(p.dailyLimitWei)} ETH` : t('agents.noLimit')} />
         </div>
 
         {/* Daily spent bar */}
@@ -803,7 +891,7 @@ export default function AgentsPage() {
           <div style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.spentToday')}</span>
-              <span style={{ fontSize: '11px', color: C.muted }}>{formatEth(info.dailySpent)} / {formatEth(p.dailyLimitWei)} ETH</span>
+              <span style={{ fontSize: '11px', color: C.muted }}>{formatEthDisplay(info.dailySpent)} / {formatEthLimit(p.dailyLimitWei)} ETH</span>
             </div>
             <ProgressBar spent={info.dailySpent} limit={p.dailyLimitWei} color={C.gold} />
           </div>
@@ -814,7 +902,7 @@ export default function AgentsPage() {
           <div style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.totalBudget')}</span>
-              <span style={{ fontSize: '11px', color: C.muted }}>{formatEth(p.totalSpentWei)} / {formatEth(p.totalBudgetWei)} ETH</span>
+              <span style={{ fontSize: '11px', color: C.muted }}>{formatEthDisplay(p.totalSpentWei)} / {formatEthLimit(p.totalBudgetWei)} ETH</span>
             </div>
             <ProgressBar spent={p.totalSpentWei} limit={p.totalBudgetWei} color={C.gold} />
           </div>
@@ -827,7 +915,7 @@ export default function AgentsPage() {
               <span style={{ fontSize: '11px', color: C.subtle }}>
                 {t('agents.period')} ({Math.round(Number(p.periodDuration) / 86400)}d)
               </span>
-              <span style={{ fontSize: '11px', color: C.muted }}>{formatEth(p.periodSpentWei)} / {formatEth(p.periodBudgetWei)} ETH</span>
+              <span style={{ fontSize: '11px', color: C.muted }}>{formatEthDisplay(p.periodSpentWei)} / {formatEthLimit(p.periodBudgetWei)} ETH</span>
             </div>
             <ProgressBar spent={p.periodSpentWei} limit={p.periodBudgetWei} color={C.gold} />
             {periodSecondsLeft !== null && (
@@ -866,7 +954,7 @@ export default function AgentsPage() {
                         {shortAddr(tokenAddr)}
                       </span>
                       <span style={{ fontSize: '11px', color: C.muted }}>
-                        {t('agents.maxPerTxShort')}: {maxTx > 0n ? formatTokenAmount(maxTx, decimals) : '∞'}
+                        {t('agents.maxPerTxShort')}: {maxTx > 0n ? formatTokenLimit(maxTx, decimals) : '∞'}
                       </span>
                     </div>
 
@@ -876,7 +964,7 @@ export default function AgentsPage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                           <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.dailyShort')}</span>
                           <span style={{ fontSize: '11px', color: C.muted }}>
-                            {formatTokenAmount(spent?.daily ?? 0n, decimals)} / {formatTokenAmount(daily, decimals)} {symbol}
+                            {formatTokenDisplay(spent?.daily ?? 0n, decimals)} / {formatTokenLimit(daily, decimals)} {symbol}
                           </span>
                         </div>
                         <ProgressBar spent={spent?.daily ?? 0n} limit={daily} color={C.gold} />
@@ -889,7 +977,7 @@ export default function AgentsPage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                           <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.totalShort')}</span>
                           <span style={{ fontSize: '11px', color: C.muted }}>
-                            {formatTokenAmount(spent?.total ?? 0n, decimals)} / {formatTokenAmount(total, decimals)} {symbol}
+                            {formatTokenDisplay(spent?.total ?? 0n, decimals)} / {formatTokenLimit(total, decimals)} {symbol}
                           </span>
                         </div>
                         <ProgressBar spent={spent?.total ?? 0n} limit={total} color={C.gold} />
@@ -1429,7 +1517,7 @@ export default function AgentsPage() {
                       chainId={network.chainId}
                       explorerBase={network.blockExplorer.url}
                       selected={fCaps}
-                      onChange={setFCaps}
+                      onChange={alElegirCapacidades}
                     />
                   )}
 
@@ -1471,15 +1559,38 @@ export default function AgentsPage() {
                     <p style={{ margin: '0 0 8px', fontSize: '11px', color: C.subtle, lineHeight: '1.4' }}>
                       {t('agents.ethRecipientsHint')}
                     </p>
-                    <AddressListInput
-                      items={fRecipients}
-                      onAdd={v => setFRecipients(prev => [...prev, v])}
-                      onRemove={i => setFRecipients(prev => prev.filter((_, idx) => idx !== i))}
-                      input={fRecipientInput}
-                      setInput={setFRecipientInput}
-                      placeholder="0x... recipient address"
-                      onChain={onChainBaseline.recipients}
-                    />
+                    {!fAnyRecipient && (
+                      <AddressListInput
+                        items={fRecipients}
+                        onAdd={v => setFRecipients(prev => [...prev, v])}
+                        onRemove={i => setFRecipients(prev => prev.filter((_, idx) => idx !== i))}
+                        input={fRecipientInput}
+                        setInput={setFRecipientInput}
+                        placeholder="0x... recipient address"
+                        onChain={onChainBaseline.recipients}
+                      />
+                    )}
+                    <label style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px',
+                      padding: '10px', borderRadius: '6px', cursor: 'pointer',
+                      backgroundColor: fAnyRecipient ? 'rgba(246,173,85,0.06)' : 'transparent',
+                      border: `1px solid ${fAnyRecipient ? 'rgba(246,173,85,0.25)' : C.border}`,
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={fAnyRecipient}
+                        onChange={e => setFAnyRecipient(e.target.checked)}
+                        style={{ marginTop: '2px', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '12px', color: fAnyRecipient ? C.warn : C.muted, lineHeight: 1.45 }}>
+                        {t('agents.anyRecipientLabel')}
+                        {fAnyRecipient && (
+                          <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: C.subtle }}>
+                            {t('agents.anyRecipientWarn')}
+                          </span>
+                        )}
+                      </span>
+                    </label>
                   </div>
 
                   {/* Expiry */}
@@ -1505,20 +1616,53 @@ export default function AgentsPage() {
                   </div>
                 )}
 
+                {/* Repaso antes de firmar. El formulario enseña huecos vacíos y un
+                    `∞` pequeño; esto lo dice con palabras, que es lo último que se
+                    lee antes de dar la passkey. */}
+                {revision && (
+                  <div style={{
+                    marginTop: '16px', padding: '14px', borderRadius: '8px',
+                    backgroundColor: revision.sinTope.length ? 'rgba(246,173,85,0.06)' : 'rgba(104,211,145,0.05)',
+                    border: `1px solid ${revision.sinTope.length ? 'rgba(246,173,85,0.28)' : 'rgba(104,211,145,0.2)'}`,
+                  }}>
+                    <p style={{ margin: '0 0 10px', fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: C.subtle }}>
+                      {t('agents.revTitle')}
+                    </p>
+                    <div style={{ display: 'grid', gap: '5px', fontSize: '12px', color: C.muted }}>
+                      <div>{t('agents.revMaxPerTx', { v: `${formatEther(revision.args.maxPerTxWei)} ETH` })}</div>
+                      <div>{t('agents.revExpiry', { v: new Date(Number(revision.args.expiry) * 1000).toLocaleString() })}</div>
+                      <div>{t('agents.revTokens', { n: revision.args.allowedTokens.length })}</div>
+                      <div>{revision.args.allowedRecipients.length > 0
+                        ? t('agents.revRecipients', { n: revision.args.allowedRecipients.length })
+                        : t('agents.revAnyRecipient')}</div>
+                    </div>
+                    {revision.sinTope.length > 0 && (
+                      <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${C.border}` }}>
+                        <p style={{ margin: '0 0 6px', fontSize: '12px', color: C.warn, fontWeight: 600 }}>
+                          {t('agents.revUnlimitedTitle')}
+                        </p>
+                        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
+                          {revision.sinTope.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Buttons */}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                   <button
-                    onClick={closeModal}
+                    onClick={() => (revision ? setRevision(null) : closeModal())}
                     style={{
                       flex: 1, padding: '12px', backgroundColor: 'transparent',
                       border: `1px solid ${C.border}`, borderRadius: '6px',
                       color: C.muted, fontSize: '14px', cursor: 'pointer',
                     }}
                   >
-                    {t('common.cancel')}
+                    {revision ? t('common.back') : t('common.cancel')}
                   </button>
                   <button
-                    onClick={handleAuthorize}
+                    onClick={() => (revision ? handleAuthorize(revision) : prepararAutorizacion())}
                     disabled={actionStatus === 'building' || actionStatus === 'signing' || actionStatus === 'sending'}
                     className="agent-btn"
                     style={{
@@ -1532,7 +1676,8 @@ export default function AgentsPage() {
                     {actionStatus === 'building' ? t('agents.preparing') :
                      actionStatus === 'signing' ? t('agents.faceId') :
                      actionStatus === 'sending' ? t('agents.sending') :
-                     modal.editAgent ? t('agents.saveChanges') : t('agents.authorize')}
+                     revision ? t('agents.revConfirm') :
+                     t('agents.review')}
                   </button>
                 </div>
               </>
@@ -1551,17 +1696,17 @@ export default function AgentsPage() {
                 <div style={{ padding: '14px', backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '8px', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '12px', color: C.subtle }}>{t('agents.currentTotal')}</span>
-                    <span style={{ fontSize: '12px', color: C.muted }}>{formatEth(modal.agent.perm.totalBudgetWei)} ETH</span>
+                    <span style={{ fontSize: '12px', color: C.muted }}>{formatEthLimit(modal.agent.perm.totalBudgetWei)} ETH</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '12px', color: C.subtle }}>{t('agents.spent')}</span>
-                    <span style={{ fontSize: '12px', color: C.muted }}>{formatEth(modal.agent.perm.totalSpentWei)} ETH</span>
+                    <span style={{ fontSize: '12px', color: C.muted }}>{formatEthDisplay(modal.agent.perm.totalSpentWei)} ETH</span>
                   </div>
                   {fIncrease && parseEthInput(fIncrease) > 0n && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: `1px solid ${C.border}` }}>
                       <span style={{ fontSize: '12px', color: C.subtle }}>{t('agents.newTotal')}</span>
                       <span style={{ fontSize: '12px', color: C.gold }}>
-                        {formatEth(modal.agent.perm.totalBudgetWei + parseEthInput(fIncrease))} ETH
+                        {formatEthLimit(modal.agent.perm.totalBudgetWei + parseEthInput(fIncrease))} ETH
                       </span>
                     </div>
                   )}
