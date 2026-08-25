@@ -239,6 +239,14 @@ export default function SettingsPage() {
   const [bundlerEnabled, setBundlerEnabled] = useState(true)
   const [maxGas, setMaxGas] = useState('')
   const [reloadGuardians, setReloadGuardians] = useState(0)
+  // El contrato rechaza `setGuardians` con una recuperación en marcha
+  // (`require(!recoveryInProgress)`), así que se pregunta antes de ofrecer el
+  // botón: enseñar el error después de la firma cuesta un prompt de passkey.
+  // `null` = no se pudo leer, que no es lo mismo que "no hay ninguna": con la
+  // duda no se ofrece rotar, pero tampoco se le dice al usuario que hay una
+  // recuperación en marcha cuando lo que falló fue el RPC.
+  const [recoveryInProgress, setRecoveryInProgress] = useState<boolean | null>(null)
+  const [rotatingGuardians, setRotatingGuardians] = useState(false)
 
   // Every slot readable and empty — the wallet is deployed but its recovery was never
   // registered. A failed read leaves nulls instead, and must not be mistaken for this.
@@ -297,13 +305,19 @@ export default function SettingsPage() {
         functionName: 'guardians',
         args: [2n],
       }).catch(() => null),
+      publicClient.readContract({
+        address: walletAddress as Address,
+        abi: BVCC_WALLET_ABI,
+        functionName: 'recoveryInProgress',
+      }).catch(() => null),
     ])
-      .then(([g0, g1, g2]) => {
+      .then(([g0, g1, g2, inProgress]) => {
         setGuardians([
           g0 as string | null,
           g1 as string | null,
           g2 as string | null,
         ])
+        setRecoveryInProgress(inProgress as boolean | null)
       })
       .catch(() => setChainError(true))
       .finally(() => setLoadingChain(false))
@@ -518,6 +532,72 @@ export default function SettingsPage() {
                   credentialId={credentialId}
                   onDone={() => setReloadGuardians(n => n + 1)}
                 />
+              )}
+
+              {/* ── Rotación ──────────────────────────────────────────────────
+                  Un guardián cuya clave se pierde, o que deja de ser de fiar, era
+                  permanente durante toda la vida de la wallet: el contrato sí deja
+                  reemplazarlos, pero la app no llamaba a `setGuardians` en ningún
+                  sitio más que en el alta.
+
+                  Pero SOLO desde V4. En V3 esto no existe de dos formas a la vez:
+                  su `setGuardians` no lleva el parámetro del credentialId (así que
+                  la llamada de la app no encuentra selector y se va al fallback), y
+                  aunque lo llevara, el contrato rechaza volver a fijarlos. Ofrecer
+                  el botón ahí es cobrar gas por algo que no puede salir bien —
+                  medido en Arbitrum One el 2026-08-25, con gas pagado. */}
+              {!loadingChain && !guardiansUnset && walletAddress && guardians.every(Boolean) && (
+                identity.isCurrent === false ? (
+                  <div style={{ padding: '14px 20px', borderTop: `1px solid rgba(255,255,255,0.04)` }}>
+                    <p style={{ margin: 0, fontSize: '11.5px', color: COLORS.textSubtle, lineHeight: 1.6 }}>
+                      {t('settings.guardianRotateOldGeneration')
+                        .replace('{generation}', identity.generation ?? '—')}
+                    </p>
+                  </div>
+                ) : identity.isCurrent !== true ? null
+                : recoveryInProgress === true ? (
+                  <div style={{ padding: '14px 20px', borderTop: `1px solid rgba(255,255,255,0.04)` }}>
+                    <p style={{ margin: 0, fontSize: '11.5px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
+                      ⚠ {t('settings.guardianRotateBlocked')}
+                    </p>
+                    <button
+                      onClick={() => router.push('/wallet/cancel-recovery')}
+                      style={{
+                        marginTop: '10px', padding: '8px 12px',
+                        background: 'rgba(255,255,255,0.04)', border: `1px solid ${COLORS.border}`,
+                        borderRadius: '5px', color: COLORS.textSecondary,
+                        fontSize: '12px', cursor: 'pointer',
+                      }}
+                    >
+                      {t('settings.guardianRotateBlockedCta')}
+                    </button>
+                  </div>
+                ) : recoveryInProgress === false ? (
+                  rotatingGuardians ? (
+                    <GuardianSetup
+                      mode="rotate"
+                      walletAddress={walletAddress as Address}
+                      credentialId={credentialId}
+                      currentGuardians={guardians}
+                      onCancel={() => setRotatingGuardians(false)}
+                      onDone={() => { setRotatingGuardians(false); setReloadGuardians(n => n + 1) }}
+                    />
+                  ) : (
+                    <div style={{ padding: '12px 20px', borderTop: `1px solid rgba(255,255,255,0.04)` }}>
+                      <button
+                        onClick={() => setRotatingGuardians(true)}
+                        style={{
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.04)', border: `1px solid ${COLORS.border}`,
+                          borderRadius: '5px', color: COLORS.textSecondary,
+                          fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+                        }}
+                      >
+                        {t('settings.guardianRotateCta')}
+                      </button>
+                    </div>
+                  )
+                ) : null
               )}
               <div style={{
                 padding: '12px 20px',

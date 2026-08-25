@@ -27,6 +27,10 @@ export const appshell = {
       guardianContinue: 'Continue',
       guardianErrorInvalid: 'All 3 addresses must be valid Ethereum addresses (0x...)',
       guardianErrorNotUnique: 'All 3 guardian addresses must be different',
+      guardianErrorZero: 'The zero address (0x000…000) cannot be a guardian — the contract rejects it.',
+      guardianErrorSelf: 'A guardian cannot be this wallet itself: approving a recovery would need the passkey that the recovery exists to replace.',
+      guardianWarnConnected: 'One of the guardians is the wallet you have connected right now. That is fine, but if it lives on the same device as your passkey, losing the device loses both.',
+      guardiansEditableNote: 'Check them character by character. You can change them later from Settings, but only with your passkey — if you lose it, these three addresses are the only way back in.',
 
       // Confirm step
       confirmTitle: 'Deploy wallet',
@@ -114,6 +118,10 @@ export const appshell = {
       guardianContinue: 'Continuar',
       guardianErrorInvalid: 'Las 3 direcciones deben ser addresses Ethereum válidas (0x...)',
       guardianErrorNotUnique: 'Las 3 direcciones guardian deben ser diferentes',
+      guardianErrorZero: 'La dirección cero (0x000…000) no puede ser guardián — el contrato la rechaza.',
+      guardianErrorSelf: 'Un guardián no puede ser esta misma wallet: aprobar una recuperación exigiría la passkey que la recuperación viene a sustituir.',
+      guardianWarnConnected: 'Uno de los guardianes es la wallet que tienes conectada ahora mismo. Es válido, pero si vive en el mismo dispositivo que tu passkey, perder el dispositivo pierde las dos cosas.',
+      guardiansEditableNote: 'Revísalas carácter a carácter. Podrás cambiarlas más adelante desde Ajustes, pero solo con tu passkey — si la pierdes, estas tres direcciones son la única vuelta atrás.',
 
       // Confirm step
       confirmTitle: 'Desplegar wallet',

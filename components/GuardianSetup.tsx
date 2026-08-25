@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createPublicClient, http, encodeFunctionData, isAddress, type Address } from 'viem'
+import { createPublicClient, http, encodeFunctionData, type Address } from 'viem'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
+import { validateGuardians } from '@/lib/guardianValidation'
 import { credentialIdToBytes, discoverCredentialId, saveCredential, WrongPasskeyError } from '@/lib/webauthn'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
@@ -25,28 +26,45 @@ const SIGNER_ABI = [{
 }] as const
 
 /**
- * Recovery setup for a wallet that was deployed but never configured.
+ * Guardian registration, in its two shapes.
  *
- * The creation flow is two transactions — the factory deploys, then a passkey-signed
- * self-call registers the guardians — and only the first one is paid for by the connected
- * EOA. If the second never lands (passkey unavailable, wallet out of gas, tab closed) the
- * wallet works but has no way to rotate its owner, and nothing in the UI used to offer a
- * retry. This is that retry.
+ * `setup` — a wallet that was deployed but never configured. The creation flow is two
+ * transactions — the factory deploys, then a passkey-signed self-call registers the
+ * guardians — and only the first one is paid for by the connected EOA. If the second never
+ * lands (passkey unavailable, wallet out of gas, tab closed) the wallet works but has no
+ * way to rotate its owner, and nothing in the UI used to offer a retry. This is that retry.
+ *
+ * `rotate` — replacing guardians that are already set. The contract has always allowed it
+ * (`setGuardians` is not once-only; it refuses only while a recovery is in flight), but the
+ * app exposed no way to call it, so a guardian who lost their key, left the company or
+ * turned hostile was permanent for the life of the wallet and the only remedy was to move
+ * the funds to a new one. Same form, same validation, different consequence — hence the
+ * explicit confirmation.
  */
 export default function GuardianSetup({
-  walletAddress, credentialId, onDone,
+  walletAddress, credentialId, onDone, mode = 'setup', currentGuardians, onCancel,
 }: {
   walletAddress: Address
   credentialId: string | null
   onDone: () => void
+  mode?: 'setup' | 'rotate'
+  /** Rotation prefill: what is on-chain right now, so a single swap is a one-field edit. */
+  currentGuardians?: readonly (string | null)[]
+  onCancel?: () => void
 }) {
+  const rotating = mode === 'rotate'
   const { network } = useNetwork()
   const { t } = useI18n()
   const submitUserOp = useSubmitUserOp()
 
-  const [guardians, setGuardians] = useState<[string, string, string]>(['', '', ''])
+  const [guardians, setGuardians] = useState<[string, string, string]>(
+    rotating && currentGuardians?.length === 3
+      ? [currentGuardians[0] ?? '', currentGuardians[1] ?? '', currentGuardians[2] ?? '']
+      : ['', '', ''],
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rotateConfirmed, setRotateConfirmed] = useState(false)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [underfunded, setUnderfunded] = useState(false)
   // Recovered from the authenticator when localStorage has no pointer to the passkey.
@@ -83,6 +101,9 @@ export default function GuardianSetup({
   // Whatever the creation flow saved before it failed, so the user does not have to dig
   // the three addresses out again.
   useEffect(() => {
+    // Al rotar, lo que vale es lo que dice la cadena, no lo que dejó escrito un
+    // alta anterior en este navegador.
+    if (rotating) return
     for (const key of ['bvcc_pending_guardians', 'bvcc_guardians']) {
       try {
         const saved = JSON.parse(localStorage.getItem(key) || 'null')
@@ -95,7 +116,7 @@ export default function GuardianSetup({
         }
       } catch { /* corrupt entry: fall through to the next key */ }
     }
-  }, [])
+  }, [rotating])
 
   // setGuardians travels as a UserOp, and the prefund comes out of the wallet itself — a
   // freshly deployed wallet holding nothing fails validation with AA21 before the call
@@ -108,12 +129,11 @@ export default function GuardianSetup({
     return () => { cancelled = true }
   }, [walletAddress, network.chainId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const check = validateGuardians(guardians, { walletAddress })
+
   async function handleSubmit() {
     if (!activeCredentialId) { setError(t('settings.guardianSetupNoCredential')); return }
-    if (!guardians.every(g => isAddress(g))) { setError(t('appshell.guardianErrorInvalid')); return }
-    if (new Set(guardians.map(g => g.toLowerCase())).size !== 3) {
-      setError(t('appshell.guardianErrorNotUnique')); return
-    }
+    if (check.errorKey) { setError(t(check.errorKey)); return }
 
     setError(null)
     setBusy(true)
@@ -144,7 +164,7 @@ export default function GuardianSetup({
   if (txHash) {
     return (
       <div style={{ padding: '14px 20px', fontSize: '12px', color: '#68d391', lineHeight: 1.6 }}>
-        {t('settings.guardianSetupDone')}
+        {t(rotating ? 'settings.guardianRotateDone' : 'settings.guardianSetupDone')}
       </div>
     )
   }
@@ -152,10 +172,10 @@ export default function GuardianSetup({
   return (
     <div style={{ padding: '14px 20px', borderTop: `1px solid rgba(255,255,255,0.04)` }}>
       <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 600, color: COLORS.gold }}>
-        {t('settings.guardianSetupTitle')}
+        {t(rotating ? 'settings.guardianRotateTitle' : 'settings.guardianSetupTitle')}
       </p>
       <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
-        {t('settings.guardianSetupDesc')}
+        {t(rotating ? 'settings.guardianRotateDesc' : 'settings.guardianSetupDesc')}
       </p>
 
       {underfunded && (
@@ -191,6 +211,31 @@ export default function GuardianSetup({
         </p>
       )}
 
+      {/* El error se enseña al pulsar; el aviso, mientras se escribe: no bloquea
+          nada, y avisar después de firmar no serviría de nada. */}
+      {!error && check.warningKey && (
+        <p style={{ margin: '4px 0 10px', fontSize: '11.5px', color: COLORS.warn, lineHeight: 1.6 }}>
+          ⚠ {t(check.warningKey)}
+        </p>
+      )}
+
+      {rotating && (
+        <label style={{
+          display: 'flex', alignItems: 'flex-start', gap: '8px',
+          margin: '4px 0 10px', fontSize: '11.5px', color: COLORS.textSecondary,
+          lineHeight: 1.5, cursor: 'pointer',
+        }}>
+          <input
+            type="checkbox"
+            checked={rotateConfirmed}
+            onChange={e => setRotateConfirmed(e.target.checked)}
+            disabled={busy}
+            style={{ marginTop: '2px', accentColor: COLORS.gold, flexShrink: 0 }}
+          />
+          {t('settings.guardianRotateConfirm')}
+        </label>
+      )}
+
       {!activeCredentialId && (
         <>
           <p style={{ margin: '4px 0 8px', fontSize: '11.5px', color: COLORS.textSecondary, lineHeight: 1.6 }}>
@@ -213,16 +258,34 @@ export default function GuardianSetup({
 
       <button
         onClick={handleSubmit}
-        disabled={busy || !activeCredentialId}
+        disabled={busy || !activeCredentialId || (rotating && !rotateConfirmed)}
         style={{
           width: '100%', padding: '10px', marginTop: '4px',
-          background: busy || !activeCredentialId ? 'rgba(212,175,55,0.35)' : COLORS.gold,
+          background: busy || !activeCredentialId || (rotating && !rotateConfirmed)
+            ? 'rgba(212,175,55,0.35)' : COLORS.gold,
           border: 'none', borderRadius: '6px', color: '#06080f',
           fontSize: '13px', fontWeight: 600, cursor: busy ? 'default' : 'pointer',
         }}
       >
-        {busy ? t('settings.guardianSetupSigning') : t('settings.guardianSetupCta')}
+        {busy
+          ? t('settings.guardianSetupSigning')
+          : t(rotating ? 'settings.guardianRotateCtaSubmit' : 'settings.guardianSetupCta')}
       </button>
+
+      {rotating && onCancel && (
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          style={{
+            width: '100%', padding: '9px', marginTop: '8px',
+            background: 'transparent', border: `1px solid ${COLORS.border}`,
+            borderRadius: '6px', color: COLORS.textSecondary,
+            fontSize: '12px', cursor: busy ? 'default' : 'pointer',
+          }}
+        >
+          {t('settings.guardianRotateClose')}
+        </button>
+      )}
     </div>
   )
 }

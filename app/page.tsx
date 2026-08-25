@@ -13,6 +13,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react'
 import { registerWebAuthn, saveCredential, hasCredential, credentialIdToBytes } from '@/lib/webauthn'
 import { getWalletAddress, getAgentWalletAddress, getCredentialIdFromChain } from '@/lib/wallet'
+import { validateGuardians, ZERO_ADDRESS } from '@/lib/guardianValidation'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from '@/lib/abis'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
@@ -101,8 +102,15 @@ export default function Home() {
 
           setRegData({ pubKeyX: BigInt(qx), pubKeyY: BigInt(qy), credentialId: stored.credentialId })
           setSelectedWalletType(wType === 1 ? 'agent' : 'standard')
-          if (g.every(Boolean)) setGuardians([g[0]!, g[1]!, g[2]!])
-          setStep(g.every(Boolean) ? 'confirm' : 'guardians')
+          // Una wallet cuyos guardianes nunca se registraron devuelve tres
+          // direcciones cero, que son cadenas y por tanto "truthy": se daban por
+          // buenas y la migración saltaba a confirmar con tres ceros dentro,
+          // saltándose el paso —y la validación— del formulario. El
+          // `setGuardians` de después revertiría con InvalidGuardian, ya con el
+          // despliegue pagado.
+          const puestos = g.every(x => x && x.toLowerCase() !== ZERO_ADDRESS)
+          if (puestos) setGuardians([g[0]!, g[1]!, g[2]!])
+          setStep(puestos ? 'confirm' : 'guardians')
         } catch {
           setStep('access')
         }
@@ -136,6 +144,27 @@ export default function Home() {
   const { isLoading: isTxConfirming, isSuccess: isTxConfirmed } =
     useWaitForTransactionReceipt({ hash: deployTxHash })
   const { sendTransactionAsync } = useSendTransaction()
+
+  // La dirección que va a tener esta wallet: sale del par de claves, así que se
+  // conoce antes de desplegar. Sirve para lo único que el contrato no puede
+  // comprobar por su cuenta — que nadie se ponga a sí mismo de guardián.
+  const [futureAddress, setFutureAddress] = useState<Address | null>(null)
+  useEffect(() => {
+    if (!regData) return
+    let cancelled = false
+    const resolver = selectedWalletType === 'agent'
+      ? getAgentWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+      : getWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+    resolver
+      .then(addr => { if (!cancelled) setFutureAddress(addr) })
+      .catch(() => { /* sin ella se pierde un aviso, no el alta */ })
+    return () => { cancelled = true }
+  }, [regData, selectedWalletType, network.chainId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const guardianCheck = validateGuardians(guardians, {
+    walletAddress: futureAddress,
+    connectedAddress,
+  })
 
   // What the wallet will need for its own first signature, shown on the confirm screen so
   // the second MetaMask prompt is expected rather than a surprise.
@@ -268,10 +297,7 @@ export default function Home() {
   }
 
   function handleGuardiansNext() {
-    const valid = guardians.every(g => isAddress(g))
-    const unique = new Set(guardians.map(g => g.toLowerCase())).size === 3
-    if (!valid) { setError(t('appshell.guardianErrorInvalid')); return }
-    if (!unique) { setError(t('appshell.guardianErrorNotUnique')); return }
+    if (guardianCheck.errorKey) { setError(t(guardianCheck.errorKey)); return }
     setError(null)
     resetDeploy()
     setStep('confirm')
@@ -279,6 +305,11 @@ export default function Home() {
 
   async function handleDeploy() {
     if (!regData) return
+    // Se vuelve a validar aquí porque a la pantalla de confirmación se puede
+    // llegar sin pasar por el formulario (la migración entra directa) y porque
+    // los guardianes se pueden editar en ella. Desplegar primero y descubrirlo
+    // en el `setGuardians` de después deja el gas pagado y la wallet a medias.
+    if (guardianCheck.errorKey) { setError(t(guardianCheck.errorKey)); return }
     // V4: the factory only deploys. Guardians and the credential are registered
     // afterwards, in a passkey-signed self-call — a squatter who deploys someone else's
     // address is left with a shell it cannot configure.
@@ -561,6 +592,18 @@ export default function Home() {
           </div>
 
           {error && <p style={{ fontSize: '12px', color: C.error, marginBottom: '16px' }}>{error}</p>}
+
+          {/* El aviso sale mientras se escribe; el error, al pulsar. Poner a tu
+              propia cuenta de guardián es legítimo, así que se avisa y ya. */}
+          {!error && guardianCheck.warningKey && (
+            <p style={{ fontSize: '11.5px', color: '#e6b800', marginBottom: '16px', lineHeight: '1.6' }}>
+              ⚠ {t(guardianCheck.warningKey)}
+            </p>
+          )}
+
+          <p style={{ fontSize: '11.5px', color: C.subtle, marginBottom: '16px', lineHeight: '1.6' }}>
+            {t('appshell.guardiansEditableNote')}
+          </p>
 
           <button
             onClick={handleGuardiansNext}

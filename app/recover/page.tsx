@@ -11,6 +11,7 @@ import {
   useReadContracts,
 } from 'wagmi'
 import { registerWebAuthn, saveCredential } from '@/lib/webauthn'
+import { coordToHex, isValidP256Point, parseCoord } from '@/lib/p256'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
@@ -31,19 +32,6 @@ const C = {
 
 function shortAddr(a: string) {
   return a.length >= 10 ? `${a.slice(0, 6)}...${a.slice(-4)}` : a
-}
-
-function bigintToHex(n: bigint): string {
-  return '0x' + n.toString(16).padStart(64, '0')
-}
-
-function hexToBigint(hex: string): bigint | null {
-  try {
-    const clean = hex.trim().startsWith('0x') ? hex.trim() : '0x' + hex.trim()
-    return BigInt(clean)
-  } catch {
-    return null
-  }
 }
 
 function formatCountdown(secs: number): string {
@@ -71,6 +59,9 @@ export default function RecoverPage() {
   const [newXInput, setNewXInput] = useState('')
   const [newYInput, setNewYInput] = useState('')
   const [guardianError, setGuardianError] = useState<string | null>(null)
+  // El segundo guardián aprobaba sin ver hacia qué clave. Esta casilla existe
+  // para que aprobar sea un acto y no un reflejo.
+  const [verifiedPending, setVerifiedPending] = useState(false)
 
   // Countdown ticker
   const [now, setNow] = useState(Math.floor(Date.now() / 1000))
@@ -192,8 +183,8 @@ export default function RecoverPage() {
       const label = 'BVCC-recovery-' + Array.from(crypto.getRandomValues(new Uint8Array(3)))
         .map(b => b.toString(16).padStart(2, '0')).join('')
       const { pubKeyX, pubKeyY, credentialId } = await registerWebAuthn(label)
-      const x = bigintToHex(pubKeyX)
-      const y = bigintToHex(pubKeyY)
+      const x = coordToHex(pubKeyX)
+      const y = coordToHex(pubKeyY)
       setNewKeyData({ x, y, credentialId })
       setNewXInput(x)
       setNewYInput(y)
@@ -220,9 +211,18 @@ export default function RecoverPage() {
 
   function handleInitiate() {
     if (!walletAddress) return
-    const newX = hexToBigint(newXInput)
-    const newY = hexToBigint(newYInput)
-    if (!newX || !newY) { setGuardianError(t('recovery.invalidCoords')); return }
+    const newX = parseCoord(newXInput)
+    const newY = parseCoord(newYInput)
+    if (newX === null || newY === null) { setGuardianError(t('recovery.invalidCoords')); return }
+    // La única barrera que hay antes del punto de no retorno: el contrato valida
+    // la curva en `executeRecovery`, con las dos aprobaciones ya dadas, y de ahí
+    // no se sale sin la passkey perdida. Ver `lib/p256.ts`.
+    if (!isValidP256Point(newX, newY)) { setGuardianError(t('recovery.coordsNotOnCurve')); return }
+    // Si esta misma sesión generó una clave, un valor distinto es un error de
+    // copia — o alguien pegando otra clave en el sitio equivocado.
+    if (newKeyData && (coordToHex(newX) !== newKeyData.x || coordToHex(newY) !== newKeyData.y)) {
+      setGuardianError(t('recovery.coordsMismatchGenerated')); return
+    }
     setGuardianError(null)
     resetInitiate()
     writeInitiate({
@@ -290,6 +290,63 @@ export default function RecoverPage() {
     borderRadius: '6px', color: C.muted,
     fontSize: '13px', cursor: 'pointer',
   }
+
+  // ── La clave que este recovery instalaría ──────────────────────────────────
+  // `pendingNewSignerX/Y` se leían de la cadena y no se pintaban en ningún sitio:
+  // quien inicia las escribe, quien aprueba veía un párrafo y un botón. Eso
+  // anula el 2-de-3 — un guardián comprometido inicia hacia SU clave y el
+  // segundo no tiene con qué darse cuenta.
+  const pendingKey = pendingX !== undefined && pendingY !== undefined && (pendingX > 0n || pendingY > 0n)
+    ? { x: coordToHex(pendingX), y: coordToHex(pendingY) }
+    : null
+
+  // Si este dispositivo generó una clave, comparar sale gratis y ahorra el
+  // cotejo a ojo de 128 dígitos hexadecimales.
+  const pendingMatchesGenerated = pendingKey && newKeyData
+    ? pendingKey.x === newKeyData.x && pendingKey.y === newKeyData.y
+    : null
+
+  const pendingKeyPanel = pendingKey && (
+    <div style={{
+      padding: '12px',
+      backgroundColor: C.goldDim,
+      border: `1px solid ${C.goldBorder}`,
+      borderRadius: '6px',
+      marginBottom: '14px',
+    }}>
+      <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: '600', color: C.gold }}>
+        {t('recovery.pendingKeyTitle')}
+      </p>
+      <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: C.muted, lineHeight: '1.6' }}>
+        {t('recovery.pendingKeyDesc')}
+      </p>
+      {(['x', 'y'] as const).map(field => (
+        <div key={field} style={{ marginBottom: '8px' }}>
+          <span style={{ fontSize: '10px', color: C.subtle, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {field === 'x' ? t('recovery.coordX') : t('recovery.coordY')}
+          </span>
+          <div style={{
+            marginTop: '4px', padding: '8px 10px',
+            backgroundColor: '#080c14',
+            border: `1px solid ${C.border}`,
+            borderRadius: '5px',
+            fontSize: '10px', fontFamily: 'monospace',
+            color: C.text, wordBreak: 'break-all', lineHeight: '1.6',
+          }}>
+            {pendingKey[field]}
+          </div>
+        </div>
+      ))}
+      {pendingMatchesGenerated !== null && (
+        <p style={{
+          margin: '8px 0 0', fontSize: '11.5px', lineHeight: '1.5',
+          color: pendingMatchesGenerated ? C.success : C.error,
+        }}>
+          {pendingMatchesGenerated ? t('recovery.pendingKeyMatches') : t('recovery.pendingKeyDiffers')}
+        </p>
+      )}
+    </div>
+  )
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -402,6 +459,11 @@ export default function RecoverPage() {
             </div>
 
           </div>
+
+          {/* Para quien no es guardián — el propietario, sobre todo: ver hacia qué
+              clave va un recovery que no inició él es lo que le dice si tiene que
+              cancelarlo. Al guardián se le enseña abajo, pegado a su botón. */}
+          {!connectedIsGuardian && pendingKeyPanel}
         </>
       )}
 
@@ -521,6 +583,8 @@ export default function RecoverPage() {
                   .replace('{addr}', shortAddr(connectedAddress))}
               </p>
 
+              {pendingKeyPanel}
+
               {/* ── Idle: iniciar recovery ── */}
               {stateIdle && (
                 <>
@@ -577,10 +641,23 @@ export default function RecoverPage() {
                       {approveConfirmed && <span style={{ color: C.success }}> {t('recovery.txConfirmed')}</span>}
                     </p>
                   )}
+                  <label style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '8px',
+                    margin: '0 0 12px', fontSize: '11.5px', color: C.muted,
+                    lineHeight: '1.5', cursor: 'pointer',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={verifiedPending}
+                      onChange={e => setVerifiedPending(e.target.checked)}
+                      style={{ marginTop: '2px', accentColor: C.gold, flexShrink: 0 }}
+                    />
+                    {t('recovery.pendingVerifiedCheckbox')}
+                  </label>
                   <button
                     onClick={handleApprove}
-                    disabled={isApproving || approveConfirming}
-                    style={{ ...btnGold, width: '100%', opacity: isApproving || approveConfirming ? 0.6 : 1, cursor: isApproving ? 'wait' : 'pointer' }}
+                    disabled={!verifiedPending || isApproving || approveConfirming}
+                    style={{ ...btnGold, width: '100%', opacity: !verifiedPending || isApproving || approveConfirming ? 0.5 : 1, cursor: !verifiedPending ? 'not-allowed' : isApproving ? 'wait' : 'pointer' }}
                   >
                     {isApproving ? t('recovery.waitingSignature') : approveConfirming ? t('recovery.confirming') : t('recovery.approveRecovery')}
                   </button>

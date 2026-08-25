@@ -53,6 +53,8 @@ export const recovery = {
       newKeyX: 'New key X (newX)',
       newKeyY: 'New key Y (newY)',
       invalidCoords: 'Invalid coordinates (must be hex 0x…)',
+      coordsNotOnCurve: 'These are not a valid P-256 public key — a digit is wrong or missing. Do not send them: the contract only checks the curve on the last step, and by then a recovery started with a bad key can no longer be finished, restarted, or cancelled without the passkey you are trying to replace.',
+      coordsMismatchGenerated: 'These are not the coordinates of the passkey generated on this device. If you are starting a recovery for someone else\'s key, clear the generated one first with "Generate another".',
       initiateRecovery: 'Initiate recovery',
       waitingSignature: 'Waiting for signature…',
       confirming: 'Confirming…',
@@ -60,6 +62,13 @@ export const recovery = {
       // In-progress state (guardian)
       approveDesc: 'A recovery is already in progress. Approve it to reach the 2/2 threshold.',
       approveRecovery: 'Approve recovery',
+
+      // The key the pending recovery would install (shown to every guardian)
+      pendingKeyTitle: 'Key this recovery would install',
+      pendingKeyDesc: 'Once two guardians approve and the timelock expires, this key becomes the wallet owner. Whoever holds it controls the wallet and everything in it. Check both values with the owner over a channel you trust — a phone call, in person — and not over whatever sent them to you.',
+      pendingKeyMatches: '✓ Matches the passkey generated on this device',
+      pendingKeyDiffers: '⚠ Does NOT match the passkey generated on this device',
+      pendingVerifiedCheckbox: 'I checked these coordinates with the owner through another channel',
 
       // Timelock active
       timelockActive: 'Timelock active — {time} remaining',
@@ -148,6 +157,8 @@ export const recovery = {
       newKeyX: 'Nueva clave X (newX)',
       newKeyY: 'Nueva clave Y (newY)',
       invalidCoords: 'Coordenadas inválidas (deben ser hex 0x...)',
+      coordsNotOnCurve: 'Esto no es una clave pública P-256 válida — falta un dígito o hay uno cambiado. No las envíes: el contrato solo comprueba la curva en el último paso, y para entonces un recovery iniciado con una clave mala ya no se puede terminar, ni reiniciar, ni cancelar sin la passkey que estás intentando sustituir.',
+      coordsMismatchGenerated: 'Estas no son las coordenadas de la passkey generada en este dispositivo. Si estás iniciando el recovery de la clave de otra persona, borra antes la generada con «Generar otra».',
       initiateRecovery: 'Iniciar recovery',
       waitingSignature: 'Esperando firma...',
       confirming: 'Confirmando...',
@@ -155,6 +166,13 @@ export const recovery = {
       // In-progress state (guardian)
       approveDesc: 'Ya hay un recovery en curso. Apruébalo para alcanzar el umbral de 2/2.',
       approveRecovery: 'Aprobar recovery',
+
+      // The key the pending recovery would install (shown to every guardian)
+      pendingKeyTitle: 'Clave que instalaría este recovery',
+      pendingKeyDesc: 'Cuando dos guardianes aprueben y expire el timelock, esta clave pasa a ser la dueña de la wallet. Quien la tenga controla la wallet y todo lo que hay dentro. Verifica los dos valores con el propietario por un canal del que te fíes — una llamada, en persona — y no por el mismo por el que te llegaron.',
+      pendingKeyMatches: '✓ Coincide con la passkey generada en este dispositivo',
+      pendingKeyDiffers: '⚠ NO coincide con la passkey generada en este dispositivo',
+      pendingVerifiedCheckbox: 'He verificado estas coordenadas con el propietario por otro canal',
 
       // Timelock active
       timelockActive: 'Timelock activo — {time} restantes',
