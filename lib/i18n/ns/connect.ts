@@ -11,7 +11,6 @@ export const connect = {
       errNoGas: 'The wallet does not have enough ETH to pay for this operation.',
       errMoreGas: 'The operation needed more gas than estimated. Try again.',
       errWrongChain: 'The dApp asked for a network this wallet does not support.',
-      unknownDapp: 'Unknown dApp',
       known: 'known',
       unknownTarget: 'unknown',
       unlimited: 'Unlimited',
@@ -39,6 +38,30 @@ export const connect = {
       doneTitle: 'Operation completed',
       doneNote: 'Confirmed on-chain. The dApp has already been notified — you can close this whenever.',
       doneBtn: 'Done',
+      // who is asking (WalletConnect verifyContext)
+      unknownOrigin: 'unknown origin',
+      originValid: 'verified domain',
+      originUnverified: 'unverified',
+      originInvalid: 'DOMAIN DOES NOT MATCH',
+      originScam: 'REPORTED AS A SCAM',
+      warnOriginInvalid: 'The request does not come from the domain this dApp claims. This is what a phishing site looks like.',
+      warnOriginScam: 'WalletConnect has this domain on its list of reported scams.',
+
+      // signature panels
+      signPanelTitle: 'What you are signing',
+      signType: 'Type',
+      signApp: 'App',
+      signContract: 'Contract',
+      messagePanelTitle: 'Message',
+
+      // risk acknowledgement
+      ackCalls: 'This call includes dangerous permissions (approval or transfer to an unknown destination, or unlimited).',
+      ackCallsBatch: 'This operation includes one or more actions with dangerous permissions (approval or transfer to an unknown destination, or unlimited).',
+      ackSignature: 'This signature lets someone this wallet does not know move your tokens.',
+      ackMessage: 'What you are being asked to sign is not a readable message.',
+      ackOrigin: 'It could not be verified who is asking for this signature.',
+      ackAssume: 'I understand and accept the risk.',
+
       // tx detail labels
       to: 'To',
       value: 'Value',
@@ -71,7 +94,6 @@ export const connect = {
       errNoGas: 'La wallet no tiene suficiente ETH para pagar esta operación.',
       errMoreGas: 'La operación necesitó más gas del estimado. Reinténtala.',
       errWrongChain: 'La dApp pidió una red que esta wallet no soporta.',
-      unknownDapp: 'dApp desconocida',
       known: 'conocido',
       unknownTarget: 'desconocido',
       unlimited: 'Ilimitado',
@@ -99,6 +121,30 @@ export const connect = {
       doneTitle: 'Operación completada',
       doneNote: 'Confirmada en la cadena. La dApp ya está avisada: puedes cerrar cuando quieras.',
       doneBtn: 'Hecho',
+      // who is asking (WalletConnect verifyContext)
+      unknownOrigin: 'origen desconocido',
+      originValid: 'dominio verificado',
+      originUnverified: 'sin verificar',
+      originInvalid: 'EL DOMINIO NO COINCIDE',
+      originScam: 'DENUNCIADO COMO FRAUDE',
+      warnOriginInvalid: 'La petición no viene del dominio que dice esta dApp. Así es exactamente como se ve una página de phishing.',
+      warnOriginScam: 'WalletConnect tiene este dominio en su lista de fraudes denunciados.',
+
+      // signature panels
+      signPanelTitle: 'Qué estás firmando',
+      signType: 'Tipo',
+      signApp: 'App',
+      signContract: 'Contrato',
+      messagePanelTitle: 'Mensaje',
+
+      // risk acknowledgement
+      ackCalls: 'Esta llamada incluye permisos peligrosos (aprobación o transferencia a un destino desconocido, o ilimitada).',
+      ackCallsBatch: 'Esta operación incluye una o más acciones con permisos peligrosos (aprobación o transferencia a un destino desconocido, o ilimitada).',
+      ackSignature: 'Esta firma permite mover tus tokens a alguien que esta wallet no conoce.',
+      ackMessage: 'Lo que te piden firmar no es un mensaje legible.',
+      ackOrigin: 'No se ha podido verificar quién pide esta firma.',
+      ackAssume: 'Lo entiendo y asumo el riesgo.',
+
       // tx detail labels
       to: 'Para',
       value: 'Valor',

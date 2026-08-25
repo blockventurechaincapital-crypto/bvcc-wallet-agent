@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPublicClient, http, getAddress, type Address, type Hex } from 'viem'
 import { useNetwork } from './NetworkContext'
 import { TOPIC } from './defiContracts'
+import { isUnlimited } from './allowanceLimits'
 
 export type Allowance = {
   kind: 'erc20' | 'nft'
@@ -14,7 +15,6 @@ export type Allowance = {
   unlimited: boolean
 }
 
-const UNLIMITED_THRESHOLD = 1n << 128n
 const ERC20 = [
   { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -72,7 +72,7 @@ export function useAllowances(owner: string | null) {
           let symbol = `${token.slice(0, 6)}…`, decimals = 18
           try { symbol = await client.readContract({ address: token, abi: ERC20, functionName: 'symbol' }) as string } catch { /* token raro */ }
           try { decimals = Number(await client.readContract({ address: token, abi: ERC20, functionName: 'decimals' })) } catch { /* default 18 */ }
-          out.push({ kind: 'erc20', token, spender, symbol, decimals, amount, unlimited: amount >= UNLIMITED_THRESHOLD })
+          out.push({ kind: 'erc20', token, spender, symbol, decimals, amount, unlimited: isUnlimited(amount) })
         } catch { /* token ilegible → omitir */ }
       }))
 

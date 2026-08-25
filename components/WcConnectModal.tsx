@@ -10,6 +10,10 @@ import {
   type WcCall, type CallRisk, type RiskLevel,
   type Tr,
 } from '@/lib/wcCalls'
+import { isUnlimited } from '@/lib/allowanceLimits'
+import {
+  analyzeTypedData, analyzeMessage, checkOrigin, type TokenMeta,
+} from '@/lib/wcSignatures'
 import { hashMessage as hashMessage7739, wrapTypedDataSignature } from 'viem/experimental/erc7739'
 import { erc7739TypedDataDigest } from '@/lib/erc7739'
 import type { PendingRequestTypes } from '@walletconnect/types'
@@ -31,6 +35,24 @@ const ERC1271_ABI = [{
   outputs: [{ name: '', type: 'bytes4' }],
 }] as const
 const ERC1271_MAGIC = '0x1626ba7e'
+
+// Saldo del token de un approve: sirve para avisar de una aprobación
+// desproporcionada sin depender de un umbral fijo (ver lib/allowanceLimits.ts).
+const ERC20_BALANCE_ABI = [{
+  name: 'balanceOf',
+  type: 'function',
+  stateMutability: 'view',
+  inputs: [{ name: 'account', type: 'address' }],
+  outputs: [{ name: '', type: 'uint256' }],
+}] as const
+
+// Símbolo y decimales del token de un permiso firmado. Sin esto, "1000000" en un
+// PermitSingle de USDC se enseñaría como 0,000000000001 — un importe que parece
+// inofensivo y son mil dólares.
+const ERC20_META_ABI = [
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
+  { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] },
+] as const
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
@@ -54,11 +76,6 @@ interface WcConnectModalProps {
   onReject: () => void
   walletAddress: string
   credentialId: string | null
-}
-
-function truncateHex(hex: string, maxLen = 32): string {
-  if (!hex || hex.length <= maxLen) return hex
-  return hex.slice(0, maxLen) + '…'
 }
 
 // Color por nivel de riesgo de una call.
@@ -224,10 +241,14 @@ export default function WcConnectModal({
   )
 
   const { method, params } = request.params.request
-  const origin =
-    (request as any).verifyContext?.verified?.origin ||
-    request.params.chainId ||
-    t('connect.unknownDapp')
+  // Quién pide la firma. El relay de WalletConnect ya compara el origen real con
+  // el dominio que la dApp declara: antes se cogía solo el nombre y se tiraba el
+  // veredicto, y sin nombre se pintaba el chainId ('eip155:1') en su hueco — un
+  // dato falso donde debería estar quién te pide firmar.
+  const originCheck = useMemo(
+    () => checkOrigin((request as { verifyContext?: unknown }).verifyContext, t),
+    [request], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   const isTypedData = method === 'eth_signTypedData_v4' || method === 'eth_signTypedData'
   const txData = method === 'eth_sendTransaction' ? params[0] : null
@@ -254,14 +275,91 @@ export default function WcConnectModal({
     try { return { ...c, data: encodeApproveAmount(c, ov) } } catch { return c }
   }), [allCalls, approveOverrides])
 
-  const risks = useMemo(() => effectiveCalls.map((c) => classifyCall(c, known, t)), [effectiveCalls, known])
+  // Saldo del usuario en el token de cada approve, por índice de call. Es la
+  // referencia con la que se decide si una aprobación es desproporcionada; sin
+  // ella el aviso solo puede mirar el umbral fijo.
+  const [approveBalances, setApproveBalances] = useState<Record<number, bigint>>({})
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const out: Record<number, bigint> = {}
+      await Promise.all(allCalls.map(async (c, i) => {
+        const info = getApproveInfo(c)
+        if (!info?.token) return
+        try {
+          out[i] = await publicClient.readContract({
+            address: info.token as Address, abi: ERC20_BALANCE_ABI,
+            functionName: 'balanceOf', args: [walletAddress as Address],
+          }) as bigint
+        } catch { /* token ilegible → se clasifica sin saldo de referencia */ }
+      }))
+      if (!cancelled) setApproveBalances(out)
+    })()
+    return () => { cancelled = true }
+  }, [allCalls, publicClient, walletAddress])
+
+  const risks = useMemo(
+    () => effectiveCalls.map((c, i) => classifyCall(c, known, t, { self: walletAddress, saldoToken: approveBalances[i] })),
+    [effectiveCalls, known, walletAddress, approveBalances], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  const seqMode = method === 'wallet_sendCalls' && !atomicMode
+
+  // ── Lo que se firma sin enviar nada ────────────────────────────────────────
+  // Estas dos vías no pasaban por ninguna clasificación: el typed data se pintaba
+  // recortado a 120 caracteres (que son el bloque `types`, o sea el esquema: el
+  // spender y el importe quedaban fuera) y el mensaje se decodificaba a texto sin
+  // mirar qué traía. No mueven gas, y por eso son la forma más barata de vaciar
+  // una wallet: un PermitSingle es una firma y el gasto viene después.
+  const [sigTokenMeta, setSigTokenMeta] = useState<Record<string, TokenMeta>>({})
+  const typedRisk = useMemo(
+    () => (typedData ? analyzeTypedData(typedData, known, t, { self: walletAddress, meta: sigTokenMeta }) : null),
+    [typedData, known, walletAddress, sigTokenMeta], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const msgRisk = useMemo(
+    () => (signMessage ? analyzeMessage(String(signMessage), t) : null),
+    [signMessage], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // Símbolo y decimales de los tokens del permiso. Se piden por la lista que
+  // devuelve el análisis, no por el objeto entero: así el efecto no se repite
+  // cuando el resultado se recalcula con los metadatos ya puestos.
+  const sigTokens = typedRisk?.tokens.join(',') ?? ''
+  useEffect(() => {
+    if (!sigTokens) return
+    let cancelled = false
+    ;(async () => {
+      const out: Record<string, TokenMeta> = {}
+      await Promise.all(sigTokens.split(',').map(async (addr) => {
+        try {
+          const [symbol, decimals] = await Promise.all([
+            publicClient.readContract({ address: addr as Address, abi: ERC20_META_ABI, functionName: 'symbol' }),
+            publicClient.readContract({ address: addr as Address, abi: ERC20_META_ABI, functionName: 'decimals' }),
+          ])
+          out[addr] = { symbol: String(symbol), decimals: Number(decimals) }
+        } catch { /* token ilegible → el importe sale con los decimales por defecto */ }
+      }))
+      if (!cancelled && Object.keys(out).length) setSigTokenMeta(out)
+    })()
+    return () => { cancelled = true }
+  }, [sigTokens, publicClient])
 
   // ¿Hay que marcar el checkbox de riesgo? En secuencial, según la call actual;
-  // en atómico / tx única, si cualquiera es peligrosa.
-  const seqMode = method === 'wallet_sendCalls' && !atomicMode
-  const needsAck = seqMode
-    ? risks[seqIndex]?.level === 'danger'
-    : risks.some((r) => r.level === 'danger')
+  // en atómico / tx única, si cualquiera es peligrosa. Y ahora también por lo que
+  // se firma y por quién lo pide: cada motivo se enseña, en vez de un texto fijo
+  // que hablaba de aprobaciones aunque el peligro fuera otro.
+  const ackReasons = useMemo(() => {
+    const out: string[] = []
+    const callsDanger = seqMode
+      ? risks[seqIndex]?.level === 'danger'
+      : risks.some((r) => r.level === 'danger')
+    if (callsDanger) out.push(t(seqMode ? 'connect.ackCalls' : 'connect.ackCallsBatch'))
+    if (typedRisk?.level === 'danger') out.push(t('connect.ackSignature'))
+    if (msgRisk?.level === 'danger') out.push(t('connect.ackMessage'))
+    if (originCheck.level === 'danger') out.push(originCheck.warn ?? t('connect.ackOrigin'))
+    return out
+  }, [risks, seqIndex, seqMode, typedRisk, msgRisk, originCheck]) // eslint-disable-line react-hooks/exhaustive-deps
+  const needsAck = ackReasons.length > 0
 
   const isTxMethod = method === 'eth_sendTransaction' || method === 'wallet_sendCalls'
   // Calls que cuentan para el gas sugerido (en secuencial, solo la call actual).
@@ -603,7 +701,7 @@ export default function WcConnectModal({
     if (!info) return null
     const ov = approveOverrides[i]
     const effective = ov ?? info.amount
-    const effectiveLabel = effective >= (1n << 128n)
+    const effectiveLabel = isUnlimited(effective)
       ? t('connect.unlimited')
       : `${formatUnits(effective, info.decimals)} ${info.symbol}`
     const applyCustom = () => {
@@ -712,15 +810,31 @@ export default function WcConnectModal({
               <path d="M8.19 4.88C13.45 -0.38 22.05 -0.38 27.31 4.88L27.93 5.50C28.21 5.78 28.21 6.22 27.93 6.50L25.76 8.67C25.62 8.81 25.39 8.81 25.25 8.67L24.39 7.81C20.77 4.19 14.73 4.19 11.11 7.81L10.19 8.73C10.05 8.87 9.82 8.87 9.68 8.73L7.51 6.56C7.23 6.28 7.23 5.84 7.51 5.56L8.19 4.88ZM31.77 9.38L33.70 11.31C33.98 11.59 33.98 12.03 33.70 12.31L24.51 21.50C24.23 21.78 23.79 21.78 23.51 21.50L17.08 15.07C17.01 15.00 16.89 15.00 16.82 15.07L10.39 21.50C10.11 21.78 9.67 21.78 9.39 21.50L0.20 12.31C-0.08 12.03 -0.08 11.59 0.20 11.31L2.13 9.38C2.41 9.10 2.85 9.10 3.13 9.38L9.56 15.81C9.63 15.88 9.75 15.88 9.82 15.81L16.25 9.38C16.53 9.10 16.97 9.10 17.25 9.38L23.68 15.81C23.75 15.88 23.87 15.88 23.94 15.81L30.37 9.38C30.65 9.10 31.09 9.10 31.37 9.38H31.77Z" fill="rgba(71,101,241,0.8)" />
             </svg>
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#f0f4f8' }}>
               {t('connect.dappRequest')}
             </p>
-            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#4a5568', fontFamily: 'IBM Plex Mono, monospace' }}>
-              {origin}
+            <p style={{ margin: '2px 0 0', fontSize: '11px', color: originCheck.known ? '#7c93b5' : '#4a5568', fontFamily: 'IBM Plex Mono, monospace', wordBreak: 'break-all' }}>
+              {originCheck.origin}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: '10px', color: RISK_COLOR[originCheck.level] }}>
+              {originCheck.level === 'safe' ? '✓' : originCheck.level === 'danger' ? '⛔' : '•'} {originCheck.label}
             </p>
           </div>
         </div>
+
+        {/* El dominio no cuadra o está denunciado: se dice antes que nada más */}
+        {originCheck.warn && (
+          <div style={{
+            padding: '9px 12px', marginBottom: '14px',
+            backgroundColor: 'rgba(252,129,129,0.08)',
+            border: '1px solid rgba(252,129,129,0.3)',
+            borderRadius: '6px',
+            fontSize: '11px', color: '#fc8181', lineHeight: 1.5,
+          }}>
+            ⛔ {originCheck.warn}
+          </div>
+        )}
 
         {/* Method badge */}
         <div style={{
@@ -746,6 +860,11 @@ export default function WcConnectModal({
           fontFamily: 'IBM Plex Mono, monospace',
           color: '#8892a4',
           lineHeight: 1.7,
+          // Un payload EIP-712 puede traer decenas de campos, y ahora se enseñan
+          // todos. El panel scrollea por dentro para que los botones de firmar y
+          // rechazar no se vayan de la pantalla.
+          maxHeight: '44vh',
+          overflowY: 'auto',
         }}>
           {txData && (
             <>
@@ -786,26 +905,76 @@ export default function WcConnectModal({
             </>
           )}
 
-          {signMessage && (
-            <div style={{ wordBreak: 'break-all', color: '#f0f4f8' }}>
-              {(() => {
-                try {
-                  if (signMessage.startsWith('0x')) {
-                    const text = Buffer.from(signMessage.slice(2), 'hex').toString('utf8')
-                    return text || signMessage
-                  }
-                  return signMessage
-                } catch {
-                  return signMessage
-                }
-              })()}
-            </div>
+          {signMessage && msgRisk && (
+            <>
+              <div style={{ color: '#4a5568', fontSize: '10px', marginBottom: '6px' }}>
+                {t('connect.messagePanelTitle')}
+              </div>
+              <div style={{
+                wordBreak: 'break-all', whiteSpace: 'pre-wrap',
+                color: msgRisk.raw ? '#D4AF37' : '#f0f4f8',
+              }}>
+                {msgRisk.text}
+              </div>
+              {msgRisk.warn && (
+                <div style={{ marginTop: '8px', color: RISK_COLOR[msgRisk.level], fontSize: '10px', lineHeight: 1.5 }}>
+                  ⚠️ {msgRisk.warn}
+                </div>
+              )}
+            </>
           )}
 
-          {typedData && !txData && !signMessage && (
-            <div style={{ wordBreak: 'break-all', color: '#8892a4' }}>
-              {truncateHex(typeof typedData === 'string' ? typedData : JSON.stringify(typedData), 120)}
-            </div>
+          {typedRisk && !txData && !signMessage && (
+            <>
+              <div style={{ color: '#e8edf4', fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>
+                {RISK_DOT[typedRisk.level]} {typedRisk.title}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span style={{ color: '#4a5568', fontSize: '10px' }}>{t('connect.signType')}</span>
+                <span style={{ color: '#8892a4', fontSize: '11px' }}>{typedRisk.primaryType}</span>
+              </div>
+              {typedRisk.domainName && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                  <span style={{ color: '#4a5568', fontSize: '10px' }}>{t('connect.signApp')}</span>
+                  <span style={{ color: '#8892a4', fontSize: '11px' }}>{typedRisk.domainName}</span>
+                </div>
+              )}
+              {typedRisk.verifyingContract && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ color: '#4a5568', fontSize: '10px' }}>{t('connect.signContract')}</span>
+                  <ExplorerAddress addr={typedRisk.verifyingContract} explorerBase={network.blockExplorer.url} />
+                </div>
+              )}
+
+              <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.04)', margin: '10px 0 8px' }} />
+              <div style={{ color: '#4a5568', fontSize: '10px', marginBottom: '2px' }}>
+                {t('connect.signPanelTitle')}
+              </div>
+              {typedRisk.rows.map((r, i) => (
+                <div key={`${r.label}-${i}`} style={{
+                  display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap',
+                  padding: '4px 0',
+                  borderTop: i > 0 ? '1px solid rgba(255,255,255,0.03)' : undefined,
+                }}>
+                  <span style={{ color: '#4a5568', fontSize: '10px', minWidth: 0 }}>
+                    {r.hint && <span style={{ color: '#8892a4' }}>{r.hint} · </span>}
+                    {r.label}
+                  </span>
+                  <span style={{
+                    color: r.level ? RISK_COLOR[r.level] : '#f0f4f8', fontSize: '11px',
+                    wordBreak: 'break-all', textAlign: 'right', minWidth: 0,
+                  }}>
+                    {r.value}
+                    {r.note && <span style={{ color: '#4a5568' }}> · {r.note}</span>}
+                  </span>
+                </div>
+              ))}
+              {typedRisk.warn && (
+                <div style={{ marginTop: '8px', color: RISK_COLOR[typedRisk.level], fontSize: '10px', lineHeight: 1.5 }}>
+                  ⚠️ {typedRisk.warn}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -888,8 +1057,7 @@ export default function WcConnectModal({
               style={{ marginTop: '2px', accentColor: '#fc8181' }}
             />
             <span>
-              ⚠️ Esta {seqMode ? 'llamada incluye' : 'operación incluye una o más acciones con'} permisos peligrosos
-              (aprobación/transferencia a destino desconocido o ilimitada). Entiendo y asumo el riesgo.
+              ⚠️ {ackReasons.join(' ')} {t('connect.ackAssume')}
             </span>
           </label>
         )}
