@@ -1,7 +1,8 @@
-import { http, createConfig } from 'wagmi'
+import { createConfig } from 'wagmi'
 import { arbitrumSepolia, base, arbitrum, mainnet, bsc, polygon } from 'wagmi/chains'
 import { injected, walletConnect } from 'wagmi/connectors'
 import { NETWORKS } from './networks'
+import { rpcTransport } from './rpc'
 
 const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'demo'
 
@@ -21,10 +22,11 @@ const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'demo'
  *
  * Deriva de una sola lista y el problema no puede volver.
  */
-function rpcUrlOf(chainId: number): string {
+function transportOf(chainId: number) {
   const n = NETWORKS.find((x) => x.chainId === chainId)
   if (!n) throw new Error(`lib/config.ts: falta el RPC de la red ${chainId} en lib/networks.ts`)
-  return n.rpcUrl
+  // La misma lista, con la misma reserva, que las lecturas de la app (lib/rpc.ts).
+  return rpcTransport(n)
 }
 
 export const config = createConfig({
@@ -36,11 +38,11 @@ export const config = createConfig({
     walletConnect({ projectId, showQrModal: false, logger: 'silent' }),
   ],
   transports: {
-    [arbitrumSepolia.id]: http(rpcUrlOf(arbitrumSepolia.id)),
-    [base.id]: http(rpcUrlOf(base.id)),
-    [arbitrum.id]: http(rpcUrlOf(arbitrum.id)),
-    [mainnet.id]: http(rpcUrlOf(mainnet.id)),
-    [bsc.id]: http(rpcUrlOf(bsc.id)),
-    [polygon.id]: http(rpcUrlOf(polygon.id)),
+    [arbitrumSepolia.id]: transportOf(arbitrumSepolia.id),
+    [base.id]: transportOf(base.id),
+    [arbitrum.id]: transportOf(arbitrum.id),
+    [mainnet.id]: transportOf(mainnet.id),
+    [bsc.id]: transportOf(bsc.id),
+    [polygon.id]: transportOf(polygon.id),
   },
 })

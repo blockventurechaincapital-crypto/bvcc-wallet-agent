@@ -30,7 +30,12 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(url)
     const data = await res.json()
-    return NextResponse.json({ result: Array.isArray(data.result) ? data.result : [] })
+    // Sin resultados, Etherscan manda `result: []`. Cuando NO puede contestar (red fuera
+    // del plan gratuito, límite de 3 por segundo, clave mala) manda `result` como TEXTO.
+    // Antes eso se devolvía como lista vacía, y quien preguntaba entendía «no hay
+    // eventos» donde había «no se pudo leer».
+    if (!Array.isArray(data.result)) return NextResponse.json({ error: 'UPSTREAM', result: [] })
+    return NextResponse.json({ result: data.result })
   } catch {
     return NextResponse.json({ error: 'FETCH_FAILED', result: [] })
   }

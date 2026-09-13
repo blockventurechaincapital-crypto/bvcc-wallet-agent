@@ -1,9 +1,10 @@
 'use client'
 import { useQuery, useQueries } from '@tanstack/react-query'
-import { createPublicClient, http, formatUnits, getAddress, type Address } from 'viem'
+import { createPublicClient, formatUnits, getAddress, type Address } from 'viem'
 import type { NetworkConfig } from './networks'
 import type { DiscoveredToken } from '@/app/api/tokens/route'
-import { CG_NATIVE_ID } from './coingecko'
+import { CG_NATIVE_ID, fetchTokenPrices } from './coingecko'
+import { rpcTransport } from './rpc'
 
 export type WalletToken = {
   key: string                 // '<chainId>:native' | '<chainId>:<contract>'
@@ -67,7 +68,7 @@ export function tokenLogo(network: NetworkConfig, contract: string): string {
 }
 
 export async function fetchTokens(address: string, network: NetworkConfig): Promise<{ tokens: WalletToken[]; totalUsd: number }> {
-  const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+  const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
   const cid = String(network.chainId)
 
   // 1. Descubrir tokens (Etherscan V2) + mergear USDC configurado
@@ -107,11 +108,9 @@ export async function fetchTokens(address: string, network: NetworkConfig): Prom
   let nativePrice = { usd: 0, change24h: 0 }
   const tokenPrices: Record<string, { usd: number; change24h: number }> = {}
   try {
-    const contracts = heldErc20.map(t => t.address).join(',')
-    const pres = await fetch(`/api/token-prices?chainId=${cid}&contracts=${contracts}`)
-    const pdata = await pres.json()
-    nativePrice = pdata.native ?? nativePrice
-    Object.assign(tokenPrices, pdata.tokens ?? {})
+    const pdata = await fetchTokenPrices(cid, heldErc20.map(t => t.address))
+    nativePrice = pdata.native
+    Object.assign(tokenPrices, pdata.tokens)
   } catch { /* sin precios */ }
 
   // 5. Construir lista enriquecida

@@ -1,9 +1,11 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { createPublicClient, http, getAddress, keccak256, encodeAbiParameters, formatUnits, type Address, type Hex } from 'viem'
+import { createPublicClient, getAddress, keccak256, encodeAbiParameters, formatUnits, type Address, type Hex } from 'viem'
 import { useNetwork } from './NetworkContext'
 import { V3_NFPM, V4_PM, V3_FACTORY, V4_STATEVIEW, TOPIC } from './defiContracts'
 import { amountsForLiquidity, feesFromGrowth, v3FeeGrowthInside, v3TickSpacing } from './tickMath'
+import { fetchTokenPrices } from './coingecko'
+import { rpcTransport } from './rpc'
 
 export type LpPosition = {
   version: 3 | 4
@@ -130,7 +132,7 @@ export function useLpPositions(owner: string | null) {
     setLoading(true)
     setError(null)
     try {
-      const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+      const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
       const resolve = makeResolver(client, network.nativeToken.symbol)
       const out: LpPosition[] = []
 
@@ -228,10 +230,9 @@ export function useLpPositions(owner: string | null) {
         let native = 0
         const prices: Record<string, number> = {}
         try {
-          const res = await fetch(`/api/token-prices?chainId=${network.chainId}&contracts=${contracts.join(',')}`)
-          const d = await res.json()
-          native = d?.native?.usd ?? 0
-          for (const [a, p] of Object.entries((d?.tokens ?? {}) as Record<string, { usd?: number }>)) prices[a.toLowerCase()] = p.usd ?? 0
+          const d = await fetchTokenPrices(String(network.chainId), contracts)
+          native = d.native.usd ?? 0
+          for (const [a, p] of Object.entries(d.tokens)) prices[a.toLowerCase()] = p.usd ?? 0
         } catch { /* sin precios → usd queda undefined */ }
         const priceFor = (addr: string): number => {
           const k = addr.toLowerCase()

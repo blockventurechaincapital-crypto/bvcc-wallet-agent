@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { CG_PLATFORM, CG_NATIVE_ID } from '@/lib/coingecko'
+import { CG_PLATFORM, CG_NATIVE_ID, MAX_PRICE_CONTRACTS, type TokenPrices } from '@/lib/coingecko'
+import { safeChainId, safeAddress } from '@/lib/apiGuard'
 
 // Precios USD + cambio 24h vía CoinGecko.
 // - native: precio del token nativo de la red (ETH / BNB / POL)
@@ -11,8 +12,7 @@ import { CG_PLATFORM, CG_NATIVE_ID } from '@/lib/coingecko'
 // se batchea en una sola llamada y sube el rate-limit.
 
 const CG = 'https://api.coingecko.com/api/v3'
-
-type Price = { usd: number; change24h: number }
+const DEFAULT_CHAIN_ID = '421614'
 
 const API_KEY = process.env.COINGECKO_API_KEY
 const headers: Record<string, string> = API_KEY ? { 'x-cg-demo-api-key': API_KEY } : {}
@@ -20,17 +20,30 @@ const fetchOpts = { headers, next: { revalidate: 60 } } as const
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
-  const chainId = searchParams.get('chainId') ?? '421614'
-  const contracts = (searchParams.get('contracts') ?? '')
-    .split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
 
-  const nativeId = CG_NATIVE_ID[chainId]
-  const platform = CG_PLATFORM[chainId]
-
-  const result: { native: Price; tokens: Record<string, Price> } = {
+  const result: TokenPrices = {
     native: { usd: 0, change24h: 0 },
     tokens: {},
   }
+
+  // safeChainId antes de buscar en las tablas: `CG_NATIVE_ID['constructor']` es
+  // una función, no un hueco, y acababa escrita en la URL.
+  const chainId = safeChainId(searchParams.get('chainId'), DEFAULT_CHAIN_ID)
+  if (!chainId) return NextResponse.json({ ...result, error: 'BAD_CHAIN' }, { status: 400 })
+
+  // Solo direcciones bien formadas, sin repetir y como mucho MAX_PRICE_CONTRACTS.
+  // Sin clave cada contrato es una petición saliente: sin tope, una petición
+  // entrante con mil direcciones abría mil contra CoinGecko. Lo que sobra se
+  // descarta; la app pide en tandas (fetchTokenPrices) y no llega a verlo.
+  const contracts = [...new Set(
+    (searchParams.get('contracts') ?? '')
+      .split(',')
+      .map(c => safeAddress(c.trim()))
+      .filter((c): c is string => c !== null)
+  )].slice(0, MAX_PRICE_CONTRACTS)
+
+  const nativeId = CG_NATIVE_ID[chainId]
+  const platform = CG_PLATFORM[chainId]
 
   try {
     // Precio nativo. Sin id conocido no se pide nada: se devuelve 0, que la

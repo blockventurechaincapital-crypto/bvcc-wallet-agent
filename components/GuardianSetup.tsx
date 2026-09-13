@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createPublicClient, http, encodeFunctionData, type Address } from 'viem'
+import { createPublicClient, encodeFunctionData, type Address } from 'viem'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { validateGuardians } from '@/lib/guardianValidation'
 import { credentialIdToBytes, discoverCredentialId, saveCredential, WrongPasskeyError } from '@/lib/webauthn'
@@ -9,6 +9,7 @@ import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { getPrefundNeed } from '@/lib/prefund'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { rpcTransport } from '@/lib/rpc'
 
 const COLORS = {
   gold: '#D4AF37',
@@ -77,7 +78,7 @@ export default function GuardianSetup({
     setError(null)
     setFinding(true)
     try {
-      const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+      const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
       // The owner the contract itself reports — the one thing here that is authenticated.
       const [pubKeyX, pubKeyY] = await client.readContract({
         address: walletAddress, abi: SIGNER_ABI, functionName: 'signer',

@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { useWalletAddress } from './useWalletAddress'
 import { useNetwork } from './NetworkContext'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from './abis'
+import { rpcTransport } from './rpc'
 
 /** The generation currently deployed. Wallets on anything older should migrate. */
 export const CURRENT_WALLET_VERSION = 4
@@ -39,7 +40,7 @@ export function useWalletVersion(): WalletVersionState {
       return
     }
     let cancelled = false
-    const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+    const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
     ;(async () => {
       try {

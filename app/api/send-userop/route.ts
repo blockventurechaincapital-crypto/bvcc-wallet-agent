@@ -270,15 +270,21 @@ export async function POST(req: Request) {
 
     const account = privateKeyToAccount(bundlerKey as `0x${string}`)
 
+    // Solo el PRIMER RPC de la red, sin reserva (lib/rpc.ts). Este cliente lee el nonce
+    // `pending` del bundler y difunde la transacción: repartir eso entre proveedores, cada
+    // uno con su mempool, es la receta para huecos y reemplazos en la cola de una EOA
+    // compartida por todos los usuarios de la red.
+    const rpcUrl = network.rpcUrls[0]
+
     const walletClient = createWalletClient({
       account,
       chain: network.viemChain,
-      transport: http(network.rpcUrl),
+      transport: http(rpcUrl),
     })
 
     const publicClient = createPublicClient({
       chain: network.viemChain,
-      transport: http(network.rpcUrl),
+      transport: http(rpcUrl),
     })
 
     // Use network's entryPoint address (same OZ v0.9 across chains)

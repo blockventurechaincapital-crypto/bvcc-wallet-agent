@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createPublicClient, http } from 'viem'
+import { createPublicClient } from 'viem'
 import { useWalletAddress } from './useWalletAddress'
 import { useNetwork } from './NetworkContext'
 import { WALLET_TYPE_ABI } from './abis'
+import { rpcTransport } from './rpc'
 
 export interface WalletTypeState {
   walletType: 0 | 1 | null  // 0 = STANDARD, 1 = AGENT, null = unknown/loading
@@ -27,7 +28,7 @@ export function useWalletType(): WalletTypeState {
 
     const client = createPublicClient({
       chain: network.viemChain,
-      transport: http(network.rpcUrl),
+      transport: rpcTransport(network),
     })
 
     client.readContract({

@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  createPublicClient, http,
+  createPublicClient,
   encodeAbiParameters, encodeFunctionData,
   type Address, type Hex,
 } from 'viem'
@@ -14,6 +14,7 @@ import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { waitForUserOp } from '@/lib/waitForUserOp'
 import { suggestGasFees } from '@/lib/gasFees'
+import { rpcTransport } from '@/lib/rpc'
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
@@ -38,7 +39,7 @@ export default function CancelRecoveryPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const [credentialId, setCredentialId] = useState<string | null>(null)

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { isAddress, createPublicClient, http, formatEther, type Address } from 'viem'
+import { isAddress, createPublicClient, formatEther, type Address } from 'viem'
 import {
   useConnect,
   useAccount,
@@ -12,7 +12,7 @@ import {
 } from 'wagmi'
 import { QRCodeSVG } from 'qrcode.react'
 import {
-  registerWebAuthn, saveCredential, hasCredential, credentialIdToBytes,
+  registerWebAuthn, saveCredential, loadCredential, hasCredential, credentialIdToBytes,
   discoverCredentialId, WrongPasskeyError,
 } from '@/lib/webauthn'
 import { getWalletAddress, getAgentWalletAddress, getCredentialFromChain } from '@/lib/wallet'
@@ -29,6 +29,7 @@ import MarketingLanding from '@/components/MarketingLanding'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
+import { rpcTransport } from '@/lib/rpc'
 
 type Step = 'landing' | 'access' | 'network' | 'walletType' | 'guardians' | 'confirm'
 
@@ -100,12 +101,12 @@ export default function Home() {
     if (params.get('migrate') === '1') {
       (async () => {
         try {
-          const stored = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || '{}')
-          const oldWallet: Address | null = stored?.walletAddress || localStorage.getItem('bvcc_active_wallet')
+          const stored = loadCredential()
+          const oldWallet = (stored?.walletAddress || localStorage.getItem('bvcc_active_wallet')) as Address | null
           if (!oldWallet || !stored?.credentialId) throw new Error('No active wallet to migrate')
 
-          const { createPublicClient, http } = await import('viem')
-          const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+          const { createPublicClient } = await import('viem')
+          const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
           const [qx, qy] = await client.readContract({
             address: oldWallet as Address, abi: BVCC_WALLET_ABI, functionName: 'signer',
           }) as readonly [`0x${string}`, `0x${string}`]
@@ -156,7 +157,7 @@ export default function Home() {
   const [confirmingOwner, setConfirmingOwner] = useState(false)
   // "Enter with address" on a wallet whose only on-chain credential is unauthenticated: the
   // key to check the passkey against, waiting for the user's click.
-  const [entryCheck, setEntryCheck] = useState<{ wallet: Address; pubKeyX: bigint; pubKeyY: bigint } | null>(null)
+  const [entryCheck, setEntryCheck] = useState<{ wallet: Address; pubKeyX: bigint; pubKeyY: bigint; unreadable: boolean } | null>(null)
   const submitUserOp = useSubmitUserOp()
   const [guardians, setGuardians] = useState<[string, string, string]>(['', '', ''])
   const [addressInput, setAddressInput] = useState('')
@@ -292,7 +293,7 @@ export default function Home() {
           // carries data — goes through the same session fine.
           data: '0x',
         })
-        const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+        const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
         await client.waitForTransactionReceipt({ hash })
         transferConfirmed = true
       }
@@ -408,12 +409,9 @@ export default function Home() {
   function enterWallet(wallet: Address) {
     // A credential stored for another wallet wins over the active address on the wallet
     // screens, so leaving it would open that other wallet instead of this one.
-    try {
-      const stored = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || 'null')
-      if (stored && stored.walletAddress?.toLowerCase() !== wallet.toLowerCase()) {
-        localStorage.removeItem('bvcc_wallet_credential')
-      }
-    } catch {
+    // A corrupt entry goes too: it is worth nothing and would only shadow the next save.
+    const stored = loadCredential()
+    if (!stored || stored.walletAddress.toLowerCase() !== wallet.toLowerCase()) {
       localStorage.removeItem('bvcc_wallet_credential')
     }
     localStorage.setItem('bvcc_active_wallet', wallet)
@@ -433,26 +431,25 @@ export default function Home() {
     // wrong one locks the owner out without saying why. One is kept only when it is known to
     // be this wallet's: already stored for it, announced by the wallet's own CredentialSet
     // event, or picked from the authenticator and checked against the contract's signer.
-    let stored: { credentialId?: string; walletAddress?: string } | null = null
-    try {
-      stored = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || 'null')
-    } catch { /* a corrupt entry is the same as none */ }
+    const stored = loadCredential()
 
     if (!stored?.credentialId || stored.walletAddress?.toLowerCase() !== wallet.toLowerCase()) {
       const found = await getCredentialFromChain(wallet, network)
       if (found?.authenticated) {
         saveCredential(found.credentialId, wallet)
       } else if (found) {
-        // Pre-V4: the only record is the factory event, written by whoever deployed the
-        // wallet. Check a passkey against the signer instead — in a click of its own, since
-        // the lookup above can outlast the user gesture Safari wants for a WebAuthn prompt.
-        // Nothing in storage changes until the user picks one of the two ways in.
+        // Pre-V4, the only record is the factory event, written by whoever deployed the
+        // wallet; or the network would not serve the logs at all, so whether the wallet
+        // announced a credential is unknown. Either way, check a passkey against the signer
+        // instead — in a click of its own, since the lookup above can outlast the user
+        // gesture Safari wants for a WebAuthn prompt. Nothing in storage changes until the
+        // user picks one of the two ways in.
         try {
-          const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+          const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
           const [pubKeyX, pubKeyY] = await client.readContract({
             address: wallet, abi: BVCC_WALLET_ABI, functionName: 'signer',
           }) as readonly [`0x${string}`, `0x${string}`]
-          setEntryCheck({ wallet, pubKeyX: BigInt(pubKeyX), pubKeyY: BigInt(pubKeyY) })
+          setEntryCheck({ wallet, pubKeyX: BigInt(pubKeyX), pubKeyY: BigInt(pubKeyY), unreadable: !!found.unreadable })
           return
         } catch { /* no signer to check against: enter with no stored credential */ }
       }
@@ -1278,7 +1275,7 @@ export default function Home() {
           {entryCheck && (
             <div style={{ marginBottom: '16px', padding: '12px 14px', backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`, borderRadius: '6px' }}>
               <p style={{ margin: '0 0 10px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
-                {t('appshell.accessVerifyBody')}
+                {t(entryCheck.unreadable ? 'appshell.accessVerifyUnreadable' : 'appshell.accessVerifyBody')}
               </p>
               <button
                 onClick={handleConfirmEntryPasskey}

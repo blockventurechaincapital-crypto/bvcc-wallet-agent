@@ -389,11 +389,29 @@ export function saveCredential(credentialId: string, walletAddress: string): voi
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ credentialId, walletAddress }))
 }
 
+/**
+ * La credencial guardada, o null si no hay o no se puede usar.
+ *
+ * Lo que hay en localStorage no es de fiar: una versión vieja de la app, una
+ * extensión o una escritura a medias pueden dejar cualquier cosa. Sin guarda, un
+ * JSON.parse que lanza tumbaba la pantalla que lo leyera, y un campo con otra
+ * forma llegaba como dirección a las lecturas de la cadena. Una entrada corrupta
+ * vale lo mismo que ninguna. Léela SIEMPRE por aquí, no con JSON.parse suelto.
+ */
 export function loadCredential(): { credentialId: string; walletAddress: string } | null {
-  const data = localStorage.getItem(STORAGE_KEY)
-  return data ? JSON.parse(data) : null
+  try {
+    const data = localStorage.getItem(STORAGE_KEY)
+    if (!data) return null
+    const parsed = JSON.parse(data) as { credentialId?: unknown; walletAddress?: unknown } | null
+    const { credentialId, walletAddress } = parsed ?? {}
+    if (typeof credentialId !== 'string' || !credentialId) return null
+    if (typeof walletAddress !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) return null
+    return { credentialId, walletAddress }
+  } catch {
+    return null
+  }
 }
 
 export function hasCredential(): boolean {
-  return !!localStorage.getItem(STORAGE_KEY)
+  return loadCredential() !== null
 }

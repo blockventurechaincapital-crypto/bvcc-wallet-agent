@@ -65,7 +65,7 @@ export const settings = {
       clearAll: 'Delete all local data',
       clearConfirm: 'Delete all local data? This will remove your session, biometric credential and address book. You will not be able to recover access without your original WebAuthn device.',
       // Footer
-      version: 'v1.1.3',
+      version: 'v1.1.4',
     },
   },
   es: {
@@ -134,7 +134,7 @@ export const settings = {
       clearAll: 'Borrar todos los datos locales',
       clearConfirm: '¿Borrar todos los datos locales? Esta acción eliminará tu sesión, credencial biométrica y libreta de direcciones. No podrás recuperar acceso sin tu dispositivo WebAuthn original.',
       // Footer
-      version: 'v1.1.3',
+      version: 'v1.1.4',
     },
   },
 }

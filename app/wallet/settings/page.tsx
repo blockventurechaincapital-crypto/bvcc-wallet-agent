@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
@@ -12,6 +12,7 @@ import { feeNumerator, feeRateLabel } from '@/lib/fees'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride, getUseBundler, setUseBundler } from '@/lib/wcCalls'
 import GuardianSetup from '@/components/GuardianSetup'
+import { rpcTransport } from '@/lib/rpc'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
@@ -228,7 +229,7 @@ export default function SettingsPage() {
   const { walletType: walletTypeValue } = useWalletType()
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 

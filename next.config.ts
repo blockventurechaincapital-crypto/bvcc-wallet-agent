@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { DAPPS } from "./lib/dapps";
+import { NETWORKS } from "./lib/networks";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Cabeceras de seguridad
@@ -28,18 +29,11 @@ const IMG_HOSTS = [
   'https://raw.githubusercontent.com',
 ]
 
-/** RPC públicos de las 6 redes (lib/networks.ts). Los seis, medidos.
- *  ⚠️ Si algún día se añade failover de RPC, esta lista tiene que crecer con él o
- *  la red de repuesto quedará bloqueada por CSP — y el síntoma será "no carga
- *  nada" justo cuando el RPC principal falle, que es el peor momento. */
-const RPC_HOSTS = [
-  'https://sepolia-rollup.arbitrum.io',
-  'https://arb1.arbitrum.io',
-  'https://mainnet.base.org',
-  'https://ethereum-rpc.publicnode.com',
-  'https://bsc-dataseed.binance.org',
-  'https://polygon-bor-rpc.publicnode.com',
-]
+/** RPC de las 6 redes, los principales y los de reserva, sacados de
+ *  `lib/networks.ts`. Antes era una lista copiada a mano; con reserva, una copia
+ *  que se queda atrás bloquea el RPC de repuesto justo cuando el principal falla,
+ *  que es el único momento en que hace falta. */
+const RPC_HOSTS = Array.from(new Set(NETWORKS.flatMap((n) => n.rpcUrls.map((u) => new URL(u).origin))))
 
 /** WalletConnect. Solo el primero está medido: forzando un emparejamiento con un
  *  URI `wc:`, el SDK abre exactamente `wss://relay.walletconnect.org` y nada más.

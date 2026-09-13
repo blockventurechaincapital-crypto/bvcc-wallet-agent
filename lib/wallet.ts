@@ -1,11 +1,12 @@
-import { createPublicClient, http, type Address, type AbiEvent } from 'viem'
+import { createPublicClient, decodeEventLog, pad, parseAbiItem, toEventSelector, type Address, type AbiEvent, type Hex } from 'viem'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI } from './abis'
 import type { NetworkConfig } from './networks'
+import { rpcTransport } from './rpc'
 
 function mkClient(network: NetworkConfig) {
   return createPublicClient({
     chain: network.viemChain,
-    transport: http(network.rpcUrl),
+    transport: rpcTransport(network),
   })
 }
 
@@ -105,16 +106,29 @@ function bytesToBase64url(hex: `0x${string}`): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-export interface ChainCredential {
-  credentialId: string
-  /**
-   * True only when it comes from the wallet's own CredentialSet event, which nothing but a
-   * passkey-signed call can emit. The legacy factory event carries whatever the account that
-   * deployed the wallet wrote, so a credential from there is a claim to verify against the
-   * signer, never an id to filter the passkey prompt by.
-   */
-  authenticated: boolean
-}
+export type ChainCredential =
+  | {
+      credentialId: string
+      /**
+       * True only when it comes from the wallet's own CredentialSet event, which nothing but a
+       * passkey-signed call can emit. The legacy factory event carries whatever the account that
+       * deployed the wallet wrote, so a credential from there is a claim to verify against the
+       * signer, never an id to filter the passkey prompt by.
+       */
+      authenticated: boolean
+      unreadable?: undefined
+    }
+  | {
+      /**
+       * The logs could not be read, which is NOT the same as "there is none". Most public RPCs
+       * refuse eth_getLogs from block 0 and the explorer's free plan leaves some networks out, so
+       * a failed read used to come back as null and the wallet was entered as if it had no
+       * credential. The caller confirms the passkey against the signer instead, which needs no logs.
+       */
+      credentialId: null
+      authenticated: false
+      unreadable: true
+    }
 
 export async function getCredentialIdFromChain(
   walletAddress: Address,
@@ -123,80 +137,111 @@ export async function getCredentialIdFromChain(
   return (await getCredentialFromChain(walletAddress, network))?.credentialId ?? null
 }
 
+const CREDENTIAL_SET = parseAbiItem('event CredentialSet(bytes32 indexed credentialHash, bytes credentialId)')
+const WALLET_CREATED = parseAbiItem('event WalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY, string credentialId)')
+const AGENT_WALLET_CREATED = parseAbiItem('event AgentWalletCreated(address indexed wallet, uint256 pubKeyX, uint256 pubKeyY, string credentialId)')
+
+type RawLog = { address: string; topics: Hex[]; data: Hex }
+
+/**
+ * Every log from block 0 matching one of `topic0s` (and `topic1`, if given) emitted by one of
+ * `addresses`, oldest first — or null when neither source could answer.
+ *
+ * The RPC goes first: on Arbitrum it serves the whole range. Elsewhere it refuses (measured
+ * 2026-09-13: Base caps the range at 2,000 blocks, Polygon at 10,000, BSC and the publicnode
+ * endpoints refuse outright), and splitting the range is not an option — hundreds of requests per
+ * wallet on Base or BSC. So the fallback is the explorer through `/api/logs`, which has no range
+ * limit but also does not cover every network on its free plan. Results from it are filtered by
+ * emitter here, because a query without `address` returns the event from ANY contract.
+ */
+async function logsFromGenesis(
+  network: NetworkConfig,
+  filter: { addresses: Address[]; topic0s: Hex[]; topic1?: Hex },
+): Promise<RawLog[] | null> {
+  const { addresses, topic0s, topic1 } = filter
+  try {
+    return await mkClient(network).request({
+      method: 'eth_getLogs',
+      params: [{
+        address: addresses,
+        topics: topic1 ? [topic0s, topic1] : [topic0s],
+        fromBlock: '0x0',
+        toBlock: 'latest',
+      }],
+    }) as RawLog[]
+  } catch { /* fall back to the explorer */ }
+
+  const emitters = new Set(addresses.map((a) => a.toLowerCase()))
+  const out: RawLog[] = []
+  // One topic0 per request, one after another: the explorer key allows 3 calls a second.
+  for (const topic0 of topic0s) {
+    try {
+      const q = new URLSearchParams({ chainId: String(network.chainId), topic0 })
+      if (addresses.length === 1) q.set('address', addresses[0])
+      if (topic1) q.set('topic1', topic1)
+      const res = await fetch(`/api/logs?${q}`)
+      const d = await res.json() as { error?: string; result?: RawLog[] }
+      if (d.error || !Array.isArray(d.result)) return null
+      out.push(...d.result.filter((l) => emitters.has(l.address.toLowerCase())))
+    } catch {
+      return null
+    }
+  }
+  return out
+}
+
+function decodeCredential(log: RawLog, event: AbiEvent): string | null {
+  try {
+    const { args } = decodeEventLog({ abi: [event], data: log.data, topics: log.topics as [Hex, ...Hex[]] })
+    const id = (args as { credentialId?: string }).credentialId
+    return id || null
+  } catch {
+    return null
+  }
+}
+
 export async function getCredentialFromChain(
   walletAddress: Address,
   network: NetworkConfig,
 ): Promise<ChainCredential | null> {
-  // A wallet may have been created by either the standard factory (emits
-  // WalletCreated) or the agent factory (emits AgentWalletCreated). Both events
-  // share the same signature, so query each factory and return whichever matches.
-  const sources: Array<{ factory: Address; eventName: 'WalletCreated' | 'AgentWalletCreated' }> = []
-  if (network.contracts.factory)      sources.push({ factory: network.contracts.factory,      eventName: 'WalletCreated' })
-  if (network.contracts.agentFactory) sources.push({ factory: network.contracts.agentFactory, eventName: 'AgentWalletCreated' })
-  // Wallets created before V4 have their credential in the event of the factory that made
-  // them, and that factory is no longer the configured one. Without these, a user coming
-  // back on a fresh device would lose the direct passkey selection on their old wallet.
-  for (const f of LEGACY_FACTORIES) {
-    sources.push({ factory: f.address, eventName: f.eventName })
-  }
-
-  const client = mkClient(network)
-
   // V4 first: the wallet announces its own credential in CredentialSet, emitted inside
   // the passkey-signed call that sets the guardians. That event is authentic — only the
   // owner can cause it — whereas the factory event below could be published by whoever
   // won the deployment race. The most recent one wins, since setCredentialId can rotate
   // it (e.g. after a guardian recovery swapped the signer).
-  try {
-    const logs = await client.getLogs({
-      address: walletAddress,
-      event: {
-        type: 'event',
-        name: 'CredentialSet',
-        inputs: [
-          { name: 'credentialHash', type: 'bytes32', indexed: true },
-          { name: 'credentialId',   type: 'bytes',   indexed: false },
-        ],
-      } as AbiEvent,
-      fromBlock: 0n,
-      toBlock: 'latest',
-    })
-    if (logs.length > 0) {
-      const raw = (logs[logs.length - 1].args as { credentialId?: `0x${string}` }).credentialId
-      if (raw) return { credentialId: bytesToBase64url(raw), authenticated: true }
-    }
-  } catch {
-    // fall through to the legacy factory event
+  const own = await logsFromGenesis(network, {
+    addresses: [walletAddress],
+    topic0s: [toEventSelector(CREDENTIAL_SET)],
+  })
+  for (const log of [...(own ?? [])].reverse()) {
+    const raw = decodeCredential(log, CREDENTIAL_SET) as Hex | null
+    if (raw) return { credentialId: bytesToBase64url(raw), authenticated: true }
   }
 
   // Pre-V4 wallets only have the factory event, where the credential travelled as a
-  // string and was never authenticated. Kept for wallets created before the migration.
-  for (const { factory, eventName } of sources) {
-    try {
-      const logs = await client.getLogs({
-        address: factory,
-        event: {
-          type: 'event',
-          name: eventName,
-          inputs: [
-            { name: 'wallet',       type: 'address', indexed: true },
-            { name: 'pubKeyX',      type: 'uint256', indexed: false },
-            { name: 'pubKeyY',      type: 'uint256', indexed: false },
-            { name: 'credentialId', type: 'string',  indexed: false },
-          ],
-        } as AbiEvent,
-        args: { wallet: walletAddress },
-        fromBlock: 0n,
-        toBlock: 'latest',
-      })
-      if (logs.length > 0) {
-        const args = logs[0].args as { credentialId?: string }
-        return args.credentialId ? { credentialId: args.credentialId, authenticated: false } : null
-      }
-    } catch {
-      // try next source
-    }
+  // string and was never authenticated. A wallet is made by the standard factory
+  // (WalletCreated) or the agent factory (AgentWalletCreated), current or superseded:
+  // without the superseded ones a user coming back on a fresh device would lose the
+  // direct passkey selection on their old wallet. Only one factory can have made a
+  // given address, and the list order is kept as the tie-break it always was.
+  const factories: Address[] = [
+    ...(network.contracts.factory ? [network.contracts.factory] : []),
+    ...(network.contracts.agentFactory ? [network.contracts.agentFactory] : []),
+    ...LEGACY_FACTORIES.map((f) => f.address),
+  ]
+  const legacy = await logsFromGenesis(network, {
+    addresses: factories,
+    topic0s: [toEventSelector(WALLET_CREATED), toEventSelector(AGENT_WALLET_CREATED)],
+    topic1: pad(walletAddress.toLowerCase() as Hex, { size: 32 }),
+  })
+  for (const factory of factories) {
+    const log = (legacy ?? []).find((l) => l.address.toLowerCase() === factory.toLowerCase())
+    if (!log) continue
+    const id = decodeCredential(log, WALLET_CREATED) ?? decodeCredential(log, AGENT_WALLET_CREATED)
+    if (id) return { credentialId: id, authenticated: false }
   }
+
+  if (own === null || legacy === null) return { credentialId: null, authenticated: false, unreadable: true }
   return null
 }
 

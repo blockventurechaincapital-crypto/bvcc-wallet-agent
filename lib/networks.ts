@@ -8,7 +8,12 @@ export type NetworkConfig = {
   color: string       // hex color for dot
   logo: string        // chain logo URL
   isTestnet: boolean
-  rpcUrl: string
+  /** RPC de la red, en orden: el primero es el de siempre y los demás son de
+   *  reserva, de OTRO operador, y solo se usan cuando el anterior falla (caído,
+   *  429, límite). Todos aceptan peticiones desde el navegador (CORS), medido el
+   *  2026-09-13. Las lecturas los usan con `rpcTransport` (lib/rpc.ts), y la CSP
+   *  (`connect-src` en next.config.ts) sale de esta misma lista. */
+  rpcUrls: readonly [string, ...string[]]
   blockExplorer: {
     url: string
     name: string       // 'Arbiscan', 'BaseScan'… shown in links, so it must match the chain
@@ -49,7 +54,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#7B61FF',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg',
     isTestnet: true,
-    rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
+    rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc', 'https://arbitrum-sepolia-rpc.publicnode.com'],
     blockExplorer: {
       url: 'https://sepolia.arbiscan.io',
       name: 'Arbiscan',
@@ -82,7 +87,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#0052FF',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_base.jpg',
     isTestnet: false,
-    rpcUrl: 'https://mainnet.base.org',
+    rpcUrls: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'],
     blockExplorer: {
       url: 'https://basescan.org',
       name: 'BaseScan',
@@ -114,7 +119,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#28A0F0',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg',
     isTestnet: false,
-    rpcUrl: 'https://arb1.arbitrum.io/rpc',
+    rpcUrls: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com'],
     blockExplorer: {
       url: 'https://arbiscan.io',
       name: 'Arbiscan',
@@ -147,7 +152,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#627EEA',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg',
     isTestnet: false,
-    rpcUrl: 'https://ethereum-rpc.publicnode.com',
+    rpcUrls: ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
     blockExplorer: {
       url: 'https://etherscan.io',
       name: 'Etherscan',
@@ -179,7 +184,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#F3BA2F',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_bsc.jpg',
     isTestnet: false,
-    rpcUrl: 'https://bsc-dataseed.binance.org',
+    rpcUrls: ['https://bsc-dataseed.binance.org', 'https://bsc-rpc.publicnode.com'],
     blockExplorer: {
       url: 'https://bscscan.com',
       name: 'BscScan',
@@ -212,7 +217,7 @@ export const NETWORKS: NetworkConfig[] = [
     color: '#8247E5',
     logo: 'https://icons.llamao.fi/icons/chains/rsz_polygon.jpg',
     isTestnet: false,
-    rpcUrl: 'https://polygon-bor-rpc.publicnode.com',
+    rpcUrls: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'],
     blockExplorer: {
       url: 'https://polygonscan.com',
       name: 'PolygonScan',

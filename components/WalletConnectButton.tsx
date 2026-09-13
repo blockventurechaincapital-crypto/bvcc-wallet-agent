@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { createPublicClient, http, type Hex } from 'viem'
+import { createPublicClient, type Hex } from 'viem'
 import type { PendingRequestTypes } from '@walletconnect/types'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
@@ -9,6 +9,7 @@ import { useWcWallet, parseWcUri, type WcProposal } from '@/lib/useWcWallet'
 import { checkOrigin } from '@/lib/wcSignatures'
 import WcConnectModal from '@/components/WcConnectModal'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { rpcTransport } from '@/lib/rpc'
 
 const COLORS = {
   border: 'rgba(255,255,255,0.07)',
@@ -175,7 +176,7 @@ export default function WalletConnectButton() {
     const reqChainId = c?.startsWith('eip155:') ? parseInt(c.slice(7), 10) : network.chainId
     let net = network
     try { net = getNetwork(reqChainId) } catch { /* red no soportada → red actual */ }
-    const client = createPublicClient({ chain: net.viemChain, transport: http(net.rpcUrl) })
+    const client = createPublicClient({ chain: net.viemChain, transport: rpcTransport(net) })
     client
       .waitForTransactionReceipt({ hash: txHash, timeout: 180_000 })
       .catch(() => { /* timeout/replaced: liberar igualmente */ })

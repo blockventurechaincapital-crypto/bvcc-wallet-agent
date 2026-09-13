@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { createPublicClient, http, getAddress, type Address, type Hex } from 'viem'
+import { createPublicClient, getAddress, type Address, type Hex } from 'viem'
 import { useNetwork } from './NetworkContext'
 import { TOPIC } from './defiContracts'
 import { isUnlimited } from './allowanceLimits'
+import { rpcTransport } from './rpc'
 
 export type Allowance = {
   kind: 'erc20' | 'nft'
@@ -42,7 +43,7 @@ export function useAllowances(owner: string | null) {
     setLoading(true)
     setError(null)
     try {
-      const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+      const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
       const [erc20Logs, nftLogs] = await Promise.all([
         fetchLogs(network.chainId, TOPIC.approval, owner),
         fetchLogs(network.chainId, TOPIC.approvalForAll, owner),

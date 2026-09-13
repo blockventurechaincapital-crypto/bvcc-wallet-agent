@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
@@ -19,6 +19,7 @@ import Sparkline from '@/components/Sparkline'
 import TokenDetailModal from '@/components/TokenDetailModal'
 import ViewNetworksSelector from '@/components/ViewNetworksSelector'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { rpcTransport } from '@/lib/rpc'
 
 function fmtBalance(s: string): string {
   const n = parseFloat(s)
@@ -107,7 +108,7 @@ export default function WalletPage() {
   }
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const [address, setAddress] = useState('')

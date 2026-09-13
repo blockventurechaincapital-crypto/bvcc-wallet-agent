@@ -1,8 +1,9 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, http, getAddress, formatUnits, type Address } from 'viem'
+import { createPublicClient, getAddress, formatUnits, type Address } from 'viem'
 import { BVCC_AGENT_WALLET_ABI } from './abis'
 import type { NetworkConfig } from './networks'
+import { rpcTransport } from './rpc'
 
 type Perm = {
   dailyLimitWei: bigint
@@ -54,7 +55,7 @@ function clamp(a: bigint, b: bigint): bigint {
 }
 
 async function fetchAgents(address: string, network: NetworkConfig): Promise<AgentsSummary> {
-  const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+  const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
   const addr = address as Address
 
   const agentAddrs = await client.readContract({

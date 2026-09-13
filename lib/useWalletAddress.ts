@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { loadCredential } from './webauthn'
 
 export interface WalletAddressState {
   address: string | null
@@ -15,12 +16,12 @@ export function useWalletAddress(): WalletAddressState {
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const credential = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || '{}')
+      // Una credencial corrupta cuenta como ninguna: antes el JSON.parse lanzaba y
+      // se perdía también la wallet activa, así que ninguna pantalla cargaba.
+      const credential = loadCredential()
       const activeWallet = localStorage.getItem('bvcc_active_wallet')
-      const addr: string | null = credential?.walletAddress || activeWallet || null
-      const cid: string | null = credential?.credentialId || null
-      setAddress(addr)
-      setCredentialId(cid)
+      setAddress(credential?.walletAddress || activeWallet || null)
+      setCredentialId(credential?.credentialId || null)
     } catch {
       setAddress(null)
       setCredentialId(null)

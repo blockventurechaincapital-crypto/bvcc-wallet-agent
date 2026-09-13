@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
-  createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseGwei,
+  createPublicClient, encodeAbiParameters, encodeFunctionData, parseGwei,
   parseUnits, formatUnits, hashTypedData, hashMessage, type Address, type Hex,
 } from 'viem'
 import {
@@ -26,6 +26,7 @@ import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { waitForUserOp, txUrl } from '@/lib/waitForUserOp'
 import { suggestGasFees } from '@/lib/gasFees'
+import { rpcTransport } from '@/lib/rpc'
 
 const ERC1271_ABI = [{
   name: 'isValidSignature',
@@ -236,7 +237,7 @@ export default function WcConnectModal({
   }, [request.params.chainId, currentNetwork])
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 

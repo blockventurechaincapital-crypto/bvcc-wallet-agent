@@ -1,10 +1,11 @@
 'use client'
 import { useCallback } from 'react'
 import { useWalletClient } from 'wagmi'
-import { createPublicClient, http, type Hex } from 'viem'
+import { createPublicClient, type Hex } from 'viem'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI } from './entrypoint'
 import { getNetwork, DEFAULT_NETWORK } from './networks'
 import { getUseBundler } from './wcCalls'
+import { rpcTransport } from './rpc'
 
 // Payload tal cual lo arman los call sites (BigInt serializado a string)
 export type SubmitUserOpPayload = {
@@ -91,7 +92,7 @@ export function useSubmitUserOp() {
       const entryPoint = network.contracts.entryPoint || ENTRYPOINT_ADDRESS
       const beneficiary = walletClient.account.address
 
-      const publicClient = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+      const publicClient = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
       // Simular antes de pedir firma al usuario (evita gastar gas en revert obvio)
       await publicClient.simulateContract({

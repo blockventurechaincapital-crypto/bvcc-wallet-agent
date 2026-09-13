@@ -1,5 +1,5 @@
 'use client'
-import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, type Address, type Hex } from 'viem'
+import { createPublicClient, encodeAbiParameters, encodeFunctionData, type Address, type Hex } from 'viem'
 import { authenticateWebAuthn } from './webauthn'
 import { BVCC_WALLET_ABI } from './abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from './entrypoint'
@@ -7,6 +7,7 @@ import type { NetworkConfig } from './networks'
 import type { SubmitUserOpPayload } from './useSubmitUserOp'
 import { waitForUserOp } from './waitForUserOp'
 import { suggestGasFees } from './gasFees'
+import { rpcTransport } from './rpc'
 
 // Una llamada del batch ERC-7821 (target + value + calldata).
 export type ExecCall = { target: Address; value?: bigint; callData?: Hex }
@@ -47,7 +48,7 @@ export async function executeWithFaceId(opts: {
   const { network, walletAddress, credentialId, calls, submitUserOp } = opts
   if (!calls.length) throw new Error('Nothing to execute')
 
-  const publicClient = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+  const publicClient = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
   const nonce = await publicClient.readContract({
     address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'getNonce', args: [],

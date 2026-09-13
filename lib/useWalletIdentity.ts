@@ -1,9 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createPublicClient, http, getAddress } from 'viem'
+import { createPublicClient, getAddress } from 'viem'
 import { BVCC_WALLET_ABI, WALLET_TYPE_ABI } from './abis'
 import { useNetwork } from './NetworkContext'
 import { NETWORKS } from './networks'
+import { rpcTransport } from './rpc'
 
 /**
  * Which contract a wallet actually is, and when it was deployed.
@@ -55,7 +56,7 @@ export function useWalletIdentity(walletAddress: string | null): WalletIdentity 
     let cancelled = false
     setState(s => ({ ...s, isLoading: true }))
 
-    const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+    const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
     const readDomain = client
       .readContract({

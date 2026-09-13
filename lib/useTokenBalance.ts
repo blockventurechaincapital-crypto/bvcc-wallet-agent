@@ -1,7 +1,8 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import type { NetworkConfig } from './networks'
+import { rpcTransport } from './rpc'
 
 const ERC20_BALANCE_ABI = [{
   name: 'balanceOf', type: 'function', stateMutability: 'view',
@@ -19,7 +20,7 @@ export function useTokenBalance(
   return useQuery<bigint>({
     queryKey: ['tokenBalance', walletAddress, network.chainId, key],
     queryFn: async () => {
-      const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+      const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
       if (token.isNative) return client.getBalance({ address: walletAddress as Address })
       return client.readContract({
         address: token.address as Address,

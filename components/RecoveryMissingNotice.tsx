@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
+import { rpcTransport } from '@/lib/rpc'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const GOLD = '#D4AF37'
@@ -43,7 +44,7 @@ export default function RecoveryMissingNotice() {
   useEffect(() => {
     if (!isLoaded || !address) return
     let cancelled = false
-    const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+    const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
     Promise.all([0n, 1n, 2n].map(i =>
       client.readContract({

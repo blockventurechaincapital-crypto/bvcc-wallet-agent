@@ -1,8 +1,9 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { BVCC_WALLET_ABI, WALLET_TYPE_ABI } from './abis'
 import type { NetworkConfig } from './networks'
+import { rpcTransport } from './rpc'
 
 export type AccountStatus = {
   deployed: boolean
@@ -12,7 +13,7 @@ export type AccountStatus = {
 }
 
 async function fetchStatus(address: string, network: NetworkConfig): Promise<AccountStatus> {
-  const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+  const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
   const addr = address as Address
 
   const code = await client.getCode({ address: addr })

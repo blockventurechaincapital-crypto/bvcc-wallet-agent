@@ -1,7 +1,8 @@
 'use client'
-import { createPublicClient, http, decodeEventLog, type Address, type Hex } from 'viem'
+import { createPublicClient, decodeEventLog, type Address, type Hex } from 'viem'
 import { ENTRYPOINT_ABI } from './entrypoint'
 import type { NetworkConfig } from './networks'
+import { rpcTransport } from './rpc'
 
 /**
  * Qué pasó de verdad con una operación, una vez enviada.
@@ -33,7 +34,7 @@ export async function waitForUserOp(
   network: NetworkConfig,
   opts: { wallet?: Address; timeoutMs?: number } = {},
 ): Promise<UserOpOutcome> {
-  const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+  const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
   let reemplazo: Hex | undefined
 
   let receipt

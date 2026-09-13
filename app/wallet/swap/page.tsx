@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  createPublicClient, http, encodeAbiParameters, encodeFunctionData,
+  createPublicClient, encodeAbiParameters, encodeFunctionData,
   parseUnits, formatUnits, type Address, type Hex,
 } from 'viem'
 import { parseEthAmount } from '@/lib/send'
@@ -20,6 +20,7 @@ import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { waitForUserOp, txUrl, type UserOpOutcome } from '@/lib/waitForUserOp'
 import { suggestGasFees, type GasFees } from '@/lib/gasFees'
 import { GasAdvanced } from '@/components/GasAdvanced'
+import { rpcTransport } from '@/lib/rpc'
 
 // Reserva de gas al pulsar MAX en ETH (el wallet paga el gas del UserOp)
 const ETH_GAS_RESERVE = 300_000_000_000_000n // 0.0003 ETH
@@ -202,7 +203,7 @@ function SwapPageInner() {
   const submitUserOp = useSubmitUserOp()
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 

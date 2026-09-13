@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { isAddress, createPublicClient, http, encodeAbiParameters, encodeFunctionData, parseUnits, formatUnits, type Address, type Hex } from 'viem'
+import { isAddress, createPublicClient, encodeAbiParameters, encodeFunctionData, parseUnits, formatUnits, type Address, type Hex } from 'viem'
 import { authenticateWebAuthn } from '@/lib/webauthn'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
@@ -17,6 +17,7 @@ import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { waitForUserOp, txUrl, type UserOpOutcome } from '@/lib/waitForUserOp'
 import { suggestGasFees, type GasFees } from '@/lib/gasFees'
 import { GasAdvanced } from '@/components/GasAdvanced'
+import { rpcTransport } from '@/lib/rpc'
 
 // `sent` es el estado nuevo: la transacción salió pero todavía no sabemos si la
 // operación se hizo. Antes se pasaba directamente a `success` con el hash en la
@@ -107,7 +108,7 @@ function SendPageInner() {
   const { walletType } = useWalletType()
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 

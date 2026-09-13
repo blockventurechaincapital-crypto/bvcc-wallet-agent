@@ -1,10 +1,11 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { BVCC_WALLET_ABI, WALLET_TYPE_ABI } from './abis'
 import { NETWORKS, type NetworkConfig } from './networks'
 import { getCredentialFromChain, getWalletAddress, getAgentWalletAddress } from './wallet'
 import { loadCredential } from './webauthn'
+import { rpcTransport } from './rpc'
 
 // Datos necesarios para recrear la wallet en otra red con la MISMA address:
 // la address CREATE2 depende solo de (factory, pubKey), y las factories tienen
@@ -55,14 +56,10 @@ async function addressOnTarget(pubKeyX: bigint, pubKeyY: bigint, walletType: 0 |
 
 /** The credential this browser stored for `address`, if any. A corrupt entry counts as none. */
 function storedCredentialFor(address: Address): string | null {
-  try {
-    const stored = loadCredential()
-    return stored?.walletAddress?.toLowerCase() === address.toLowerCase() ? stored.credentialId ?? null : null
-  } catch {
-    // loadCredential parses without a guard; letting it throw here would skip every network
-    // in the loop below and report the wallet as deployed nowhere.
-    return null
-  }
+  // loadCredential treats a corrupt entry as none. It must not throw here: that would skip
+  // every network in the loop below and report the wallet as deployed nowhere.
+  const stored = loadCredential()
+  return stored?.walletAddress.toLowerCase() === address.toLowerCase() ? stored.credentialId : null
 }
 
 async function fetchSeed(address: Address, target: NetworkConfig): Promise<DeploySeed | null> {
@@ -75,7 +72,7 @@ async function fetchSeed(address: Address, target: NetworkConfig): Promise<Deplo
 
   for (const n of candidates) {
     try {
-      const client = createPublicClient({ chain: n.viemChain, transport: http(n.rpcUrl) })
+      const client = createPublicClient({ chain: n.viemChain, transport: rpcTransport(n) })
       const code = await client.getCode({ address })
       if (!code || code === '0x') continue
 

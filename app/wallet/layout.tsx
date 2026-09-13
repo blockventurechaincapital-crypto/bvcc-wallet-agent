@@ -8,6 +8,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { loadCredential } from '@/lib/webauthn'
 import OutdatedWalletNotice from '@/components/OutdatedWalletNotice'
 import RecoveryMissingNotice from '@/components/RecoveryMissingNotice'
 
@@ -211,7 +212,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     try {
-      const credential = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || '{}')
+      const credential = loadCredential()
       const activeWallet = localStorage.getItem('bvcc_active_wallet')
       const addr = credential?.walletAddress || activeWallet || ''
       if (addr) setAddress(addr)

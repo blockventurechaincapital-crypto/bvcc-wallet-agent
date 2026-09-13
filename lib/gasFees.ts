@@ -1,5 +1,6 @@
 'use client'
-import { type PublicClient, parseGwei } from 'viem'
+import { type PublicClient, createPublicClient, http, parseGwei } from 'viem'
+import { NETWORKS } from './networks'
 
 /**
  * Tarifa con la que se firma un UserOp.
@@ -95,15 +96,16 @@ export function multiplicadorPara(chainId: number, baseFee: bigint): number {
   return (tramos.find((t) => baseFee <= t.hastaBaseFee) ?? tramos[tramos.length - 1]).mult
 }
 
-/**
- * Tarifa sugerida para firmar. Se queda con lo más alto entre lo que estima viem
- * y `baseFee × multiplicador`, así que **nunca baja** de lo que ya se hacía.
- */
-export async function suggestGasFees(client: PublicClient, chainId: number): Promise<GasFees> {
+type FeeReading = GasFees & { baseFee: bigint }
+
+/** Lo que se firmaría leyendo de este cliente. En modo estricto, null si falta
+ *  algún dato: una referencia inventada con los valores por defecto no sirve. */
+async function feesFrom(client: PublicClient, chainId: number, strict: boolean): Promise<FeeReading | null> {
   const [fees, block] = await Promise.all([
     client.estimateFeesPerGas().catch(() => null),
     client.getBlock({ blockTag: 'latest' }).catch(() => null),
   ])
+  if (strict && (!fees || !block)) return null
 
   const estimado = fees?.maxFeePerGas ?? parseGwei('2')
   const propina = fees?.maxPriorityFeePerGas ?? parseGwei('0.1')
@@ -116,5 +118,85 @@ export async function suggestGasFees(client: PublicClient, chainId: number): Pro
   return {
     maxFeePerGas: suelo > estimado ? suelo : estimado,
     maxPriorityFeePerGas: propina,
+    baseFee,
   }
+}
+
+/**
+ * ── Contraste con un segundo proveedor ──────────────────────────────────────
+ *
+ * Todo lo de arriba sale del RPC, y un RPC que mienta mueve a la vez la
+ * estimación y el base fee: contra sí mismo no hay tope que valga. Así que se
+ * repite el MISMO cálculo contra el RPC de reserva de la red (otro operador) y
+ * no se firma por encima de REFERENCE_SLACK veces lo que dé.
+ *
+ * Qué evita: con una tarifa inflada, el EntryPoint reserva `maxFee × gas` del
+ * saldo (AA21 y fondos bloqueados) y la wallet PAGA `propina + base fee` por
+ * gas a quien mande la operación. El servidor ya rechaza lo que pase de 20× su
+ * estimación (app/api/send-userop), pero una operación firmada que va por la
+ * wallet conectada no pasa por ahí, y en una mempool pública la puede reenviar
+ * cualquiera cobrándose esa propina.
+ *
+ * Por qué ×3: medido el 2026-09-13 en las 6 redes, dos proveedores honrados
+ * pedidos a la vez dan cocientes entre 0,97 y 1,02. ×3 deja sitio para varios
+ * bloques de desfase en plena subida y aun así corta cualquier inflado grande.
+ * Y queda por debajo del ×20 del servidor: lo que el cliente firma, el servidor
+ * no lo rechaza por caro.
+ *
+ * Si la reserva no contesta, se firma sin contraste: bloquear las firmas porque
+ * el RPC de repuesto está caído sería peor que el riesgo que cubre.
+ */
+const REFERENCE_SLACK = 3n
+const REFERENCE_TIMEOUT_MS = 4_000
+
+function referenceClient(chainId: number): PublicClient | null {
+  const n = NETWORKS.find((x) => x.chainId === chainId)
+  if (!n || n.rpcUrls.length < 2) return null
+  return createPublicClient({
+    chain: n.viemChain,
+    transport: http(n.rpcUrls[1], { retryCount: 0, timeout: REFERENCE_TIMEOUT_MS }),
+  }) as PublicClient
+}
+
+/** Recorta la tarifa a REFERENCE_SLACK veces la de referencia. Exportado para las pruebas. */
+export function capToReference(own: GasFees, ref: FeeReading): GasFees {
+  // La propina se acota también contra el base fee: en Arbitrum la estimación de
+  // propina es 0, y un tope de 0 × 3 no dejaría ninguna. En BSC es al revés (base
+  // fee 0, propina 0,05 gwei). Si la referencia no da ninguno de los dos, no hay
+  // con qué comparar y no se toca.
+  const tipRef = ref.maxPriorityFeePerGas * REFERENCE_SLACK > ref.baseFee
+    ? ref.maxPriorityFeePerGas * REFERENCE_SLACK
+    : ref.baseFee
+  const feeRef = ref.maxFeePerGas * REFERENCE_SLACK
+
+  const tip = tipRef > 0n && own.maxPriorityFeePerGas > tipRef ? tipRef : own.maxPriorityFeePerGas
+  let maxFee = feeRef > 0n && own.maxFeePerGas > feeRef ? feeRef : own.maxFeePerGas
+  if (maxFee < tip) maxFee = tip
+  return { maxFeePerGas: maxFee, maxPriorityFeePerGas: tip }
+}
+
+/**
+ * Tarifa sugerida para firmar. Se queda con lo más alto entre lo que estima viem
+ * y `baseFee × multiplicador`, así que **nunca baja** de lo que ya se hacía, y
+ * después se contrasta con el RPC de reserva (ver arriba).
+ */
+export async function suggestGasFees(
+  client: PublicClient,
+  chainId: number,
+  reference: PublicClient | null = referenceClient(chainId),
+): Promise<GasFees> {
+  const [own, ref] = await Promise.all([
+    feesFrom(client, chainId, false),
+    reference ? feesFrom(reference, chainId, true) : Promise.resolve(null),
+  ])
+  const fees: GasFees = { maxFeePerGas: own!.maxFeePerGas, maxPriorityFeePerGas: own!.maxPriorityFeePerGas }
+  if (!ref) return fees
+
+  const capped = capToReference(fees, ref)
+  if (capped.maxFeePerGas !== fees.maxFeePerGas || capped.maxPriorityFeePerGas !== fees.maxPriorityFeePerGas) {
+    console.warn('[gasFees] the RPC fee is far above the reference RPC; capped before signing', {
+      chainId, own: fees, capped,
+    })
+  }
+  return capped
 }

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { createPublicClient, http, type Hex } from 'viem'
+import { createPublicClient, type Hex } from 'viem'
 import { getWeb3Wallet } from './wcWallet'
 import { NETWORKS, getNetwork } from './networks'
 import { getAtomicBatchEnabled, getBatch } from './wcCalls'
 import type { SessionTypes, PendingRequestTypes, ProposalTypes } from '@walletconnect/types'
+import { rpcTransport } from './rpc'
 
 export type WcSession = {
   topic: string
@@ -193,7 +194,7 @@ async function autoRespondCallsStatus(wc: Wc, event: PendingRequestTypes.Struct)
     const hashes: Hex[] = rec ? rec.txHashes : [id]
 
     const net = getNetwork(chainId)
-    const client = createPublicClient({ chain: net.viemChain, transport: http(net.rpcUrl) })
+    const client = createPublicClient({ chain: net.viemChain, transport: rpcTransport(net) })
 
     const receipts = await Promise.all(hashes.map(async (h) => {
       try { return await client.getTransactionReceipt({ hash: h }) } catch { return null }

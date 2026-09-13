@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import {
-  isAddress, createPublicClient, http,
+  isAddress, createPublicClient,
   encodeAbiParameters, encodeFunctionData,
   formatEther,
   type Address, type Hex,
@@ -33,6 +33,7 @@ import DisclaimerModal from '@/components/DisclaimerModal'
 import { AgentAvatar, AgentAvatarPicker } from '@/components/AgentAvatar'
 import type { NetworkConfig } from '@/lib/networks'
 import { suggestGasFees } from '@/lib/gasFees'
+import { rpcTransport } from '@/lib/rpc'
 
 const C = {
   bg: '#06080f',
@@ -150,7 +151,7 @@ export default function AgentsPage() {
   const submitUserOp = useSubmitUserOp()
 
   const publicClient = useMemo(
-    () => createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) }),
+    () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 

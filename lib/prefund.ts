@@ -1,8 +1,9 @@
 'use client'
-import { createPublicClient, http, type Address } from 'viem'
+import { createPublicClient, type Address } from 'viem'
 import { USEROP_TOTAL_GAS } from './executeUserOp'
 import { suggestGasFees } from './gasFees'
 import type { NetworkConfig } from './networks'
+import { rpcTransport } from './rpc'
 
 /**
  * How much headroom to leave on top of one userOp's cost. Gas can move between the deploy
@@ -38,7 +39,7 @@ export async function getPrefundNeed(
   walletAddress: Address,
   network: NetworkConfig,
 ): Promise<PrefundNeed> {
-  const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+  const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
   const [balance, deposit, fees] = await Promise.all([
     client.getBalance({ address: walletAddress }),
