@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { CG_PLATFORM, CG_NATIVE_ID } from '@/lib/coingecko'
 
 // Precios USD + cambio 24h vía CoinGecko.
-// - native: precio del token nativo de la red (ETH / BNB)
+// - native: precio del token nativo de la red (ETH / BNB / POL)
 // - tokens: precio por contrato ERC-20 (solo redes mainnet indexadas por CoinGecko)
 // Los testnets no están indexados → tokens = {} (esperado).
 //
@@ -10,18 +11,6 @@ import { NextRequest, NextResponse } from 'next/server'
 // se batchea en una sola llamada y sube el rate-limit.
 
 const CG = 'https://api.coingecko.com/api/v3'
-
-const PLATFORM: Record<string, string> = {
-  '1': 'ethereum',
-  '42161': 'arbitrum-one',
-  '8453': 'base',
-  '56': 'binance-smart-chain',
-}
-
-const NATIVE_ID: Record<string, string> = {
-  '1': 'ethereum', '42161': 'ethereum', '8453': 'ethereum',
-  '56': 'binancecoin', '421614': 'ethereum',
-}
 
 type Price = { usd: number; change24h: number }
 
@@ -35,8 +24,8 @@ export async function GET(req: NextRequest) {
   const contracts = (searchParams.get('contracts') ?? '')
     .split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
 
-  const nativeId = NATIVE_ID[chainId] ?? 'ethereum'
-  const platform = PLATFORM[chainId]
+  const nativeId = CG_NATIVE_ID[chainId]
+  const platform = CG_PLATFORM[chainId]
 
   const result: { native: Price; tokens: Record<string, Price> } = {
     native: { usd: 0, change24h: 0 },
@@ -44,12 +33,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Precio nativo
-    const nativeRes = await fetch(
+    // Precio nativo. Sin id conocido no se pide nada: se devuelve 0, que la
+    // interfaz ya sabe pintar como «sin precio».
+    const nativeRes = nativeId ? await fetch(
       `${CG}/simple/price?ids=${nativeId}&vs_currencies=usd&include_24hr_change=true`,
       fetchOpts
-    )
-    if (nativeRes.ok) {
+    ) : null
+    if (nativeId && nativeRes?.ok) {
       const d = await nativeRes.json()
       const n = d?.[nativeId]
       if (n) result.native = { usd: n.usd ?? 0, change24h: n.usd_24h_change ?? 0 }

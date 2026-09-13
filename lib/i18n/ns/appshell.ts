@@ -37,6 +37,7 @@ export const appshell = {
       confirmSubtitle: 'Connect a wallet to pay gas and deploy your contract.',
       confirmRowAuth: 'Authentication',
       confirmRowAuthValue: '✓ Passkey registered',
+      confirmRowAuthPending: 'Passkey not confirmed yet',
       confirmRowType: 'Type',
       confirmRowTypeAgent: '🤖 AI Agent',
       confirmRowTypePersonal: '👤 Personal',
@@ -58,12 +59,33 @@ export const appshell = {
       confirmAgentFactoryHint: 'Switch network in the selector above or choose Personal Wallet.',
       confirmDeployBtn: 'Deploy wallet',
       confirmTwoTxNotice: 'Two confirmations: the deploy, then {amount} {symbol} sent to your new wallet so it can pay for its own recovery signature.',
-      confirmFundingStep: 'Sending your wallet the gas for its first signature...',
+      confirmFundingChecking: 'Checking what your new wallet needs for its first signature...',
+      confirmFundingStep: 'Confirm the transfer of {amount} {symbol} to your new wallet in your connected wallet — it pays for its first signature.',
+      confirmFundingStepWc: 'Open your wallet app and confirm the transfer of {amount} {symbol} to your new wallet. The request went there over WalletConnect, so nothing will pop up on this page.',
       confirmSigningStep: 'Registering your guardians — confirm with your passkey.',
       confirmDeployingBtn: 'Waiting for signature...',
       confirmConfirmingBtn: 'Confirming...',
       confirmDeployedBtn: 'Deployed ✓',
       confirmBackBtn: '← Change guardians',
+
+      // Passkey check before a migration, or before remembering a pre-V4 credential
+      passkeyConfirmBtn: 'Confirm with passkey',
+      passkeyConfirming: 'Waiting for your passkey...',
+      migrateConfirmBody: 'Your new wallet will be controlled by the same passkey as your current one. Confirm that passkey is on this device before anything is deployed: if it is not, the deploy would pay for a wallet you cannot sign for.',
+      migrateWrongPasskey: 'That passkey does not control your current wallet, so it could not sign for the new one either. Nothing was deployed. If the wallet was recovered through guardians, its owner is the passkey created during the recovery.',
+      migratePasskeyFailed: 'The passkey was not confirmed ({reason}). Nothing was deployed.',
+
+      // Setup stopped between the deploy and the passkey
+      setupStopTitle: 'Your wallet is deployed, but it cannot pay for its first signature yet',
+      setupStopBody: 'Registering your guardians is paid from the new wallet\'s own balance, and it holds less than that costs. Send it {amount} {symbol} and press Retry. Your passkey will not be asked for until the funds are there.',
+      setupStopAddress: 'Your new wallet',
+      setupStopRejected: 'The transfer from your connected wallet was declined.',
+      setupStopNoFunds: 'Your connected wallet does not have enough {symbol} for this transfer and its gas. Top it up, or send the amount from any other wallet or exchange.',
+      setupStopOther: 'The transfer from your connected wallet did not go through: {detail}',
+      setupStopNotArrived: 'No transfer has reached it yet. If you have just sent one, give it a few seconds and press Retry.',
+      setupStopRetry: 'Retry',
+      setupStopSkip: 'Go to my wallet and set up guardians later',
+      setupStopSkipped: 'the wallet had nothing to pay for the signature with. Send it {amount} {symbol}, then set them up here.',
 
       // Access step
       accessBackToHome: '← Back to home',
@@ -79,6 +101,10 @@ export const appshell = {
       accessRecoverBtn: 'Recover wallet',
       accessWaitingBiometrics: 'Waiting for biometrics...',
       accessCreateError: 'Error creating wallet',
+      accessVerifyBody: 'This wallet was created before V4. The only record of its passkey on-chain was written by whoever deployed it, so it cannot be trusted as is. Confirm with your passkey and the app will remember the one that really controls the wallet.',
+      accessVerifySkip: 'Enter without confirming — you will pick the passkey when you sign',
+      accessWrongPasskey: 'That passkey does not control this wallet, so nothing was saved. If the wallet was recovered through guardians, its owner is the passkey created during the recovery.',
+      accessPasskeyFailed: 'The passkey was not confirmed ({reason}). Nothing was saved.',
 
       // Left panel (access step)
       accessHeroTitle1: 'Your',
@@ -128,6 +154,7 @@ export const appshell = {
       confirmSubtitle: 'Conecta una wallet para pagar el gas y desplegar tu contrato.',
       confirmRowAuth: 'Autenticación',
       confirmRowAuthValue: '✓ Passkey registrada',
+      confirmRowAuthPending: 'Passkey sin confirmar',
       confirmRowType: 'Tipo',
       confirmRowTypeAgent: '🤖 Agente IA',
       confirmRowTypePersonal: '👤 Personal',
@@ -149,12 +176,33 @@ export const appshell = {
       confirmAgentFactoryHint: 'Cambia de red en el selector superior o elige Wallet Personal.',
       confirmDeployBtn: 'Desplegar wallet',
       confirmTwoTxNotice: 'Dos confirmaciones: el despliegue y, después, {amount} {symbol} para tu nueva wallet, con los que pagará la firma de su propia recuperación.',
-      confirmFundingStep: 'Enviando a tu wallet el gas de su primera firma...',
+      confirmFundingChecking: 'Comprobando qué necesita tu nueva wallet para su primera firma...',
+      confirmFundingStep: 'Confirma en tu wallet conectada el envío de {amount} {symbol} a tu nueva wallet — con eso paga su primera firma.',
+      confirmFundingStepWc: 'Abre la app de tu wallet y confirma el envío de {amount} {symbol} a tu nueva wallet. La petición ha ido allí por WalletConnect, así que en esta página no va a saltar nada.',
       confirmSigningStep: 'Registrando tus guardianes — confirma con tu passkey.',
       confirmDeployingBtn: 'Esperando firma...',
       confirmConfirmingBtn: 'Confirmando...',
       confirmDeployedBtn: 'Desplegada ✓',
       confirmBackBtn: '← Cambiar guardians',
+
+      // Comprobación de la passkey antes de migrar, o antes de recordar una credencial pre-V4
+      passkeyConfirmBtn: 'Confirmar con passkey',
+      passkeyConfirming: 'Esperando a tu passkey...',
+      migrateConfirmBody: 'Tu nueva wallet la controlará la misma passkey que la actual. Confirma que esa passkey está en este dispositivo antes de desplegar nada: si no lo está, el despliegue pagaría una wallet que no podrías firmar.',
+      migrateWrongPasskey: 'Esa passkey no controla tu wallet actual, así que tampoco podría firmar por la nueva. No se ha desplegado nada. Si la wallet se recuperó con guardianes, su dueña es la passkey que se creó durante la recuperación.',
+      migratePasskeyFailed: 'La passkey no se confirmó ({reason}). No se ha desplegado nada.',
+
+      // El alta se detiene entre el despliegue y la passkey
+      setupStopTitle: 'Tu wallet está desplegada, pero todavía no puede pagar su primera firma',
+      setupStopBody: 'Registrar tus guardianes se paga con el saldo de la propia wallet nueva, y tiene menos de lo que cuesta. Envíale {amount} {symbol} y pulsa Reintentar. No se te pedirá la passkey hasta que los fondos estén dentro.',
+      setupStopAddress: 'Tu nueva wallet',
+      setupStopRejected: 'El envío desde tu wallet conectada se rechazó.',
+      setupStopNoFunds: 'Tu wallet conectada no tiene {symbol} suficiente para este envío y su gas. Recárgala, o manda la cantidad desde cualquier otra wallet o exchange.',
+      setupStopOther: 'El envío desde tu wallet conectada no salió: {detail}',
+      setupStopNotArrived: 'Todavía no le ha llegado ningún envío. Si acabas de hacerlo, espera unos segundos y pulsa Reintentar.',
+      setupStopRetry: 'Reintentar',
+      setupStopSkip: 'Ir a mi wallet y configurar los guardianes más tarde',
+      setupStopSkipped: 'la wallet no tenía con qué pagar la firma. Envíale {amount} {symbol} y configúralos aquí.',
 
       // Access step
       accessBackToHome: '← Volver al inicio',
@@ -170,6 +218,10 @@ export const appshell = {
       accessRecoverBtn: 'Recuperar wallet',
       accessWaitingBiometrics: 'Esperando biometría...',
       accessCreateError: 'Error al crear la wallet',
+      accessVerifyBody: 'Esta wallet se creó antes de la V4. El único registro de su passkey en la cadena lo escribió quien la desplegó, así que no es de fiar tal cual. Confirma con tu passkey y la app recordará la que de verdad controla la wallet.',
+      accessVerifySkip: 'Entrar sin confirmar — elegirás la passkey al firmar',
+      accessWrongPasskey: 'Esa passkey no controla esta wallet, así que no se ha guardado nada. Si la wallet se recuperó con guardianes, su dueña es la passkey que se creó durante la recuperación.',
+      accessPasskeyFailed: 'La passkey no se confirmó ({reason}). No se ha guardado nada.',
 
       // Left panel (access step)
       accessHeroTitle1: 'Tu wallet',

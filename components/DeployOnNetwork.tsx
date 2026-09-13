@@ -1,11 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAccount, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useDeploySeed } from '@/lib/useCrossChainDeploy'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI } from '@/lib/abis'
+import { discoverCredentialId, saveCredential, WrongPasskeyError } from '@/lib/webauthn'
 
 const GOLD = '#D4AF37'
 const GOLD_GRADIENT = 'linear-gradient(115deg,#f5d76e,#d4af37,#ecc84a)'
@@ -29,6 +31,28 @@ export default function DeployOnNetwork({ address }: { address: string }) {
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash, chainId: network.chainId })
   const queryClient = useQueryClient()
 
+  // The credential is not needed to deploy — createWallet takes the key alone — but the
+  // wallet needs it to sign afterwards. When neither this browser nor the chain vouches for
+  // one, the passkey itself is asked, and checked against the signer before it is kept.
+  const [recoveredCredId, setRecoveredCredId] = useState<string | null>(null)
+  const [recovering, setRecovering] = useState(false)
+  const [recoverError, setRecoverError] = useState<string | null>(null)
+
+  async function handleRecoverCredential() {
+    if (!seed) return
+    setRecovering(true)
+    setRecoverError(null)
+    try {
+      const id = await discoverCredentialId({ pubKeyX: seed.pubKeyX, pubKeyY: seed.pubKeyY })
+      saveCredential(id, address)
+      setRecoveredCredId(id)
+    } catch (err) {
+      setRecoverError(err instanceof WrongPasskeyError ? t('dashboard.depWrongPasskey') : t('dashboard.depRecoverFailed'))
+    } finally {
+      setRecovering(false)
+    }
+  }
+
   useEffect(() => {
     if (isSuccess) queryClient.invalidateQueries({ queryKey: ['accountStatus'] })
   }, [isSuccess, queryClient])
@@ -36,9 +60,13 @@ export default function DeployOnNetwork({ address }: { address: string }) {
   const factoryAddr = seed?.walletType === 1 ? network.contracts.agentFactory : network.contracts.factory
   const isOnTargetChain = connectedChainId === network.chainId
   const isProcessing = isWriting || isConfirming
+  // createWallet derives the address from the key it is given. If that is not this wallet's
+  // address — the owner key was rotated by a recovery, or the wallet predates this factory —
+  // deploying would create a different wallet while funds keep arriving at the usual one.
+  const addressMatches = !!seed?.targetAddress && seed.targetAddress.toLowerCase() === address.toLowerCase()
 
   function handleDeploy() {
-    if (!seed || !factoryAddr) return
+    if (!seed || !factoryAddr || !addressMatches) return
     // V4: the factory only deploys. The guardians of the source network are NOT copied
     // here any more — they are registered on this network in a passkey-signed call, so
     // the deployer of an address never gets to choose who can rotate its owner.
@@ -90,18 +118,24 @@ export default function DeployOnNetwork({ address }: { address: string }) {
         {t('dashboard.depBtn')}
       </button>
 
-      {open && (
+      {/* Rendered into <body>: the card this button sits in keeps a transform from its entry
+          animation, and a transformed ancestor becomes the containing block of any fixed
+          descendant — the overlay ended up the size of the card, cut off, under the page. */}
+      {open && createPortal(
         <div
           onClick={close}
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             backgroundColor: 'rgba(0,0,0,0.72)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+            display: 'flex', padding: '20px', overflowY: 'auto',
           }}
         >
           <div
             onClick={e => e.stopPropagation()}
             style={{
+              // Auto margins centre it, and unlike align-items: center they let a modal taller
+              // than the screen scroll from its top instead of losing it.
+              margin: 'auto',
               width: '100%', maxWidth: '420px',
               backgroundColor: '#0d1117',
               border: '1px solid rgba(255,255,255,0.09)',
@@ -139,10 +173,27 @@ export default function DeployOnNetwork({ address }: { address: string }) {
                     <span style={lbl}>{t('dashboard.depSource')}</span>
                     <span style={val}>{seed.sourceName}</span>
                   </div>
-                  <div style={{ ...row, borderBottom: 'none' }}>
+                  <div style={row}>
                     <span style={lbl}>{t('dashboard.accountGuardians')}</span>
                     <span style={{ ...val, color: '#8892a4' }}>{seed.guardians.map(shortAddr).join('  ')}</span>
                   </div>
+                  <div style={{ ...row, borderBottom: 'none' }}>
+                    <span style={lbl}>{t('dashboard.depCredential')}</span>
+                    {seed.credentialId || recoveredCredId ? (
+                      <span style={{ ...val, color: '#48bb78' }}>{t('dashboard.depCredFound')}</span>
+                    ) : (
+                      <button
+                        onClick={handleRecoverCredential}
+                        disabled={recovering}
+                        style={{ fontSize: '11px', fontWeight: 600, color: GOLD, background: 'transparent', border: `1px solid ${GOLD}`, borderRadius: '4px', padding: '4px 8px', cursor: recovering ? 'wait' : 'pointer', opacity: recovering ? 0.6 : 1 }}
+                      >
+                        {recovering ? t('dashboard.depRecovering') : t('dashboard.depRecoverCred')}
+                      </button>
+                    )}
+                  </div>
+                  {recoverError && (
+                    <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#fc8181' }}>{recoverError}</p>
+                  )}
                 </div>
 
                 {isSuccess ? (
@@ -159,6 +210,14 @@ export default function DeployOnNetwork({ address }: { address: string }) {
                   </div>
                 ) : !factoryAddr ? (
                   <p style={{ fontSize: '12px', color: '#fc8181' }}>{t('dashboard.depAgentMissing')}</p>
+                ) : !seed.targetAddress ? (
+                  <p style={{ fontSize: '12px', color: '#fc8181', lineHeight: 1.5 }}>{t('dashboard.depAddrUnverified')}</p>
+                ) : !addressMatches ? (
+                  <p style={{ fontSize: '12px', color: '#fc8181', lineHeight: 1.5 }}>
+                    {t('dashboard.depAddrMismatch')
+                      .replace('{target}', shortAddr(seed.targetAddress))
+                      .replace('{address}', shortAddr(address))}
+                  </p>
                 ) : !connected ? (
                   <p style={{ fontSize: '12px', color: '#8892a4' }}>{t('dashboard.depConnect')}</p>
                 ) : !isOnTargetChain ? (
@@ -188,7 +247,8 @@ export default function DeployOnNetwork({ address }: { address: string }) {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

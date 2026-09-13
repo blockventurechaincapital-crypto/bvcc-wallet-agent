@@ -105,10 +105,28 @@ function bytesToBase64url(hex: `0x${string}`): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+export interface ChainCredential {
+  credentialId: string
+  /**
+   * True only when it comes from the wallet's own CredentialSet event, which nothing but a
+   * passkey-signed call can emit. The legacy factory event carries whatever the account that
+   * deployed the wallet wrote, so a credential from there is a claim to verify against the
+   * signer, never an id to filter the passkey prompt by.
+   */
+  authenticated: boolean
+}
+
 export async function getCredentialIdFromChain(
   walletAddress: Address,
   network: NetworkConfig,
 ): Promise<string | null> {
+  return (await getCredentialFromChain(walletAddress, network))?.credentialId ?? null
+}
+
+export async function getCredentialFromChain(
+  walletAddress: Address,
+  network: NetworkConfig,
+): Promise<ChainCredential | null> {
   // A wallet may have been created by either the standard factory (emits
   // WalletCreated) or the agent factory (emits AgentWalletCreated). Both events
   // share the same signature, so query each factory and return whichever matches.
@@ -145,7 +163,7 @@ export async function getCredentialIdFromChain(
     })
     if (logs.length > 0) {
       const raw = (logs[logs.length - 1].args as { credentialId?: `0x${string}` }).credentialId
-      if (raw) return bytesToBase64url(raw)
+      if (raw) return { credentialId: bytesToBase64url(raw), authenticated: true }
     }
   } catch {
     // fall through to the legacy factory event
@@ -173,7 +191,7 @@ export async function getCredentialIdFromChain(
       })
       if (logs.length > 0) {
         const args = logs[0].args as { credentialId?: string }
-        return args.credentialId ?? null
+        return args.credentialId ? { credentialId: args.credentialId, authenticated: false } : null
       }
     } catch {
       // try next source

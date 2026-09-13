@@ -25,6 +25,20 @@ export default function RecoveryMissingNotice() {
   const { t } = useI18n()
   const router = useRouter()
   const [unset, setUnset] = useState(false)
+  const [lastFailure, setLastFailure] = useState<string | null>(null)
+
+  // Why the setup attempt that sent the user here failed. The creation page cannot show it
+  // itself — it navigates away in the same breath — so it hands the reason over once, and it
+  // stays for as long as this layout is mounted.
+  useEffect(() => {
+    try {
+      const reason = sessionStorage.getItem('bvcc_setup_failure')
+      if (!reason) return
+      sessionStorage.removeItem('bvcc_setup_failure')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastFailure(reason)
+    } catch { /* storage blocked: the banner still says what is missing */ }
+  }, [])
 
   useEffect(() => {
     if (!isLoaded || !address) return
@@ -57,6 +71,11 @@ export default function RecoveryMissingNotice() {
       <span style={{ fontSize: '14px' }} aria-hidden>⚠</span>
       <span style={{ flex: 1, minWidth: '220px', lineHeight: 1.45 }}>
         <b>{t('wallet.recoveryMissingTitle')}</b> — {t('wallet.recoveryMissingBody')}
+        {lastFailure && (
+          <span style={{ display: 'block', marginTop: '3px', wordBreak: 'break-word' }}>
+            {t('wallet.recoveryMissingLastAttempt')} {lastFailure}
+          </span>
+        )}
       </span>
       <button
         onClick={() => router.push('/wallet/settings')}

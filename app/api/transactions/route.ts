@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { safeChainId, safeAddress, safeInt } from '@/lib/apiGuard'
+import { sanitizeTokenMeta, safeDecimals } from '@/lib/tokenMeta'
 
 export type TxItem = {
   hash: string
@@ -71,8 +72,10 @@ export async function GET(req: NextRequest) {
         from: tx.from,
         to: tx.to,
         value: tx.value,
-        tokenSymbol: tx.tokenSymbol,
-        tokenDecimal: parseInt(tx.tokenDecimal, 10),
+        // Mismo texto de tercero que en /api/tokens, misma poda: el historial
+        // es donde un token de polvo aparece por primera vez.
+        tokenSymbol: sanitizeTokenMeta(tx.tokenSymbol, tx.tokenSymbol).symbol,
+        tokenDecimal: safeDecimals(tx.tokenDecimal) ?? 18,
         timestamp: parseInt(tx.timeStamp, 10),
         isError: false,
         type: 'token' as const,

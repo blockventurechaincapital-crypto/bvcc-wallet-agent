@@ -3,6 +3,7 @@ import { useQuery, useQueries } from '@tanstack/react-query'
 import { createPublicClient, http, formatUnits, getAddress, type Address } from 'viem'
 import type { NetworkConfig } from './networks'
 import type { DiscoveredToken } from '@/app/api/tokens/route'
+import { CG_NATIVE_ID } from './coingecko'
 
 export type WalletToken = {
   key: string                 // '<chainId>:native' | '<chainId>:<contract>'
@@ -19,6 +20,9 @@ export type WalletToken = {
   logo: string
   cgId?: string               // coingecko id (nativo) — para la gráfica
   network: NetworkConfig      // red a la que pertenece este token
+  /** El símbolo lo escribió un tercero y no es de fiar tal cual (lib/tokenMeta).
+   *  Los nativos y el USDC configurado nunca lo llevan: esos los ponemos aquí. */
+  suspicious?: boolean
 }
 
 const ERC20_BALANCE_ABI = [{
@@ -27,14 +31,24 @@ const ERC20_BALANCE_ABI = [{
   outputs: [{ name: '', type: 'uint256' }],
 }] as const
 
+// ⚠️ Las tres tablas de aquí abajo NO llevan valor por defecto, y es a propósito.
+// Antes caían todas a Ethereum, y Polygon no estaba en ninguna: el POL salía
+// llamándose «Ethereum», con el logo de ETH y con el precio de ETH. Un hueco que
+// se tapa con el nativo de otra red no se nota nunca; un hueco que se ve, sí.
+// ⚠️ Tienen que ser URLs de `assets.coingecko.com`, que es el host que está en
+// `img-src` (next.config.ts). La API de CoinGecko devuelve hoy las suyas en
+// `coin-images.coingecko.com`: copiar de ahí "para usar la buena" deja el logo
+// sin cargar, y sin más síntoma que un círculo con la inicial.
 const NATIVE_LOGO: Record<string, string> = {
   ETH: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
   BNB: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+  POL: 'https://assets.coingecko.com/coins/images/32440/small/polygon.png',
 }
 
-const NATIVE_CG_ID: Record<number, string> = {
-  1: 'ethereum', 42161: 'ethereum', 8453: 'ethereum',
-  421614: 'ethereum', 56: 'binancecoin',
+const NATIVE_NAME: Record<string, string> = {
+  ETH: 'Ethereum',
+  BNB: 'BNB',
+  POL: 'Polygon',
 }
 
 // chainId → carpeta de trustwallet/assets (logos por contrato)
@@ -108,15 +122,19 @@ export async function fetchTokens(address: string, network: NetworkConfig): Prom
     isNative: true,
     address: null,
     symbol: nativeSym,
-    name: nativeSym === 'BNB' ? 'BNB' : 'Ethereum',
+    // Sin nombre conocido se usa el símbolo, que es dato de la red y no una
+    // suposición.
+    name: NATIVE_NAME[nativeSym] ?? nativeSym,
     decimals: network.nativeToken.decimals,
     balance: nativeBalance,
     balanceFormatted: nativeFmt,
     usdPrice: nativePrice.usd,
     change24h: nativePrice.change24h,
     usdValue: parseFloat(nativeFmt) * nativePrice.usd,
-    logo: NATIVE_LOGO[nativeSym] ?? NATIVE_LOGO.ETH,
-    cgId: NATIVE_CG_ID[network.chainId] ?? 'ethereum',
+    // Sin logo, `TokenIcon` pinta el círculo con la inicial: mejor eso que el
+    // logo de otra moneda.
+    logo: NATIVE_LOGO[nativeSym] ?? '',
+    cgId: CG_NATIVE_ID[String(network.chainId)],
     network,
   }]
 
@@ -137,6 +155,7 @@ export async function fetchTokens(address: string, network: NetworkConfig): Prom
       usdValue: parseFloat(fmt) * price.usd,
       logo: tokenLogo(network, t.address),
       network,
+      ...(t.suspicious ? { suspicious: true } : {}),
     })
   }
 

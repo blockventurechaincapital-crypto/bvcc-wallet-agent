@@ -13,6 +13,7 @@ export const walletversion = {
       recoveryMissingBody:
         'This wallet has no guardians registered, so if you lose your passkey there is no way to recover it. Setting them takes one signature.',
       recoveryMissingCta: 'Set up now',
+      recoveryMissingLastAttempt: 'Last attempt:',
     },
   },
   es: {
@@ -29,6 +30,7 @@ export const walletversion = {
       recoveryMissingBody:
         'Esta wallet no tiene guardianes registrados, así que si pierdes la passkey no hay forma de recuperarla. Configurarlos es una sola firma.',
       recoveryMissingCta: 'Configurar ahora',
+      recoveryMissingLastAttempt: 'Último intento:',
     },
   },
 } as const

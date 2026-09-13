@@ -11,13 +11,17 @@ import {
   useSendTransaction,
 } from 'wagmi'
 import { QRCodeSVG } from 'qrcode.react'
-import { registerWebAuthn, saveCredential, hasCredential, credentialIdToBytes } from '@/lib/webauthn'
-import { getWalletAddress, getAgentWalletAddress, getCredentialIdFromChain } from '@/lib/wallet'
+import {
+  registerWebAuthn, saveCredential, hasCredential, credentialIdToBytes,
+  discoverCredentialId, WrongPasskeyError,
+} from '@/lib/webauthn'
+import { getWalletAddress, getAgentWalletAddress, getCredentialFromChain } from '@/lib/wallet'
 import { validateGuardians, ZERO_ADDRESS } from '@/lib/guardianValidation'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from '@/lib/abis'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
-import { getPrefundNeed } from '@/lib/prefund'
+import { getPrefundNeed, type PrefundNeed } from '@/lib/prefund'
+import { classifyTransferFailure, failureSummary, type TransferFailure } from '@/lib/txFailure'
 import { encodeFunctionData } from 'viem'
 import { useNetwork } from '@/lib/NetworkContext'
 import { NETWORKS } from '@/lib/networks'
@@ -32,6 +36,24 @@ interface RegistrationData {
   pubKeyX: bigint
   pubKeyY: bigint
   credentialId: string
+  /**
+   * Whether this browser has proven it holds the passkey behind (pubKeyX, pubKeyY). A key
+   * registered right here is proven by construction. A migration takes the key from the old
+   * contract and the credential id from localStorage, which drift apart after a guardian
+   * recovery — and the new address derives from the key, so deploying on an unproven pair
+   * pays for a wallet nobody on this device can sign for.
+   */
+  ownerConfirmed: boolean
+}
+
+/** Onboarding stopped between the deploy and the passkey, because the wallet cannot pay yet. */
+interface SetupStop {
+  walletAddress: Address
+  /** What to send, from the same estimate the confirm screen announced. */
+  missing: bigint
+  /** Why the transfer from the connected wallet failed; null when it did not throw. */
+  failure: TransferFailure | null
+  detail: string | null
 }
 
 const C = {
@@ -47,6 +69,7 @@ const C = {
   subtle: '#4a5568',
   error: '#fc8181',
   success: '#68d391',
+  warn: '#e6b800',
 }
 
 function shortAddr(addr: string) {
@@ -100,7 +123,13 @@ export default function Home() {
               .catch(() => null),
           )) as (string | null)[]
 
-          setRegData({ pubKeyX: BigInt(qx), pubKeyY: BigInt(qy), credentialId: stored.credentialId })
+          // The key comes from the contract and the credential id from this browser, and nothing
+          // here says they belong together. The confirm screen asks the passkey before it offers
+          // the deploy.
+          setRegData({
+            pubKeyX: BigInt(qx), pubKeyY: BigInt(qy),
+            credentialId: stored.credentialId, ownerConfirmed: false,
+          })
           setSelectedWalletType(wType === 1 ? 'agent' : 'standard')
           // Una wallet cuyos guardianes nunca se registraron devuelve tres
           // direcciones cero, que son cadenas y por tanto "truthy": se daban por
@@ -122,6 +151,12 @@ export default function Home() {
   const [regData, setRegData] = useState<RegistrationData | null>(null)
   const [configuring, setConfiguring] = useState(false)
   const [setupPhase, setSetupPhase] = useState<'idle' | 'funding' | 'signing'>('idle')
+  const [fundingAmount, setFundingAmount] = useState<bigint | null>(null)
+  const [setupStop, setSetupStop] = useState<SetupStop | null>(null)
+  const [confirmingOwner, setConfirmingOwner] = useState(false)
+  // "Enter with address" on a wallet whose only on-chain credential is unauthenticated: the
+  // key to check the passkey against, waiting for the user's click.
+  const [entryCheck, setEntryCheck] = useState<{ wallet: Address; pubKeyX: bigint; pubKeyY: bigint } | null>(null)
   const submitUserOp = useSubmitUserOp()
   const [guardians, setGuardians] = useState<[string, string, string]>(['', '', ''])
   const [addressInput, setAddressInput] = useState('')
@@ -132,7 +167,10 @@ export default function Home() {
 
   // Wagmi hooks — deploy flow
   const { connect, connectors } = useConnect()
-  const { address: connectedAddress, chainId: connectedChainId } = useAccount()
+  const { address: connectedAddress, chainId: connectedChainId, connector: activeConnector } = useAccount()
+  // Over WalletConnect a transaction request goes to another device and this page shows no
+  // prompt at all, so "sending..." reads as the app hanging.
+  const viaWalletConnect = activeConnector?.id === 'walletConnect'
   const { switchChain } = useSwitchChain()
   const {
     writeContract,
@@ -189,55 +227,6 @@ export default function Home() {
     if (connectedAddress && wcUri) setWcUri(null)
   }, [connectedAddress, wcUri])
 
-  // After tx confirmed: compute address, save credential, then register guardians and
-  // the credential on-chain with the passkey. The wallet is deployed but unconfigured
-  // until this second, signed step lands — which is exactly what makes the deployment
-  // race harmless: whoever wins it cannot set the guardians.
-  useEffect(() => {
-    if (!isTxConfirmed || !regData) return
-    const resolver = selectedWalletType === 'agent'
-      ? getAgentWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
-      : getWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
-    resolver.then(async walletAddress => {
-      saveCredential(regData.credentialId, walletAddress)
-      localStorage.setItem('bvcc_guardians', JSON.stringify(guardians))
-      setConfiguring(true)
-
-      // Leave the wallet able to pay for the signature that comes next. setGuardians
-      // travels as a userOp and the EntryPoint charges the prefund to the account, not to
-      // whoever relays it — so a wallet that was just created, holding nothing, fails
-      // validation with AA21 before its call ever runs. Funding it here is what makes the
-      // second step possible at all; it is the user's own money, in their own wallet.
-      try {
-        setSetupPhase('funding')
-        const { missing } = await getPrefundNeed(walletAddress, network)
-        if (missing > 0n) {
-          const hash = await sendTransactionAsync({
-            to: walletAddress, value: missing, chainId: network.chainId,
-          })
-          const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
-          await client.waitForTransactionReceipt({ hash })
-        }
-      } catch {
-        // Declined, or the transfer failed. Try the signature anyway — the wallet may
-        // already have funds from elsewhere — and let the catch below handle the fallout.
-      }
-
-      try {
-        setSetupPhase('signing')
-        await registerRecovery(walletAddress, regData.credentialId)
-        router.push('/wallet')
-      } catch (err) {
-        // The wallet exists and is the user's; only the recovery setup failed. Send them
-        // in anyway and let the wallet prompt for it rather than trapping them here.
-        setConfiguring(false)
-        setError(err instanceof Error ? err.message : String(err))
-        localStorage.setItem('bvcc_pending_guardians', JSON.stringify(guardians))
-        router.push('/wallet')
-      }
-    })
-  }, [isTxConfirmed]) // eslint-disable-line react-hooks/exhaustive-deps
-
   /// Registers guardians + credential in one passkey-signed self-call.
   async function registerRecovery(walletAddress: Address, credentialId: string) {
     const callData = encodeFunctionData({
@@ -254,6 +243,144 @@ export default function Home() {
     })
   }
 
+  /**
+   * What the wallet still lacks. Right after a confirmed transfer a load-balanced RPC can
+   * still answer from a node behind the receipt, so poll briefly instead of stopping someone
+   * who has just paid. Null only when no read succeeded, and then nothing is known either way.
+   */
+  async function readPrefundNeed(walletAddress: Address, justFunded: boolean): Promise<PrefundNeed | null> {
+    const attempts = justFunded ? 5 : 1
+    let last: PrefundNeed | null = null
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000))
+      try {
+        last = await getPrefundNeed(walletAddress, network)
+        if (last.available >= last.required) return last
+      } catch { /* a failed read is not evidence of an empty wallet */ }
+    }
+    return last
+  }
+
+  /**
+   * The half of creation that follows the deploy: leave the wallet able to pay for its own
+   * signature, then register guardians and the credential with the passkey. Retry runs it
+   * again from the top, so a transfer declined by mistake gets a second prompt and one sent
+   * from elsewhere is simply found.
+   */
+  async function finishSetup(walletAddress: Address) {
+    if (!regData) return
+    setSetupStop(null)
+    setError(null)
+    setConfiguring(true)
+
+    // setGuardians travels as a userOp and the EntryPoint charges the prefund to the account,
+    // not to whoever relays it — so a wallet that was just created, holding nothing, fails
+    // validation with AA21 before its call ever runs. Funding it here is what makes the second
+    // step possible at all; it is the user's own money, in their own wallet.
+    let transferError: unknown = null
+    let transferConfirmed = false
+    try {
+      setSetupPhase('funding')
+      setFundingAmount(null)
+      const { missing } = await getPrefundNeed(walletAddress, network)
+      if (missing > 0n) {
+        setFundingAmount(missing)
+        const hash = await sendTransactionAsync({
+          to: walletAddress, value: missing, chainId: network.chainId,
+          // An empty but explicit data field. Trust Wallet over WalletConnect answers a
+          // value-only request with -32603 and never shows it, while the deploy — which
+          // carries data — goes through the same session fine.
+          data: '0x',
+        })
+        const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+        await client.waitForTransactionReceipt({ hash })
+        transferConfirmed = true
+      }
+    } catch (err) {
+      transferError = err
+    }
+
+    // Whether the transfer call returned says nothing about whether the wallet can pay. The
+    // request may never have reached a phone over WalletConnect, the connected wallet may have
+    // failed its own gas estimate before showing any prompt, or the funds may have arrived from
+    // somewhere else. All of those end here, so check the balance rather than guess which one
+    // happened — and do not ask for the passkey until it covers the signature. Going ahead
+    // anyway is how wallets ended up deployed with no guardians.
+    const need = await readPrefundNeed(walletAddress, transferConfirmed)
+    if (need && need.available < need.required) {
+      setConfiguring(false)
+      setSetupPhase('idle')
+      localStorage.setItem('bvcc_pending_guardians', JSON.stringify(guardians))
+      setSetupStop({
+        walletAddress,
+        missing: need.missing,
+        failure: transferError ? classifyTransferFailure(transferError) : null,
+        detail: transferError ? failureSummary(transferError) : null,
+      })
+      return
+    }
+
+    try {
+      setSetupPhase('signing')
+      await registerRecovery(walletAddress, regData.credentialId)
+      router.push('/wallet')
+    } catch (err) {
+      // The wallet exists and is the user's; only the recovery setup failed. Send them in
+      // anyway rather than trapping them here: the wallet layout warns until guardians are set
+      // and Settings picks the typed ones back up. The reason cannot be shown on this page,
+      // which unmounts on the next line, so it travels with the navigation.
+      setConfiguring(false)
+      localStorage.setItem('bvcc_pending_guardians', JSON.stringify(guardians))
+      try { sessionStorage.setItem('bvcc_setup_failure', failureSummary(err)) } catch { /* storage blocked */ }
+      router.push('/wallet')
+    }
+  }
+
+  function handleSkipSetup() {
+    if (!setupStop) return
+    try {
+      sessionStorage.setItem('bvcc_setup_failure', t('appshell.setupStopSkipped')
+        .replace('{amount}', formatEther(setupStop.missing))
+        .replace('{symbol}', network.nativeToken.symbol))
+    } catch { /* storage blocked */ }
+    router.push('/wallet')
+  }
+
+  /** Migration only: prove the passkey on this device is the old wallet's owner, before any gas. */
+  async function handleConfirmOwner() {
+    if (!regData) return
+    setError(null)
+    setConfirmingOwner(true)
+    try {
+      // Discovery rather than the stored id: after a recovery that id names the replaced
+      // passkey, and the one to use is whichever the contract's key actually verifies.
+      const credentialId = await discoverCredentialId({ pubKeyX: regData.pubKeyX, pubKeyY: regData.pubKeyY })
+      setRegData({ ...regData, credentialId, ownerConfirmed: true })
+    } catch (err) {
+      setError(err instanceof WrongPasskeyError
+        ? t('appshell.migrateWrongPasskey')
+        : t('appshell.migratePasskeyFailed').replace('{reason}', failureSummary(err)))
+    } finally {
+      setConfirmingOwner(false)
+    }
+  }
+
+  // After tx confirmed: compute address, save credential, then register guardians and
+  // the credential on-chain with the passkey. The wallet is deployed but unconfigured
+  // until this second, signed step lands — which is exactly what makes the deployment
+  // race harmless: whoever wins it cannot set the guardians.
+  useEffect(() => {
+    if (!isTxConfirmed || !regData) return
+    const resolver = selectedWalletType === 'agent'
+      ? getAgentWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+      : getWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+    resolver.then(walletAddress => {
+      saveCredential(regData.credentialId, walletAddress)
+      localStorage.setItem('bvcc_guardians', JSON.stringify(guardians))
+      return finishSetup(walletAddress)
+    })
+  }, [isTxConfirmed]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleCreateWallet() {
     setError(null)
     setLoading(true)
@@ -261,7 +388,7 @@ export default function Home() {
       const label = 'BVCC-' + Array.from(crypto.getRandomValues(new Uint8Array(3)))
         .map(b => b.toString(16).padStart(2, '0')).join('')
       const data = await registerWebAuthn(label)
-      setRegData(data)
+      setRegData({ ...data, ownerConfirmed: true })
       setStep('network')
     } catch (err) {
       setError(err instanceof Error ? `${err.name}: ${err.message}` : t('appshell.accessCreateError'))
@@ -278,22 +405,76 @@ export default function Home() {
     }
   }
 
+  function enterWallet(wallet: Address) {
+    // A credential stored for another wallet wins over the active address on the wallet
+    // screens, so leaving it would open that other wallet instead of this one.
+    try {
+      const stored = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || 'null')
+      if (stored && stored.walletAddress?.toLowerCase() !== wallet.toLowerCase()) {
+        localStorage.removeItem('bvcc_wallet_credential')
+      }
+    } catch {
+      localStorage.removeItem('bvcc_wallet_credential')
+    }
+    localStorage.setItem('bvcc_active_wallet', wallet)
+    router.push('/wallet')
+  }
+
   async function handleEnterAddress() {
     if (!isAddress(addressInput)) {
       setError(t('appshell.accessInvalidAddress'))
       return
     }
-    localStorage.setItem('bvcc_active_wallet', addressInput)
-    // Intentar recuperar credentialId de la chain si no está en localStorage
-    const stored = localStorage.getItem('bvcc_wallet_credential')
-    const parsed = stored ? JSON.parse(stored) : null
-    if (!parsed?.credentialId || parsed?.walletAddress?.toLowerCase() !== addressInput.toLowerCase()) {
-      const credId = await getCredentialIdFromChain(addressInput as Address, network)
-      if (credId) {
-        localStorage.setItem('bvcc_wallet_credential', JSON.stringify({ credentialId: credId, walletAddress: addressInput }))
+    setError(null)
+    setEntryCheck(null)
+    const wallet = addressInput as Address
+
+    // The credential id is what every later signature narrows the passkey prompt to, so a
+    // wrong one locks the owner out without saying why. One is kept only when it is known to
+    // be this wallet's: already stored for it, announced by the wallet's own CredentialSet
+    // event, or picked from the authenticator and checked against the contract's signer.
+    let stored: { credentialId?: string; walletAddress?: string } | null = null
+    try {
+      stored = JSON.parse(localStorage.getItem('bvcc_wallet_credential') || 'null')
+    } catch { /* a corrupt entry is the same as none */ }
+
+    if (!stored?.credentialId || stored.walletAddress?.toLowerCase() !== wallet.toLowerCase()) {
+      const found = await getCredentialFromChain(wallet, network)
+      if (found?.authenticated) {
+        saveCredential(found.credentialId, wallet)
+      } else if (found) {
+        // Pre-V4: the only record is the factory event, written by whoever deployed the
+        // wallet. Check a passkey against the signer instead — in a click of its own, since
+        // the lookup above can outlast the user gesture Safari wants for a WebAuthn prompt.
+        // Nothing in storage changes until the user picks one of the two ways in.
+        try {
+          const client = createPublicClient({ chain: network.viemChain, transport: http(network.rpcUrl) })
+          const [pubKeyX, pubKeyY] = await client.readContract({
+            address: wallet, abi: BVCC_WALLET_ABI, functionName: 'signer',
+          }) as readonly [`0x${string}`, `0x${string}`]
+          setEntryCheck({ wallet, pubKeyX: BigInt(pubKeyX), pubKeyY: BigInt(pubKeyY) })
+          return
+        } catch { /* no signer to check against: enter with no stored credential */ }
       }
     }
-    router.push('/wallet')
+    enterWallet(wallet)
+  }
+
+  async function handleConfirmEntryPasskey() {
+    if (!entryCheck) return
+    setError(null)
+    setConfirmingOwner(true)
+    try {
+      const credentialId = await discoverCredentialId({ pubKeyX: entryCheck.pubKeyX, pubKeyY: entryCheck.pubKeyY })
+      saveCredential(credentialId, entryCheck.wallet)
+      enterWallet(entryCheck.wallet)
+    } catch (err) {
+      setError(err instanceof WrongPasskeyError
+        ? t('appshell.accessWrongPasskey')
+        : t('appshell.accessPasskeyFailed').replace('{reason}', failureSummary(err)))
+    } finally {
+      setConfirmingOwner(false)
+    }
   }
 
   function handleGuardiansNext() {
@@ -310,6 +491,9 @@ export default function Home() {
     // los guardianes se pueden editar en ella. Desplegar primero y descubrirlo
     // en el `setGuardians` de después deja el gas pagado y la wallet a medias.
     if (guardianCheck.errorKey) { setError(t(guardianCheck.errorKey)); return }
+    // The confirm screen does not offer the deploy before this, but it is the check the whole
+    // migration rests on, so it is enforced where the gas is spent.
+    if (!regData.ownerConfirmed) { setError(t('appshell.migrateConfirmBody')); return }
     // V4: the factory only deploys. Guardians and the credential are registered
     // afterwards, in a passkey-signed self-call — a squatter who deploys someone else's
     // address is left with a shell it cannot configure.
@@ -641,7 +825,9 @@ export default function Home() {
 
           {/* Summary card */}
           <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
-            <Row label={t('appshell.confirmRowAuth')} value={<span style={{ color: C.success, fontWeight: 500 }}>{t('appshell.confirmRowAuthValue')}</span>} />
+            <Row label={t('appshell.confirmRowAuth')} value={regData?.ownerConfirmed === false
+              ? <span style={{ color: C.warn, fontWeight: 500 }}>{t('appshell.confirmRowAuthPending')}</span>
+              : <span style={{ color: C.success, fontWeight: 500 }}>{t('appshell.confirmRowAuthValue')}</span>} />
             <div style={{ height: '1px', backgroundColor: C.border }} />
             <Row label={t('appshell.confirmRowType')} value={selectedWalletType === 'agent' ? t('appshell.confirmRowTypeAgent') : t('appshell.confirmRowTypePersonal')} />
             <div style={{ height: '1px', backgroundColor: C.border }} />
@@ -698,7 +884,26 @@ export default function Home() {
           )}
 
           {/* Action buttons */}
-          {!connectedAddress ? (
+          {regData && !regData.ownerConfirmed ? (
+            // Migration: nothing to connect or deploy until the passkey is proven to be the owner.
+            <div style={{ padding: '14px 16px', backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`, borderRadius: '6px' }}>
+              <p style={{ margin: '0 0 12px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
+                {t('appshell.migrateConfirmBody')}
+              </p>
+              <button
+                onClick={handleConfirmOwner}
+                disabled={confirmingOwner}
+                style={{
+                  width: '100%', padding: '13px',
+                  background: confirmingOwner ? 'rgba(212,175,55,0.7)' : 'linear-gradient(115deg,#f5d76e,#d4af37,#ecc84a)',
+                  border: 'none', borderRadius: '6px', color: '#000',
+                  fontSize: '14px', fontWeight: '600', cursor: confirmingOwner ? 'wait' : 'pointer',
+                }}
+              >
+                {confirmingOwner ? t('appshell.passkeyConfirming') : t('appshell.passkeyConfirmBtn')}
+              </button>
+            </div>
+          ) : !connectedAddress ? (
             // Not connected: show connector options
             <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -829,9 +1034,60 @@ export default function Home() {
             </button>
           )}
 
-          {configuring ? (
+          {setupStop ? (
+            <div style={{ marginTop: '14px', padding: '14px 16px', backgroundColor: 'rgba(230,184,0,0.06)', border: '1px solid rgba(230,184,0,0.3)', borderRadius: '8px' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: 600, color: C.warn, lineHeight: 1.45 }}>
+                {t('appshell.setupStopTitle')}
+              </p>
+              <p style={{ margin: '0 0 10px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
+                {t('appshell.setupStopBody')
+                  .replace('{amount}', formatEther(setupStop.missing))
+                  .replace('{symbol}', network.nativeToken.symbol)}
+              </p>
+              <p style={{ margin: '0 0 4px', fontSize: '11px', color: C.subtle, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                {t('appshell.setupStopAddress')}
+              </p>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: '11.5px', fontFamily: 'monospace', color: C.text, wordBreak: 'break-all' }}>
+                  {setupStop.walletAddress}
+                </span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(setupStop.walletAddress) }}
+                  style={{ padding: '5px 10px', borderRadius: '5px', border: `1px solid ${C.goldBorder}`, background: 'transparent', color: C.gold, fontSize: '11px', cursor: 'pointer', flexShrink: 0 }}
+                >
+                  {t('common.copy')}
+                </button>
+              </div>
+              <p style={{ margin: '0 0 12px', fontSize: '11.5px', color: setupStop.failure ? C.error : C.muted, lineHeight: 1.6, wordBreak: 'break-word' }}>
+                {setupStop.failure === 'rejected' ? t('appshell.setupStopRejected')
+                  : setupStop.failure === 'insufficientFunds' ? t('appshell.setupStopNoFunds').replace('{symbol}', network.nativeToken.symbol)
+                  : setupStop.failure === 'other' ? t('appshell.setupStopOther').replace('{detail}', setupStop.detail ?? '')
+                  : t('appshell.setupStopNotArrived')}
+              </p>
+              <button
+                onClick={() => finishSetup(setupStop.walletAddress)}
+                style={{
+                  width: '100%', padding: '11px',
+                  background: 'linear-gradient(115deg,#f5d76e,#d4af37,#ecc84a)', border: 'none',
+                  borderRadius: '6px', color: '#000', fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                }}
+              >
+                {t('appshell.setupStopRetry')}
+              </button>
+              <button
+                onClick={handleSkipSetup}
+                style={{ width: '100%', padding: '9px', marginTop: '6px', background: 'transparent', border: 'none', color: C.subtle, fontSize: '12px', cursor: 'pointer' }}
+              >
+                {t('appshell.setupStopSkip')}
+              </button>
+            </div>
+          ) : configuring ? (
             <p style={{ margin: '10px 0 0', fontSize: '12px', color: C.gold, lineHeight: 1.6, textAlign: 'center' }}>
-              {setupPhase === 'funding' ? t('appshell.confirmFundingStep') : t('appshell.confirmSigningStep')}
+              {setupPhase !== 'funding' ? t('appshell.confirmSigningStep')
+                : fundingAmount === null ? t('appshell.confirmFundingChecking')
+                : t(viaWalletConnect ? 'appshell.confirmFundingStepWc' : 'appshell.confirmFundingStep')
+                  .replace('{amount}', formatEther(fundingAmount))
+                  .replace('{symbol}', network.nativeToken.symbol)}
             </p>
           ) : prefundHint !== null && prefundHint > 0n && (
             <p style={{ margin: '10px 0 0', fontSize: '11.5px', color: C.muted, lineHeight: 1.6, textAlign: 'center' }}>
@@ -841,12 +1097,16 @@ export default function Home() {
             </p>
           )}
 
-          <button
-            onClick={() => setStep('guardians')}
-            style={{ width: '100%', padding: '11px', marginTop: '8px', background: 'transparent', border: 'none', color: C.subtle, fontSize: '13px', cursor: 'pointer' }}
-          >
-            {t('appshell.confirmBackBtn')}
-          </button>
+          {/* Once the wallet is deployed, going back would reset the deploy and offer to pay
+              for it a second time. */}
+          {!isTxConfirmed && (
+            <button
+              onClick={() => setStep('guardians')}
+              style={{ width: '100%', padding: '11px', marginTop: '8px', background: 'transparent', border: 'none', color: C.subtle, fontSize: '13px', cursor: 'pointer' }}
+            >
+              {t('appshell.confirmBackBtn')}
+            </button>
+          )}
         </div>
       </div>
     )
@@ -975,7 +1235,7 @@ export default function Home() {
               <input
                 type="text"
                 value={addressInput}
-                onChange={e => { setAddressInput(e.target.value); setError(null) }}
+                onChange={e => { setAddressInput(e.target.value); setError(null); setEntryCheck(null) }}
                 onFocus={() => setAddressInputFocused(true)}
                 onBlur={() => setAddressInputFocused(false)}
                 onKeyDown={e => e.key === 'Enter' && handleEnterAddress()}
@@ -1014,6 +1274,33 @@ export default function Home() {
               <p style={{ fontSize: '11px', color: C.error, margin: '5px 0 0' }}>{t('appshell.accessInvalidAddress')}</p>
             )}
           </div>
+
+          {entryCheck && (
+            <div style={{ marginBottom: '16px', padding: '12px 14px', backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`, borderRadius: '6px' }}>
+              <p style={{ margin: '0 0 10px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
+                {t('appshell.accessVerifyBody')}
+              </p>
+              <button
+                onClick={handleConfirmEntryPasskey}
+                disabled={confirmingOwner}
+                className="btn-gold"
+                style={{
+                  width: '100%', padding: '11px', background: 'linear-gradient(115deg,#f5d76e,#d4af37,#ecc84a)',
+                  border: 'none', borderRadius: '8px', color: '#1a1505', fontSize: '13px', fontWeight: '700',
+                  cursor: confirmingOwner ? 'wait' : 'pointer', opacity: confirmingOwner ? 0.7 : 1,
+                }}
+              >
+                {confirmingOwner ? t('appshell.passkeyConfirming') : t('appshell.passkeyConfirmBtn')}
+              </button>
+              <button
+                onClick={() => enterWallet(entryCheck.wallet)}
+                disabled={confirmingOwner}
+                style={{ width: '100%', padding: '8px', marginTop: '4px', background: 'transparent', border: 'none', color: C.subtle, fontSize: '12px', cursor: 'pointer' }}
+              >
+                {t('appshell.accessVerifySkip')}
+              </button>
+            </div>
+          )}
 
           {/* Wallet saved on device badge */}
           {walletExists && (

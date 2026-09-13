@@ -32,6 +32,15 @@ export const send = {
       unknownNote: 'It has not confirmed yet. It may still go through: check the explorer in a moment.',
       retryBtn: 'Try again',
       backBtn: '← Back',
+
+      // who the destination is, and destinations with no way back
+      gasReserved: '{amount} left in the wallet to pay for gas.',
+      newAddress: 'New address — not in your address book',
+      fromLink: 'Filled in from a link, not typed by you',
+      destZero: 'That is the burn address. Anything sent there is gone for good.',
+      destTokenContract: 'That is the {token} contract itself. Tokens sent to a token contract cannot be recovered.',
+      destSelf: 'That is this wallet. You would only pay the fee.',
+      unverifiedSymbol: 'This token name was written by whoever deployed it, and it shows up here just for having been sent to you. Check the contract address, not the symbol.',
     },
   },
   es: {
@@ -67,6 +76,15 @@ export const send = {
       unknownNote: 'Todavía no ha confirmado. Puede entrar aún: míralo en el explorador dentro de un momento.',
       retryBtn: 'Volver a intentarlo',
       backBtn: '← Volver',
+
+      // quién es el destino, y destinos sin vuelta atrás
+      gasReserved: 'Se quedan {amount} en la wallet para pagar el gas.',
+      newAddress: 'Dirección nueva — no está en tu agenda',
+      fromLink: 'Viene de un enlace, no lo has escrito tú',
+      destZero: 'Es la dirección de quemado. Lo que mandes ahí no vuelve.',
+      destTokenContract: 'Ese es el contrato del propio {token}. Los tokens enviados al contrato de un token no se recuperan.',
+      destSelf: 'Es esta misma wallet. Solo pagarías el fee.',
+      unverifiedSymbol: 'El nombre de este token lo escribió quien lo desplegó, y aparece aquí solo por habértelo enviado. Fíjate en la dirección del contrato, no en el símbolo.',
     },
   },
 }

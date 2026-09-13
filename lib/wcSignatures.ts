@@ -14,6 +14,7 @@
 import { hexToBytes } from 'viem'
 import { isUnlimited } from './allowanceLimits'
 import { formatAmount, formatWithMeta, worseRisk, type RiskLevel, type Tr } from './wcCalls'
+import { BIDI, esControl } from './textSafety'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Typed data (EIP-712)
@@ -349,26 +350,9 @@ export type MessageRisk = {
   warn?: string
 }
 
-// Caracteres que reordenan visualmente el texto: lo que lees deja de ser lo que
-// firmas. No hay motivo honesto para meterlos en un mensaje que se te enseña.
-// Se listan por punto de código a propósito: escritos como carácter literal
-// dejarían el propio fuente ilegible, que es justo el ataque.
-const BIDI = new Set([
-  0x061c,                                          // ARABIC LETTER MARK
-  0x200e, 0x200f,                                  // LEFT/RIGHT-TO-LEFT MARK
-  0x202a, 0x202b, 0x202c, 0x202d, 0x202e,          // EMBEDDING / OVERRIDE / POP
-  0x2066, 0x2067, 0x2068, 0x2069,                  // ISOLATE / POP ISOLATE
-])
-// Invisibles y de control. Se dejan fuera \t (09), \n (0a) y \r (0d): un mensaje
-// de varias líneas es normal.
-function esControl(c: number): boolean {
-  if (c === 0x09 || c === 0x0a || c === 0x0d) return false
-  return c < 0x20 ||
-    (c >= 0x7f && c <= 0x9f) ||     // DEL + C1
-    (c >= 0x200b && c <= 0x200d) || // espacios de anchura cero
-    c === 0x2028 || c === 0x2029 || // separadores de línea/párrafo
-    c === 0xfeff                    // BOM
-}
+// La tabla de caracteres invisibles vive en `lib/textSafety.ts`: aquí se
+// ESCAPAN (el usuario tiene que ver que están, porque es lo que va a firmar) y
+// en los metadatos de token se BORRAN. Misma clasificación, dos reacciones.
 
 /** Sustituye lo invisible por su código, para que se vea que está. */
 function escapar(texto: string): { out: string; bidi: boolean; control: boolean } {

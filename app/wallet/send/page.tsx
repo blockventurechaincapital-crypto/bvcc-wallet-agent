@@ -5,6 +5,7 @@ import { isAddress, createPublicClient, http, encodeAbiParameters, encodeFunctio
 import { authenticateWebAuthn } from '@/lib/webauthn'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
+import { USEROP_TOTAL_GAS } from '@/lib/executeUserOp'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useTokens, type WalletToken } from '@/lib/useTokens'
@@ -24,8 +25,27 @@ type SendStatus =
   | 'idle' | 'building' | 'signing' | 'sending'
   | 'sent' | 'success' | 'failed' | 'replaced' | 'unknown' | 'error'
 
-// Reserva de gas al pulsar MAX en el token nativo (el wallet paga el gas del UserOp)
-const NATIVE_GAS_RESERVE = 300_000_000_000_000n // 0.0003 ETH
+// Suelo de reserva para MAX, y SOLO cuando todavía no hay estimación viva.
+// Dejó de ser el valor por defecto porque no es bueno en ninguna red concreta:
+// una misma operación costó 0,0000069 ETH en Base y 0,318 POL en Polygon —46.000x
+// de diferencia en unidades nativas, medido y documentado en lib/prefund.ts—, así
+// que en Base reservaba de más (vaciar dejaba dinero dentro, molesto) y en Polygon
+// reservaba MIL VECES de menos: la operación fallaba en validación y la wallet se
+// quedaba sin nativo para la siguiente, incluida la que arreglaría la situación.
+const RESERVA_SUELO = 300_000_000_000_000n // 0.0003 unidades nativas
+
+// Cuántas operaciones se reservan al vaciar: esta y una de margen.
+//
+// lib/prefund.ts usa 3 para un trabajo distinto —dejar financiada una wallet
+// ANTES de un despliegue, donde entre el cálculo y la firma pasa tiempo y las
+// tarifas se mueven—. Aquí se firma con las MISMAS tarifas que se acaban de
+// leer, así que 1 cubriría esta operación; la segunda es para que vaciar no deje
+// la wallet sin con qué hacer la siguiente. Medido en Arbitrum Sepolia el
+// 2026-09-12: una reserva son ~0,00034 ETH, o sea que la constante vieja de
+// 0,0003 ya se quedaba corta AQUÍ, no solo en Polygon.
+const RESERVA_OPERACIONES = 2n
+
+const DIRECCION_CERO = '0x0000000000000000000000000000000000000000'
 
 function fmtBal(wei: bigint, decimals: number): string {
   const n = parseFloat(formatUnits(wei, decimals))
@@ -140,13 +160,18 @@ function SendPageInner() {
     return match ?? tokens[0]
   }, [tokens, tokenKey, requestedToken])
 
+  // Un destino que llega por query string no lo ha escrito el usuario. Se
+  // acepta —los enlaces de "pagar a" son útiles— pero se dice de dónde salió.
+  const [fromLink, setFromLink] = useState(false)
+
   useEffect(() => {
     const prefilledTo = searchParams.get('to')
-    if (prefilledTo) setTo(prefilledTo)
+    if (prefilledTo) { setTo(prefilledTo); setFromLink(true) }
   }, [searchParams])
 
   const handleToChange = (value: string) => {
     setTo(value)
+    setFromLink(false)
     if (value.trim().length > 0) {
       const results = addressBook.search(value)
       setSuggestions(results)
@@ -168,15 +193,56 @@ function SendPageInner() {
   const isNative = token?.isNative ?? true
   const balance = token?.balance
 
+  // ── Quién es el destino ───────────────────────────────────────────────────
+  // La agenda solo se consultaba al TECLEAR, así que un destino prellenado desde
+  // la URL no se contrastaba con nada; y aun eligiendo un contacto del
+  // desplegable, después solo quedaba el hex y ningún nombre. Se resuelve en cada
+  // cambio, venga de donde venga.
+  const contact = useMemo(
+    () => (isAddress(to) ? addressBook.findByAddress(to) : undefined),
+    [to],
+  )
+
+  // ── Destinos que no tienen vuelta atrás ───────────────────────────────────
+  // `isAddress(to)` era toda la validación: nada comparaba el destino con el
+  // contrato del propio token (mandar USDC al contrato de USDC es tirarlo), ni
+  // con la dirección de quemado, ni con la wallet de uno mismo.
+  const destRisk = useMemo((): 'zero' | 'tokenContract' | 'self' | null => {
+    if (!isAddress(to)) return null
+    const d = to.toLowerCase()
+    if (d === DIRECCION_CERO) return 'zero'
+    if (token?.address && d === token.address.toLowerCase()) return 'tokenContract'
+    if (walletAddress && d === walletAddress.toLowerCase()) return 'self'
+    return null
+  }, [to, token, walletAddress])
+
+  // El autoenvío se avisa pero se deja pasar: es raro, no irreversible.
+  const destBlocked = destRisk === 'zero' || destRisk === 'tokenContract'
+
   const feeNum = feeNumerator(walletType)
   const feeRate = feeRateLabel(feeNum)
 
+  // Reserva de gas de MAX, sacada de la estimación VIVA y no de una constante —
+  // y del MISMO número con el que se va a firmar, incluido el override del panel
+  // Avanzado, que es la única forma de que los dos no diverjan. Si no hay
+  // estimación todavía, o el RPC devuelve 0, se cae al suelo: nunca a cero, que
+  // dejaría MAX vaciando la wallet entera para fallar luego en validación.
+  const gasReserve = useMemo(() => {
+    const fees = gasOverride ?? gasSugerido
+    if (!fees || fees.maxFeePerGas <= 0n) return RESERVA_SUELO
+    return USEROP_TOTAL_GAS * fees.maxFeePerGas * RESERVA_OPERACIONES
+  }, [gasOverride, gasSugerido])
+
+  // Solo para explicar el número: se apaga en cuanto el usuario teclea.
+  const [maxUsed, setMaxUsed] = useState(false)
+
   const setMax = () => {
     if (balance === undefined) return
+    setMaxUsed(true)
     // Nativo: hay que dejar gas para el UserOp. ERC-20: hay que dejar sitio al
     // fee, que en el Caso 2 del contrato se cobra APARTE del importe enviado.
     const usable = isNative
-      ? (balance > NATIVE_GAS_RESERVE ? balance - NATIVE_GAS_RESERVE : 0n)
+      ? (balance > gasReserve ? balance - gasReserve : 0n)
       : maxTokenAmount(balance, feeNum)
     setAmount(formatUnits(usable, decimals))
   }
@@ -192,7 +258,7 @@ function SendPageInner() {
   // El contrato revierte si el saldo no cubre importe + fee. Se corta antes.
   const overBalance = amountValid && balance !== undefined && walletPays > balance
   const isBusy = status === 'building' || status === 'signing' || status === 'sending'
-  const canSubmit = toValid && amountValid && !overBalance && !!token && !isBusy
+  const canSubmit = toValid && amountValid && !overBalance && !destBlocked && !!token && !isBusy
 
   const handleSend = async () => {
     if (!canSubmit) return
@@ -419,6 +485,9 @@ function SendPageInner() {
             <>
               <TokenIcon token={token} />
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#f0f4f8' }}>{token.symbol}</span>
+              {token.suspicious && (
+                <span title={t('send.unverifiedSymbol')} style={{ fontSize: '12px', color: '#D4AF37' }}>⚠</span>
+              )}
               <span style={{ fontSize: '12px', color: '#8892a4', fontFamily: 'monospace', marginLeft: 'auto' }}>
                 {fmtBal(token.balance, token.decimals)}
               </span>
@@ -453,7 +522,9 @@ function SendPageInner() {
               >
                 <TokenIcon token={tk} />
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#f0f4f8' }}>{tk.symbol}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#f0f4f8' }}>
+                    {tk.symbol}{tk.suspicious ? ' ⚠' : ''}
+                  </span>
                   <span style={{ fontSize: '11px', color: '#8892a4', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tk.name}</span>
                 </div>
                 <span style={{ fontSize: '12px', color: '#8892a4', fontFamily: 'monospace', marginLeft: 'auto', flexShrink: 0 }}>
@@ -464,6 +535,22 @@ function SendPageInner() {
           </div>
         )}
       </div>
+
+      {/* El símbolo de un ERC-20 lo escribe quien despliega el contrato, y para
+          que aparezca aquí basta con que te manden una unidad. Cuando el texto no
+          es de fiar se dice, en vez de pintarlo como si lo fuera. */}
+      {token?.suspicious && (
+        <div style={{ padding: '10px 14px', marginBottom: '20px', backgroundColor: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: '6px' }}>
+          <p style={{ margin: 0, fontSize: '12px', color: '#D4AF37', lineHeight: 1.5 }}>
+            ⚠ {t('send.unverifiedSymbol')}
+          </p>
+          {token.address && (
+            <p style={{ margin: '4px 0 0', fontSize: '11px', fontFamily: 'monospace', color: '#8892a4', wordBreak: 'break-all' }}>
+              {token.address}
+            </p>
+          )}
+        </div>
+      )}
 
       <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#f0f4f8', marginBottom: '24px' }}>
         {t('common.send')} {symbol}
@@ -525,6 +612,30 @@ function SendPageInner() {
               ))}
             </div>
           )}
+
+          {/* Quién es el destino. Es la única referencia de confianza que tiene
+              esta pantalla: sin ella, un hex de 42 caracteres se parece a
+              cualquier otro hex de 42 caracteres. */}
+          {toValid && (
+            <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {destRisk === 'zero' && (
+                <span style={{ fontSize: '11px', color: '#fc8181' }}>⛔ {t('send.destZero')}</span>
+              )}
+              {destRisk === 'tokenContract' && (
+                <span style={{ fontSize: '11px', color: '#fc8181' }}>⛔ {t('send.destTokenContract', { token: symbol })}</span>
+              )}
+              {destRisk === 'self' && (
+                <span style={{ fontSize: '11px', color: '#D4AF37' }}>⚠ {t('send.destSelf')}</span>
+              )}
+              {!destRisk && (contact
+                ? <span style={{ fontSize: '11px', color: '#68d391' }}>✓ {contact.name}</span>
+                : <span style={{ fontSize: '11px', color: '#D4AF37' }}>⚠ {t('send.newAddress')}</span>
+              )}
+              {fromLink && (
+                <span style={{ fontSize: '11px', color: '#8892a4' }}>{t('send.fromLink')}</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Amount */}
@@ -556,7 +667,7 @@ function SendPageInner() {
           <input
             type="number"
             value={amount}
-            onChange={e => setAmount(e.target.value)}
+            onChange={e => { setAmount(e.target.value); setMaxUsed(false) }}
             placeholder={decimals <= 6 ? '0.00' : '0.000'}
             min="0"
             step="any"
@@ -567,6 +678,15 @@ function SendPageInner() {
             }}
           />
         </div>
+
+        {/* Por qué MAX no vacía del todo. La reserva sale de la estimación viva,
+            así que cambia por red y por momento: sin decirlo, el hueco que queda
+            dentro parece un error. */}
+        {maxUsed && isNative && (
+          <p style={{ margin: '-8px 0 0', fontSize: '11px', color: '#8892a4' }}>
+            {t('send.gasReserved', { amount: `${fmtBal(gasReserve, decimals)} ${symbol}` })}
+          </p>
+        )}
 
         {/* Desglose del fee. Nativo: sale del importe. ERC-20: se suma encima. */}
         {amountValid && token && (
@@ -631,7 +751,7 @@ function SendPageInner() {
             border: 'none', borderRadius: '6px', color: '#000',
             fontSize: '14px', fontWeight: '600',
             cursor: canSubmit ? 'pointer' : 'not-allowed',
-            opacity: (toValid && amountValid && !overBalance) ? 1 : 0.45,
+            opacity: (toValid && amountValid && !overBalance && !destBlocked) ? 1 : 0.45,
           }}
         >
           {statusLabel()}

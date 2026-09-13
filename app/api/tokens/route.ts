@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { safeChainId, safeAddress } from '@/lib/apiGuard'
+import { sanitizeTokenMeta, safeDecimals } from '@/lib/tokenMeta'
 
 // Descubre los tokens ERC-20 que una wallet ha tocado alguna vez, vía
 // Etherscan V2 (multichain con una sola key). Solo metadata — el balance
@@ -10,6 +11,9 @@ export type DiscoveredToken = {
   symbol: string
   name: string
   decimals: number
+  /** El símbolo no es de fiar tal cual: traía invisibles, no cabía, o no es
+   *  ASCII. Lo pinta quien lo enseñe — ver lib/tokenMeta.ts. */
+  suspicious?: boolean
 }
 
 const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api'
@@ -47,13 +51,17 @@ export async function GET(req: NextRequest) {
     for (const tx of data.result as Record<string, string>[]) {
       const addr = (tx.contractAddress ?? '').toLowerCase()
       if (!addr || seen.has(addr)) continue
-      const decimals = parseInt(tx.tokenDecimal, 10)
-      if (Number.isNaN(decimals)) continue
+      // El símbolo, el nombre y los decimales los escribe quien desplegó el
+      // contrato, y para colarlos aquí basta con mandar una unidad del token.
+      const decimals = safeDecimals(tx.tokenDecimal)
+      if (decimals === null) continue
+      const meta = sanitizeTokenMeta(tx.tokenSymbol, tx.tokenName || tx.tokenSymbol)
       seen.set(addr, {
         address: addr,
-        symbol: tx.tokenSymbol || '???',
-        name: tx.tokenName || tx.tokenSymbol || 'Unknown',
+        symbol: meta.symbol,
+        name: meta.name,
         decimals,
+        ...(meta.suspicious ? { suspicious: true } : {}),
       })
     }
 

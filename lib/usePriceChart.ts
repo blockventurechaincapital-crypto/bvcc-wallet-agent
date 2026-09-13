@@ -7,8 +7,11 @@ export type ChartDays = 1 | 7 | 30
 export type ChartPoint = [number, number] // [timestamp ms, price usd]
 
 async function fetchChart(token: WalletToken, network: NetworkConfig, days: ChartDays): Promise<ChartPoint[]> {
+  // Sin id conocido no hay gráfica. Antes caía a 'ethereum' y pintaba la curva
+  // de ETH bajo el saldo de otra moneda.
+  if (token.isNative && !token.cgId) return []
   const params = token.isNative
-    ? `id=${token.cgId ?? 'ethereum'}`
+    ? `id=${token.cgId}`
     : `chainId=${network.chainId}&contract=${token.address}`
   const res = await fetch(`/api/price-chart?${params}&days=${days}`)
   const data = await res.json()

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { CG_PLATFORM } from '@/lib/coingecko'
 
 // Histórico de precio (USD) vía CoinGecko market_chart.
 // Identifica el token por:
@@ -8,13 +9,6 @@ import { NextRequest, NextResponse } from 'next/server'
 // Testnets / tokens no indexados → points = [] (esperado).
 
 const CG = 'https://api.coingecko.com/api/v3'
-
-const PLATFORM: Record<string, string> = {
-  '1': 'ethereum',
-  '42161': 'arbitrum-one',
-  '8453': 'base',
-  '56': 'binance-smart-chain',
-}
 
 const API_KEY = process.env.COINGECKO_API_KEY
 const headers: Record<string, string> = API_KEY ? { 'x-cg-demo-api-key': API_KEY } : {}
@@ -30,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (id) {
     url = `${CG}/coins/${id}/market_chart?vs_currency=usd&days=${days}`
   } else if (chainId && contract) {
-    const platform = PLATFORM[chainId]
+    const platform = CG_PLATFORM[chainId]
     if (platform) {
       url = `${CG}/coins/${platform}/contract/${contract}/market_chart?vs_currency=usd&days=${days}`
     }
