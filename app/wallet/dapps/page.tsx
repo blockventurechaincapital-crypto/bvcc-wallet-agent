@@ -2,7 +2,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
-import { useWcWallet } from '@/lib/useWcWallet'
+import { useWcWallet, parseWcUri } from '@/lib/useWcWallet'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { DAPPS, type Category, type DApp } from '@/lib/dapps'
 
@@ -592,10 +592,27 @@ function DAppViewer({ dapp, onClose, backLabel, openNewTabLabel, openNewTabTitle
             ref={iframeRef}
             src={dapp.url}
             onLoad={handleLoad}
-            // Delega Permissions-Policy al origen del iframe. Sin esto, las dApps
-            // cross-origin no pueden usar navigator.clipboard (copiar el URI de
-            // WalletConnect falla silenciosamente con NotAllowedError).
-            allow="clipboard-write; clipboard-read"
+            // Sin `sandbox` el documento embebido conserva la NAVEGACIÓN DE NIVEL
+            // SUPERIOR: un `top.location = '…'` dentro de la dApp sustituye la
+            // página entera de la wallet, que es una posición de phishing muy
+            // buena. Las restricciones solo existen cuando el atributo está
+            // presente, así que `allow-top-navigation` se omite a propósito.
+            //
+            // Aviso honesto: `allow-same-origin` + `allow-scripts` permite al
+            // frame quitarse el sandbox A SÍ MISMO, para SU propio origen — no
+            // para el nuestro. Es la combinación mínima con la que las dApps
+            // funcionan; lo que sí se retiene es la navegación superior, que es
+            // justo lo que importa aquí.
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+            // Delega Permissions-Policy al origen del iframe: sin esto las dApps
+            // cross-origin no pueden usar navigator.clipboard y copiar el URI de
+            // WalletConnect falla en silencio con NotAllowedError.
+            //
+            // Solo `clipboard-write`, que es lo que hace falta para COPIAR.
+            // `clipboard-read` dejaba además a 19 terceros intentar LEER el
+            // portapapeles del usuario — que en una wallet lleva direcciones de
+            // destino y, en el peor caso, la semilla de otra wallet.
+            allow="clipboard-write"
             style={{
               width: '100%',
               height: '100%',
@@ -758,6 +775,13 @@ export default function DAppsPage() {
   async function handleConnect() {
     if (!wcUri.trim() || !ready) return
     setConnectError('')
+    // Un pegado a medias tiene que fallar en voz alta: `pair` lo tragaba y la
+    // pantalla se quedaba esperando una propuesta que no iba a llegar nunca.
+    if (!parseWcUri(wcUri)) {
+      setConnectError(t('connect.wcUriInvalid'))
+      setConnectStatus('error')
+      return
+    }
     setConnectStatus('connecting')
     try {
       await pair(wcUri.trim())

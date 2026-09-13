@@ -29,7 +29,7 @@ export const dapps = {
       wcActiveSessions: 'Active sessions',
       wcConnectBtn: 'Connect',
       wcConnecting: 'Connecting...',
-      wcSuccess: 'Connected! The dApp is linked to your wallet.',
+      wcSuccess: 'Paired. Confirm the connection in the card that appears.',
       wcInitializing: 'Initializing WalletConnect...',
       // Session row
       sessionDisconnect: 'Disconnect',
@@ -67,7 +67,7 @@ export const dapps = {
       wcActiveSessions: 'Sesiones activas',
       wcConnectBtn: 'Conectar',
       wcConnecting: 'Conectando...',
-      wcSuccess: '¡Conectado! La dApp está vinculada a tu wallet.',
+      wcSuccess: 'Emparejado. Confirma la conexión en la tarjeta que aparece.',
       wcInitializing: 'Inicializando WalletConnect...',
       // Session row
       sessionDisconnect: 'Desconectar',

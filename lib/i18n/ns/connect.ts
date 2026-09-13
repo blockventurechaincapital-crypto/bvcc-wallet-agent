@@ -80,6 +80,14 @@ export const connect = {
       pendingSignature: 'Signature',
       pendingQueued: 'Queued',
       pendingWaiting: 'Waiting for previous tx…',
+
+      // session proposal (a dApp asking to pair)
+      proposalTitle: 'New connection',
+      proposalGrants: 'It will be able to ask you to sign on:',
+      proposalApprove: 'Connect',
+      proposalReject: 'Reject',
+      proposalWorking: 'Connecting…',
+      wcUriInvalid: 'That is not a WalletConnect URI. Copy the whole line: it starts with wc: and ends in a long key.',
     },
   },
   es: {
@@ -163,6 +171,14 @@ export const connect = {
       pendingSignature: 'Firma',
       pendingQueued: 'En cola',
       pendingWaiting: 'Esperando la tx anterior…',
+
+      // session proposal (una dApp pide emparejarse)
+      proposalTitle: 'Nueva conexión',
+      proposalGrants: 'Podrá pedirte firmas en:',
+      proposalApprove: 'Conectar',
+      proposalReject: 'Rechazar',
+      proposalWorking: 'Conectando…',
+      wcUriInvalid: 'Eso no es un URI de WalletConnect. Copia la línea entera: empieza por wc: y acaba en una clave larga.',
     },
   },
 }

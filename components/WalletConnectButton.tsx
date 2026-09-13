@@ -4,8 +4,9 @@ import { createPublicClient, http, type Hex } from 'viem'
 import type { PendingRequestTypes } from '@walletconnect/types'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
-import { getNetwork } from '@/lib/networks'
-import { useWcWallet } from '@/lib/useWcWallet'
+import { NETWORKS, getNetwork } from '@/lib/networks'
+import { useWcWallet, parseWcUri, type WcProposal } from '@/lib/useWcWallet'
+import { checkOrigin } from '@/lib/wcSignatures'
 import WcConnectModal from '@/components/WcConnectModal'
 import { useI18n } from '@/lib/i18n/I18nContext'
 
@@ -25,14 +26,141 @@ function IconWC() {
   )
 }
 
+// Mismos colores de riesgo que el modal de firma, para que "verificado" y "el
+// dominio no coincide" se lean igual en los dos sitios.
+const ORIGIN_COLOR: Record<'safe' | 'caution' | 'danger', string> = {
+  safe: '#48bb78',
+  caution: '#D4AF37',
+  danger: '#fc8181',
+}
+
+// Tarjeta de propuesta de sesión. Es el único punto en el que se ve QUÉ dominio
+// va a quedar emparejado: antes la sesión se aprobaba sola y esta pantalla no
+// existía, así que un URI copiado de una página de phishing entraba sin que
+// nadie llegase a leer de quién era.
+function ProposalCard({ proposal, busy, onApprove, onReject }: {
+  proposal: WcProposal
+  busy: boolean
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const { t } = useI18n()
+  // El veredicto del relay sobre si el origen real coincide con la url que la
+  // dApp declara. Sin él solo tendríamos lo que la dApp dice de sí misma.
+  const origin = checkOrigin(proposal.verifyContext, t)
+  const danger = origin.level === 'danger'
+
+  return (
+    <div style={{
+      background: '#0d1117',
+      border: `1px solid ${danger ? 'rgba(252,129,129,0.5)' : 'rgba(59,153,252,0.45)'}`,
+      borderRadius: 12, padding: '14px 16px',
+      boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          background: '#3B99FC', boxShadow: '0 0 8px rgba(59,153,252,0.8)',
+          animation: 'wcPulse 1.6s ease-in-out infinite',
+        }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: COLORS.textPrimary }}>
+            {t('connect.proposalTitle')}
+          </p>
+          <p style={{ margin: '1px 0 0', fontSize: 11, color: COLORS.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {proposal.metadata.name || t('connect.unknownOrigin')}
+          </p>
+        </div>
+        {proposal.metadata.icons?.[0] && (
+          <img src={proposal.metadata.icons[0]} alt="" width={24} height={24}
+            style={{ borderRadius: 5, flexShrink: 0, objectFit: 'contain' }}
+            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+        )}
+      </div>
+
+      <p style={{ margin: '0 0 2px', fontSize: 11, color: '#7c93b5', fontFamily: 'IBM Plex Mono, monospace', wordBreak: 'break-all' }}>
+        {proposal.metadata.url || t('connect.unknownOrigin')}
+      </p>
+      <p style={{ margin: '0 0 8px', fontSize: 10, color: ORIGIN_COLOR[origin.level] }}>
+        {origin.level === 'safe' ? '✓' : danger ? '⛔' : '•'} {origin.label}
+        {origin.known && origin.origin !== proposal.metadata.url ? ` · ${origin.origin}` : ''}
+      </p>
+
+      {origin.warn && (
+        <div style={{
+          padding: '8px 10px', marginBottom: 8,
+          background: 'rgba(252,129,129,0.08)', border: '1px solid rgba(252,129,129,0.3)',
+          borderRadius: 6, fontSize: 11, color: '#fc8181', lineHeight: 1.5,
+        }}>
+          ⛔ {origin.warn}
+        </div>
+      )}
+
+      {/* Qué concede de verdad la sesión: todas las redes soportadas, porque el
+          wallet tiene la misma dirección en todas. Decirlo aquí es la mitad del
+          arreglo — la otra mitad es que no se conceda sin pulsar. */}
+      <p style={{ margin: '0 0 10px', fontSize: 10.5, color: COLORS.textSubtle, lineHeight: 1.5 }}>
+        {t('connect.proposalGrants')} {NETWORKS.map(n => n.name).join(' · ')}
+      </p>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={onReject}
+          disabled={busy}
+          style={{
+            flex: 1, padding: '8px 0', background: 'transparent',
+            border: '1px solid rgba(252,129,129,0.25)', borderRadius: 7,
+            color: '#fc8181', fontSize: 12, fontWeight: 500,
+            cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
+          }}
+        >
+          {t('connect.proposalReject')}
+        </button>
+        <button
+          onClick={onApprove}
+          disabled={busy}
+          style={{
+            flex: 2, padding: '8px 0',
+            background: busy ? 'rgba(212,175,55,0.25)' : COLORS.gold,
+            border: 'none', borderRadius: 7,
+            color: busy ? 'rgba(0,0,0,0.6)' : '#000',
+            fontSize: 12, fontWeight: 600,
+            cursor: busy ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {busy ? t('connect.proposalWorking') : t('connect.proposalApprove')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function WalletConnectButton() {
   const { address: walletAddr, credentialId } = useWalletAddress()
   const { network } = useNetwork()
   const { t } = useI18n()
   const {
-    sessions, pendingRequests, ready, error: wcError,
-    pair, respondSuccess, respondError, disconnect,
+    sessions, pendingRequests, pendingProposals, ready, error: wcError,
+    pair, approveProposal, rejectProposal, respondSuccess, respondError, disconnect,
   } = useWcWallet(walletAddr, network.chainId)
+
+  // Propuesta de sesión que se está resolviendo: bloquea los dos botones de esa
+  // tarjeta para que un doble clic no mande dos respuestas al relay.
+  const [busyProposal, setBusyProposal] = useState<number | null>(null)
+  const [proposalError, setProposalError] = useState<string | null>(null)
+
+  async function decideProposal(id: number, accept: boolean) {
+    setBusyProposal(id)
+    setProposalError(null)
+    try {
+      if (accept) await approveProposal(id)
+      else await rejectProposal(id)
+    } catch (e) {
+      setProposalError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyProposal(null)
+    }
+  }
 
   // Petición que el usuario decidió revisar (abre el modal de Face ID)
   const [activeRequest, setActiveRequest] = useState<PendingRequestTypes.Struct | null>(null)
@@ -145,6 +273,10 @@ export default function WalletConnectButton() {
               <button
                 disabled={!ready || !wcUri.trim() || wcConnecting}
                 onClick={async () => {
+                  // Un pegado a medias tiene que fallar en voz alta: `pair` lo
+                  // aceptaba y la interfaz se quedaba esperando una propuesta
+                  // que no iba a llegar.
+                  if (!parseWcUri(wcUri)) { setWcPairError(t('connect.wcUriInvalid')); return }
                   setWcConnecting(true); setWcPairError(null)
                   try { await pair(wcUri.trim()); setWcUri('') }
                   catch (e: unknown) { setWcPairError(e instanceof Error ? e.message : String(e)) }
@@ -208,14 +340,37 @@ export default function WalletConnectButton() {
         )}
       </div>
 
-      {/* Bandeja de firmas pendientes (estilo Safe): caja flotante con botón
-          para revisar — el modal con Face ID solo se abre al pulsarlo */}
-      {pendingRequests.length > 0 && !activeRequest && walletAddr && (
+      {/* Bandeja de peticiones pendientes (estilo Safe): caja flotante con botón
+          para revisar — el modal con passkey solo se abre al pulsarlo. Las
+          propuestas de sesión entran por aquí también: son el primer permiso que
+          se concede y antes se daban solas. */}
+      {(pendingProposals.length > 0 || pendingRequests.length > 0) && !activeRequest && walletAddr && (
         <div style={{
           position: 'fixed', bottom: 20, right: 20, zIndex: 900,
           display: 'flex', flexDirection: 'column', gap: 10,
           width: 320, maxWidth: 'calc(100vw - 40px)',
         }}>
+          {pendingProposals.map((prop) => (
+            <ProposalCard
+              key={prop.id}
+              proposal={prop}
+              busy={busyProposal === prop.id}
+              onApprove={() => decideProposal(prop.id, true)}
+              onReject={() => decideProposal(prop.id, false)}
+            />
+          ))}
+
+          {proposalError && (
+            <div style={{
+              padding: '8px 10px', background: 'rgba(252,129,129,0.06)',
+              border: '1px solid rgba(252,129,129,0.2)', borderRadius: 7,
+              fontSize: 11, color: '#fc8181', fontFamily: 'IBM Plex Mono, monospace',
+              wordBreak: 'break-word',
+            }}>
+              {proposalError}
+            </div>
+          )}
+
           {pendingRequests.map((req, idx) => {
             const session = sessions.find(s => s.topic === req.topic)
             const meta = session?.peer.metadata

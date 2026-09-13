@@ -25,12 +25,17 @@ export interface DApp {
   chains: number[]
 }
 
+// ⚠️ La `url` tiene que ser el DESTINO FINAL, no una que redirija: el iframe
+// hereda la CSP de la wallet, y `frame-src` se comprueba en CADA salto. Una url
+// que responde 301 a otro dominio se queda en marco en blanco. 1inch, Curve y
+// Balancer ya mudaron de dominio una vez (2026-09-12, medido con el tester:
+// app.1inch.io→1inch.com, curve.fi→www.curve.finance, app.balancer.fi→balancer.fi).
 export const DAPPS: DApp[] = [
   // DEX
   { id: 'uniswap', name: 'Uniswap', desc: 'El mayor DEX descentralizado. Intercambia tokens con liquidez profunda.', url: 'https://app.uniswap.org', color: '#FF007A', logo: 'https://icons.llama.fi/uniswap.png', category: 'DEX', chains: [1, 8453, 42161] },
-  { id: '1inch', name: '1inch', desc: 'Agregador DEX. Encuentra el mejor precio entre múltiples exchanges.', url: 'https://app.1inch.io', color: '#1B4F8A', logo: 'https://icons.llama.fi/1inch.png', category: 'DEX', chains: [1, 8453, 42161, 56] },
-  { id: 'curve', name: 'Curve Finance', desc: 'DEX especializado en stablecoins y activos correlacionados.', url: 'https://curve.fi', color: '#F7D66A', logo: 'https://icons.llama.fi/curve.png', category: 'DEX', chains: [1, 8453, 42161] },
-  { id: 'balancer', name: 'Balancer', desc: 'AMM flexible con pools personalizados de múltiples tokens.', url: 'https://app.balancer.fi', color: '#1E3A5F', logo: 'https://icons.llama.fi/balancer.png', category: 'DEX', chains: [1, 8453, 42161] },
+  { id: '1inch', name: '1inch', desc: 'Agregador DEX. Encuentra el mejor precio entre múltiples exchanges.', url: 'https://1inch.com', color: '#1B4F8A', logo: 'https://icons.llama.fi/1inch.png', category: 'DEX', chains: [1, 8453, 42161, 56] },
+  { id: 'curve', name: 'Curve Finance', desc: 'DEX especializado en stablecoins y activos correlacionados.', url: 'https://www.curve.finance', color: '#F7D66A', logo: 'https://icons.llama.fi/curve.png', category: 'DEX', chains: [1, 8453, 42161] },
+  { id: 'balancer', name: 'Balancer', desc: 'AMM flexible con pools personalizados de múltiples tokens.', url: 'https://balancer.fi/pools', color: '#1E3A5F', logo: 'https://icons.llama.fi/balancer.png', category: 'DEX', chains: [1, 8453, 42161] },
   // Lending
   { id: 'aave', name: 'Aave', desc: 'Protocolo de lending y borrowing descentralizado líder.', url: 'https://app.aave.com', color: '#B6509E', logo: 'https://icons.llama.fi/aave-v3.png', category: 'Lending', chains: [1, 8453, 42161] },
   { id: 'compound', name: 'Compound', desc: 'Protocolo de tipo de interés algorítmico para DeFi.', url: 'https://app.compound.finance', color: '#00D395', logo: 'https://icons.llama.fi/compound-v3.png', category: 'Lending', chains: [1, 8453] },

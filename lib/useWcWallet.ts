@@ -3,7 +3,7 @@ import { createPublicClient, http, type Hex } from 'viem'
 import { getWeb3Wallet } from './wcWallet'
 import { NETWORKS, getNetwork } from './networks'
 import { getAtomicBatchEnabled, getBatch } from './wcCalls'
-import type { SessionTypes, PendingRequestTypes } from '@walletconnect/types'
+import type { SessionTypes, PendingRequestTypes, ProposalTypes } from '@walletconnect/types'
 
 export type WcSession = {
   topic: string
@@ -16,6 +16,65 @@ export type WcSession = {
     }
   }
   namespaces: SessionTypes.Namespaces
+}
+
+export type WcProposal = {
+  id: number
+  /** Lo que la dApp DICE que es. No está verificado: el veredicto sobre si el
+   *  origen real coincide con esta `url` vive en `verifyContext`. */
+  metadata: { name: string; description: string; url: string; icons: string[] }
+  /** `verifyContext` del relay, tal cual. Lo interpreta `checkOrigin`
+   *  (lib/wcSignatures.ts), el mismo que usa el modal de firma. */
+  verifyContext: unknown
+  /** Segundos epoch: el relay caduca las propuestas a los ~5 min. */
+  expiryTimestamp: number
+}
+
+/** Valida el texto pegado ANTES de llamar a `pair`. Sin esto, un pegado a medias
+ *  —o un `wc:` de v1, cuyo relay está apagado desde 2023— se iba en silencio a
+ *  la cola de emparejamiento y la interfaz se quedaba esperando una propuesta
+ *  que no iba a llegar nunca. */
+export function parseWcUri(raw: string): { topic: string } | null {
+  const m = /^wc:([^@?\s]+)@(\d+)(\?.*)?$/i.exec(raw.trim())
+  if (!m) return null
+  if (m[2] !== '2') return null
+  const params = new URLSearchParams(m[3] ? m[3].slice(1) : '')
+  if (!params.get('symKey')) return null   // sin symKey el par no puede cifrar
+  return { topic: m[1] }
+}
+
+// ─── Cola de propuestas, compartida entre instancias del hook ────────────────
+// `useWcWallet` se monta dos veces a la vez: la cabecera (WalletConnectButton,
+// que es quien pinta la bandeja) y la página de dApps. Con estado local cada
+// una tendría su propia cola y las dos intentarían aprobar la misma propuesta;
+// y al aprobar desde la cabecera, la lista de "sesiones activas" de la página
+// no se enteraría. Un store de módulo con suscriptores arregla las dos cosas.
+let proposalQueue: WcProposal[] = []
+const proposalSubs = new Set<() => void>()
+
+function publishProposals(next: WcProposal[]) {
+  proposalQueue = next
+  for (const notify of proposalSubs) notify()
+}
+
+function addProposal(p: WcProposal) {
+  if (proposalQueue.some((q) => q.id === p.id)) return
+  publishProposals([...proposalQueue, p])
+}
+
+/** Siempre publica, aunque el id ya no esté: el aviso es también la señal con la
+ *  que cada instancia vuelve a leer las sesiones activas después de aprobar. */
+function removeProposal(id: number) {
+  publishProposals(proposalQueue.filter((q) => q.id !== id))
+}
+
+function toProposal(id: number, params: ProposalTypes.Struct, verifyContext: unknown): WcProposal {
+  return {
+    id,
+    metadata: params.proposer.metadata,
+    verifyContext,
+    expiryTimestamp: params.expiryTimestamp,
+  }
 }
 
 // The wallet has the same CREATE2 address on every supported network, so the
@@ -180,6 +239,8 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
   // Bandeja de peticiones pendientes (estilo Safe): persisten en el store de WC
   // aunque la pestaña estuviera cerrada/dormida cuando llegaron.
   const [pendingRequests, setPendingRequests] = useState<PendingRequestTypes.Struct[]>([])
+  // Propuestas de sesión a la espera de que el usuario acepte o decline.
+  const [pendingProposals, setPendingProposals] = useState<WcProposal[]>(proposalQueue)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -233,17 +294,36 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
         setReady(true)
         void refreshPending()
 
-        // Nueva conexión: dApp envía proposal
-        const onProposal = async ({ id }: { id: number; params: unknown }) => {
+        // Propuestas que llegaron con la pestaña cerrada o dormida: el store de
+        // WC las guarda igual que las peticiones de firma. Las caducadas no
+        // entran — aprobarlas falla y la tarjeta solo confundiría.
+        for (const p of Object.values(wc.getPendingSessionProposals() ?? {})) {
+          if (p.expiryTimestamp * 1000 > Date.now()) addProposal(toProposal(p.id, p, undefined))
+        }
+
+        // Cualquier cambio en la cola compartida —desde esta instancia o desde
+        // la otra— repinta la bandeja y reelee las sesiones activas.
+        const onProposalStore = () => {
           if (cancelled) return
-          try {
-            const namespaces = buildNamespaces(walletAddress, chainId)
-            await wc.approveSession({ id, namespaces })
-            const updated = wc.getActiveSessions()
-            setSessions(Object.values(updated) as WcSession[])
-          } catch (e) {
-            console.warn('[WC] session_proposal error', e)
-          }
+          setPendingProposals(proposalQueue)
+          setSessions(Object.values(wc.getActiveSessions()) as WcSession[])
+        }
+        proposalSubs.add(onProposalStore)
+        setPendingProposals(proposalQueue)
+
+        // Nueva conexión: la dApp manda una propuesta. NO se aprueba sola — pasa
+        // a la bandeja y espera acción explícita. El emparejamiento lo inicia el
+        // usuario pegando un URI, pero ese URI puede venir copiado de una página
+        // de phishing: la pantalla que enseña QUÉ dominio ha quedado emparejado
+        // es justo la que caza ese caso.
+        const onProposal = (proposal: { id: number; params: ProposalTypes.Struct; verifyContext?: unknown }) => {
+          if (cancelled) return
+          addProposal(toProposal(proposal.id, proposal.params, proposal.verifyContext))
+        }
+
+        // Caducada en el relay: fuera de la bandeja, no se puede aprobar ya.
+        const onProposalExpire = ({ id }: { id: number }) => {
+          removeProposal(id)
         }
 
         // dApp pide firmar / enviar tx / cambiar de red
@@ -263,6 +343,7 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
         }
 
         wc.on('session_proposal', onProposal)
+        wc.on('proposal_expire', onProposalExpire)
         wc.on('session_request', onRequest)
         wc.on('session_delete', onDelete)
 
@@ -279,7 +360,9 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
         }, 10_000)
 
         cleanup = () => {
+          proposalSubs.delete(onProposalStore)
           wc.off('session_proposal', onProposal)
+          wc.off('proposal_expire', onProposalExpire)
           wc.off('session_request', onRequest)
           wc.off('session_delete', onDelete)
           window.removeEventListener('focus', onFocus)
@@ -300,8 +383,31 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
   }, [walletAddress, chainId, refreshPending])
 
   const pair = useCallback(async (uri: string) => {
+    // Red de seguridad: las dos pantallas que emparejan validan antes para poder
+    // dar el mensaje en el idioma del usuario, pero el hook no se fía de eso.
+    if (!parseWcUri(uri)) throw new Error('Invalid WalletConnect URI')
     const wc = await getWeb3Wallet()
-    await wc.pair({ uri })
+    await wc.pair({ uri: uri.trim() })
+  }, [])
+
+  const approveProposal = useCallback(async (id: number) => {
+    if (!walletAddress) throw new Error('No wallet address')
+    const wc = await getWeb3Wallet()
+    try {
+      await wc.approveSession({ id, namespaces: buildNamespaces(walletAddress, chainId) })
+    } finally {
+      removeProposal(id)
+    }
+  }, [walletAddress, chainId])
+
+  const rejectProposal = useCallback(async (id: number) => {
+    const wc = await getWeb3Wallet()
+    try {
+      // 5000 = USER_REJECTED en el catálogo de errores de WalletConnect.
+      await wc.rejectSession({ id, reason: { code: 5000, message: 'User rejected.' } })
+    } finally {
+      removeProposal(id)
+    }
   }, [])
 
   const respondSuccess = useCallback(async (topic: string, id: number, result: string) => {
@@ -339,9 +445,12 @@ export function useWcWallet(walletAddress: string | null, chainId = 421614) {
   return {
     sessions,
     pendingRequests,
+    pendingProposals,
     ready,
     error,
     pair,
+    approveProposal,
+    rejectProposal,
     respondSuccess,
     respondError,
     disconnect,

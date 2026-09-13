@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { DAPPS } from "./lib/dapps";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Cabeceras de seguridad
@@ -61,29 +62,31 @@ const WALLETCONNECT_HOSTS = [
   'https://api.web3modal.org',
 ]
 
-/** Los 19 hosts de dApps embebibles (lib/dapps.ts).
- *  ⚠️ Si se añade una dApp a `lib/dapps.ts`, hay que añadirla también aquí. */
-const DAPP_HOSTS = [
-  'https://app.uniswap.org',
-  'https://app.1inch.io',
-  'https://curve.fi',
-  'https://app.balancer.fi',
-  'https://app.aave.com',
-  'https://app.compound.finance',
-  'https://app.morpho.org',
-  'https://stargate.finance',
-  'https://app.hop.exchange',
-  'https://across.to',
-  'https://stake.lido.fi',
-  'https://yearn.fi',
-  'https://app.eigenlayer.xyz',
-  'https://opensea.io',
-  'https://blur.io',
-  'https://zapper.xyz',
-  'https://debank.com',
-  'https://analytics.blockventurechaincapital.com',
-  'https://polymarket.com',
+/** Los hosts de dApps embebibles. Se DERIVAN de `lib/dapps.ts`, que ya es la
+ *  fuente de verdad de qué se puede embeber y de qué hostname puede tocar el
+ *  backend (`resolveAllowedDAppUrl`). Escribirlos a mano aquí garantizaba que
+ *  dentro de tres meses una dApp nueva funcionase en desarrollo y no en
+ *  producción, y que el síntoma fuese un marco en blanco sin explicación. */
+const DAPP_HOSTS = Array.from(new Set(DAPPS.map((d) => new URL(d.url).origin)))
+
+/** WalletConnect monta un iframe OCULTO contra `verify.walletconnect.org` para
+ *  registrar la atestación de origen cuando esta app hace de dApp — el camino
+ *  «MetaMask paga el gas del alta». Está dentro de `@walletconnect/core`, no en
+ *  código nuestro, así que no se ve leyendo la app.
+ *
+ *  ⚠️ Si `frame-src` no lo deja pasar, el `verifyContext` se degrada a UNKNOWN
+ *  EN SILENCIO, y con él el aviso de «dominio no verificado» que enseñan el
+ *  modal de firma y la tarjeta de conexión. Es decir: apretar esta directiva sin
+ *  estos dos hosts aflojaría una señal de seguridad en vez de reforzarla. */
+const VERIFY_FRAME_HOSTS = [
+  'https://verify.walletconnect.org',
+  'https://verify.walletconnect.com',
 ]
+
+/** `frame-src`: lo único que esta app embebe son las dApps de la lista y el
+ *  iframe de atestación de WalletConnect. `'self'` entra porque un marco del
+ *  propio origen no añade superficie. */
+const FRAME_SRC = `frame-src 'self' ${[...DAPP_HOSTS, ...VERIFY_FRAME_HOSTS].join(' ')}`
 
 /** CSP en ENFORCE.
  *
@@ -97,6 +100,7 @@ const CSP_ENFORCE = [
   "form-action 'self'",
   `img-src 'self' data: blob: ${IMG_HOSTS.join(' ')}`,
   `connect-src 'self' ${[...RPC_HOSTS, ...WALLETCONNECT_HOSTS].join(' ')}`,
+  FRAME_SRC,
 ].join('; ')
 
 /** CSP candidata, en REPORT-ONLY: no bloquea, solo denuncia por consola.
@@ -119,7 +123,9 @@ const CSP_REPORT_ONLY = [
   // `default-src 'self'` no genere ruido duplicado sobre ellas.
   `img-src 'self' data: blob: ${IMG_HOSTS.join(' ')}`,
   `connect-src 'self' ${[...RPC_HOSTS, ...WALLETCONNECT_HOSTS].join(' ')}`,
-  `frame-src ${DAPP_HOSTS.join(' ')}`,
+  // frame-src ya está en enforce; se repite aquí por el mismo motivo que
+  // img-src y connect-src.
+  FRAME_SRC,
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
@@ -134,10 +140,13 @@ const CSP_REPORT_ONLY = [
  *  ⚠️ Tres cosas que NO se tocan y hay que dejar en su valor por defecto (`self`):
  *    - publickey-credentials-get / -create → son las passkeys. Apagarlas deja la
  *      wallet inutilizable.
- *    - clipboard-read / clipboard-write → las dApps embebidas las necesitan; el
- *      iframe las delega con allow="clipboard-write; clipboard-read"
- *      (app/wallet/dapps/page.tsx:598), y esa delegación solo funciona si el
- *      documento padre las tiene habilitadas. */
+ *    - clipboard-write → las dApps embebidas la necesitan para copiar su URI de
+ *      WalletConnect; el iframe la delega con allow="clipboard-write", y esa
+ *      delegación solo funciona si el documento padre la tiene habilitada.
+ *    - clipboard-read → el iframe de las dApps ya no la delega y la app no llama
+ *      a `clipboard.readText()` en ninguna parte, así que hoy se podría apagar.
+ *      No se hace aquí para no mezclar dos cambios: esto es la cabecera del
+ *      documento, no la delegación del iframe. */
 const PERMISSIONS_POLICY = [
   'accelerometer=()',
   'autoplay=()',
