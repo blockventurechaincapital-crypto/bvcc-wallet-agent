@@ -4,6 +4,7 @@ Documentation for integrating with and self-hosting the BVCC Agent Wallet. Also 
 
 | Guide | What it covers |
 |---|---|
+| [Recover your wallet](./recovery.md) | Move a wallet to a new passkey with two of its three guardians — step by step, network by network |
 | [Connect an AI](./connect-ai.md) | Wire any MCP client (Claude, Cursor, LM Studio, Hermes) to the wallet — install, env vars, read-only mode, module filtering |
 | [Agent Integration](./agent-integration.md) | How an AI agent calls `executeAsAgent` — encoding, limits, whitelists, errors, Foundry + viem examples |
 | [Signing with dApps](./signing.md) | What the wallet shows before you approve — calldata decoding, risk levels, editable approvals, EIP-5792 batching |

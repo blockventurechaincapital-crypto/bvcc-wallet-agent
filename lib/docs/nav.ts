@@ -9,6 +9,7 @@ export type DocSlug =
   | 'self-hosting'
   | 'contracts'
   | 'bundler-api'
+  | 'recovery'
 
 export interface Localized {
   en: string
@@ -47,6 +48,20 @@ export const DOC_NAV: DocNavGroup[] = [
         blurb: {
           en: 'Clone, configure .env.local, optional bundler, PM2 + nginx deployment.',
           es: 'Clonar, configurar .env.local, bundler opcional, despliegue con PM2 + nginx.',
+        },
+      },
+    ],
+  },
+  {
+    title: { en: 'Wallet', es: 'Wallet' },
+    items: [
+      {
+        slug: 'recovery',
+        href: '/docs/recovery',
+        label: { en: 'Recover Your Wallet', es: 'Recuperar tu wallet' },
+        blurb: {
+          en: 'Move the wallet to a new passkey with two guardians — step by step, network by network.',
+          es: 'Pasa la wallet a una passkey nueva con dos guardianes — paso a paso, red a red.',
         },
       },
     ],

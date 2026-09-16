@@ -7,6 +7,7 @@
 
 ## Documentation
 - [Docs](https://bvccwallet.blockventurechaincapital.com/docs): Documentation overview.
+- [Recover your wallet](https://bvccwallet.blockventurechaincapital.com/docs/recovery): Move a wallet to a new passkey with two of its three guardians, step by step and network by network.
 - [Connect an AI](https://bvccwallet.blockventurechaincapital.com/docs/connect-ai): Connect Hermes, Claude, Cursor, or LM Studio over MCP — install, configure, authorize, verify.
 - [How agent permissions work](https://bvccwallet.blockventurechaincapital.com/docs/agent-permissions): Capabilities vs addresses, the four permission layers, call policies.
 - [Agent integration](https://bvccwallet.blockventurechaincapital.com/docs/agent-integration): How an agent transacts within on-chain limits.
