@@ -15,6 +15,7 @@ import { coordToHex, isValidP256Point, parseCoord } from '@/lib/p256'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import NetworkSelector from '@/components/NetworkSelector'
 
 const C = {
   bg: '#06080f',
@@ -100,23 +101,26 @@ export default function RecoverPage() {
   } = useWriteContract()
 
   const { isLoading: initiateConfirming, isSuccess: initiateConfirmed } =
-    useWaitForTransactionReceipt({ hash: initiateTxHash })
+    useWaitForTransactionReceipt({ hash: initiateTxHash, chainId: network.chainId })
   const { isLoading: approveConfirming, isSuccess: approveConfirmed } =
-    useWaitForTransactionReceipt({ hash: approveTxHash })
+    useWaitForTransactionReceipt({ hash: approveTxHash, chainId: network.chainId })
   const { isLoading: executeConfirming, isSuccess: executeConfirmed } =
-    useWaitForTransactionReceipt({ hash: executeTxHash })
+    useWaitForTransactionReceipt({ hash: executeTxHash, chainId: network.chainId })
 
-  // Stage 1: guardians + recovery metadata
+  // Stage 1: guardians + recovery metadata. Every read names the network chosen in the app: without
+  // it wagmi asks its own current chain — the one it remembers from the last wallet connection, or
+  // the first configured — so a wallet that lives elsewhere read as nothing, and one deployed on both
+  // showed the state of the wrong network while the guardian's transaction went to the chosen one.
   const { data: s1, refetch: refetch1 } = useReadContracts({
     contracts: walletAddress ? [
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [0n] },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [1n] },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [2n] },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'recoveryInProgress' },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'recoveryApprovals' },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'recoveryReadyAt' },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'pendingNewSignerX' },
-      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'pendingNewSignerY' },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [0n], chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [1n], chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [2n], chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'recoveryInProgress', chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'recoveryApprovals', chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'recoveryReadyAt', chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'pendingNewSignerX', chainId: network.chainId },
+      { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'pendingNewSignerY', chainId: network.chainId },
     ] : [],
   })
 
@@ -132,9 +136,9 @@ export default function RecoverPage() {
   // Stage 2: approval status per guardian (needs guardians loaded first)
   const { data: s2, refetch: refetch2 } = useReadContracts({
     contracts: g0 && g1 && g2 ? [
-      { address: walletAddress!, abi: BVCC_WALLET_ABI, functionName: 'hasApprovedRecovery', args: [g0] },
-      { address: walletAddress!, abi: BVCC_WALLET_ABI, functionName: 'hasApprovedRecovery', args: [g1] },
-      { address: walletAddress!, abi: BVCC_WALLET_ABI, functionName: 'hasApprovedRecovery', args: [g2] },
+      { address: walletAddress!, abi: BVCC_WALLET_ABI, functionName: 'hasApprovedRecovery', args: [g0], chainId: network.chainId },
+      { address: walletAddress!, abi: BVCC_WALLET_ABI, functionName: 'hasApprovedRecovery', args: [g1], chainId: network.chainId },
+      { address: walletAddress!, abi: BVCC_WALLET_ABI, functionName: 'hasApprovedRecovery', args: [g2], chainId: network.chainId },
     ] : [],
   })
 
@@ -166,6 +170,8 @@ export default function RecoverPage() {
 
   // State machine
   const stateLoaded    = walletAddress && g0 !== undefined
+  // The read came back and failed: no BVCC wallet at this address on this network.
+  const notFoundHere   = !!walletAddress && s1?.[0]?.status === 'failure'
   const stateIdle      = stateLoaded && !recoveryInProgress
   const stateInProgress = stateLoaded && recoveryInProgress && !timelockExpired
   const stateReady     = stateLoaded && recoveryInProgress && timelockExpired
@@ -367,8 +373,14 @@ export default function RecoverPage() {
 
       {/* ── Sección 1: Dirección de la wallet ── */}
       <div style={cardStyle}>
-        <p style={{ margin: '0 0 10px', fontSize: '11px', color: C.subtle, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {t('recovery.walletToRecover')}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <p style={{ margin: 0, fontSize: '11px', color: C.subtle, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {t('recovery.walletToRecover')}
+          </p>
+          <NetworkSelector />
+        </div>
+        <p style={{ margin: '0 0 10px', fontSize: '12px', color: C.muted, lineHeight: 1.5 }}>
+          {t('recovery.networkNote').replace('{network}', network.name)}
         </p>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
@@ -384,6 +396,11 @@ export default function RecoverPage() {
           </button>
         </div>
         {searchError && <p style={{ fontSize: '12px', color: C.error, margin: '8px 0 0' }}>{searchError}</p>}
+        {!searchError && notFoundHere && (
+          <p style={{ fontSize: '12px', color: C.error, margin: '8px 0 0' }}>
+            {t('recovery.notFoundOnNetwork').replace('{network}', network.name)}
+          </p>
+        )}
       </div>
 
       {/* ── Estado on-chain ── */}

@@ -10,6 +10,8 @@ export const recovery = {
       walletToRecover: 'Wallet to recover',
       load: 'Load',
       invalidAddress: 'Invalid Ethereum address',
+      networkNote: 'Recovery happens on {network}. A wallet deployed on several networks has a separate owner on each, so recover it on each one.',
+      notFoundOnNetwork: 'There is no BVCC wallet at this address on {network}. Pick the network it was deployed on.',
 
       // Section: guardians list
       guardiansLabel: 'Guardians',
@@ -114,6 +116,8 @@ export const recovery = {
       walletToRecover: 'Wallet a recuperar',
       load: 'Cargar',
       invalidAddress: 'Dirección Ethereum inválida',
+      networkNote: 'La recuperación se hace en {network}. Una wallet desplegada en varias redes tiene un dueño distinto en cada una, así que hay que recuperarla en cada red.',
+      notFoundOnNetwork: 'En {network} no hay ninguna wallet BVCC en esta dirección. Elige la red en la que está desplegada.',
 
       // Section: guardians list
       guardiansLabel: 'Guardians',
