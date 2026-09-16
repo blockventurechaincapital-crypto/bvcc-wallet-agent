@@ -101,11 +101,12 @@ export const appshell = {
       accessRecoverBtn: 'Recover wallet',
       accessWaitingBiometrics: 'Waiting for biometrics...',
       accessCreateError: 'Error creating wallet',
-      accessVerifyBody: 'This wallet was created before V4. The only record of its passkey on-chain was written by whoever deployed it, so it cannot be trusted as is. Confirm with your passkey and the app will remember the one that really controls the wallet.',
-      accessVerifyUnreadable: 'This network would not tell us which passkey controls this wallet. Confirm with your passkey and the app will check it against the wallet and remember it.',
+      accessVerifyBody: 'Confirm with the passkey of this wallet. The app checks it against the wallet\'s current owner before remembering it, so after a guardian recovery it is the new passkey that works.',
       accessVerifySkip: 'Enter without confirming — you will pick the passkey when you sign',
       accessWrongPasskey: 'That passkey does not control this wallet, so nothing was saved. If the wallet was recovered through guardians, its owner is the passkey created during the recovery.',
-      accessPasskeyFailed: 'The passkey was not confirmed ({reason}). Nothing was saved.',
+      accessPasskeyFailed: 'The passkey was not confirmed ({reason}). Nothing was saved. A passkey created before version 1.1.6 no longer works here — see the note above.',
+      accessOldPasskeyHint: 'If this wallet\'s passkey was created before version 1.1.6, it no longer works on this site: move the wallet to a new passkey with your guardians.',
+      accessOldPasskeyLink: 'Recover your wallet →',
 
       // Left panel (access step)
       accessHeroTitle1: 'Your',
@@ -219,11 +220,12 @@ export const appshell = {
       accessRecoverBtn: 'Recuperar wallet',
       accessWaitingBiometrics: 'Esperando biometría...',
       accessCreateError: 'Error al crear la wallet',
-      accessVerifyBody: 'Esta wallet se creó antes de la V4. El único registro de su passkey en la cadena lo escribió quien la desplegó, así que no es de fiar tal cual. Confirma con tu passkey y la app recordará la que de verdad controla la wallet.',
-      accessVerifyUnreadable: 'Esta red no nos ha dejado leer qué passkey controla esta wallet. Confirma con tu passkey y la app la comprobará contra la wallet y la recordará.',
+      accessVerifyBody: 'Confirma con la passkey de esta wallet. La app la comprueba contra el dueño actual de la wallet antes de recordarla, así que tras una recuperación con guardianes la que vale es la passkey nueva.',
       accessVerifySkip: 'Entrar sin confirmar — elegirás la passkey al firmar',
       accessWrongPasskey: 'Esa passkey no controla esta wallet, así que no se ha guardado nada. Si la wallet se recuperó con guardianes, su dueña es la passkey que se creó durante la recuperación.',
-      accessPasskeyFailed: 'La passkey no se confirmó ({reason}). No se ha guardado nada.',
+      accessPasskeyFailed: 'La passkey no se confirmó ({reason}). No se ha guardado nada. Una passkey creada antes de la versión 1.1.6 ya no sirve aquí — mira la nota de arriba.',
+      accessOldPasskeyHint: 'Si la passkey de esta wallet se creó antes de la versión 1.1.6, ya no sirve en esta web: pasa la wallet a una passkey nueva con tus guardianes.',
+      accessOldPasskeyLink: 'Recuperar tu wallet →',
 
       // Left panel (access step)
       accessHeroTitle1: 'Tu wallet',

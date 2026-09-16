@@ -105,17 +105,16 @@ function extractPublicKeyFromAuthData(authData: Uint8Array): { pubKeyX: bigint; 
 // Registro WebAuthn
 // ---------------------------------------------------------------------------
 
-// rpId = dominio padre para que la misma passkey funcione en todos los
-// subdominios (wallet.*, bvccwallet.*, ...). El navegador exige que el rpId
-// sea sufijo del hostname actual, asi que en localhost / otros dominios
-// (self-hosted) se usa el hostname tal cual.
-const PARENT_RP_ID = 'blockventurechaincapital.com'
-
-function getRpId(): string {
-  const host = window.location.hostname
-  return host === PARENT_RP_ID || host.endsWith('.' + PARENT_RP_ID)
-    ? PARENT_RP_ID
-    : host
+/**
+ * Passkeys belong to the exact host that serves the wallet.
+ *
+ * The contract checks neither the origin nor the rpId hash of a signature, so any page the
+ * browser lets ask for a passkey gets a signature the wallet accepts. With the parent domain
+ * as rpId that meant every site under it, present or future; with the host, only this one.
+ * Localhost and self-hosted copies follow the same rule.
+ */
+function walletRpId(): string {
+  return window.location.hostname
 }
 
 /**
@@ -135,7 +134,7 @@ export async function registerWebAuthn(username: string): Promise<{
       challenge,
       rp: {
         name: 'BVCC Wallet',
-        id: getRpId(),
+        id: walletRpId(),
       },
       user: {
         id: userId,
@@ -249,7 +248,7 @@ export async function authenticateWebAuthn(
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: challenge.buffer as ArrayBuffer,
-      rpId: getRpId(),
+      rpId: walletRpId(),
       ...(allowCredentials ? { allowCredentials } : {}),
       userVerification: 'required',
       timeout: 60000,
@@ -305,7 +304,7 @@ export async function discoverCredentialId(
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)).buffer as ArrayBuffer,
-      rpId: getRpId(),
+      rpId: walletRpId(),
       userVerification: 'required',
       timeout: 60000,
     },
@@ -385,8 +384,17 @@ async function assertionMatchesPubKey(
 
 const STORAGE_KEY = 'bvcc_wallet_credential'
 
+export type StoredCredential = {
+  credentialId: string
+  walletAddress: string
+}
+
+/**
+ * Saves the credential together with the rpId it belongs to, so an entry left by a passkey of
+ * another rpId can be told apart and ignored instead of being asked for with the wrong one.
+ */
 export function saveCredential(credentialId: string, walletAddress: string): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ credentialId, walletAddress }))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ credentialId, walletAddress, rpId: walletRpId() }))
 }
 
 /**
@@ -397,15 +405,21 @@ export function saveCredential(credentialId: string, walletAddress: string): voi
  * JSON.parse que lanza tumbaba la pantalla que lo leyera, y un campo con otra
  * forma llegaba como dirección a las lecturas de la cadena. Una entrada corrupta
  * vale lo mismo que ninguna. Léela SIEMPRE por aquí, no con JSON.parse suelto.
+ *
+ * An entry whose rpId is not this host's is worth nothing too. That includes one with no rpId
+ * at all, saved before passkeys were scoped to the host: its passkey belongs to another rpId,
+ * and asking for it here would only make the browser say there is no passkey. Forgetting it
+ * sends the user back to enter the wallet, where the right passkey is picked and checked.
  */
-export function loadCredential(): { credentialId: string; walletAddress: string } | null {
+export function loadCredential(): StoredCredential | null {
   try {
     const data = localStorage.getItem(STORAGE_KEY)
     if (!data) return null
-    const parsed = JSON.parse(data) as { credentialId?: unknown; walletAddress?: unknown } | null
+    const parsed = JSON.parse(data) as { credentialId?: unknown; walletAddress?: unknown; rpId?: unknown } | null
     const { credentialId, walletAddress } = parsed ?? {}
     if (typeof credentialId !== 'string' || !credentialId) return null
     if (typeof walletAddress !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) return null
+    if (parsed?.rpId !== walletRpId()) return null
     return { credentialId, walletAddress }
   } catch {
     return null

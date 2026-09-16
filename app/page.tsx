@@ -15,7 +15,7 @@ import {
   registerWebAuthn, saveCredential, loadCredential, hasCredential, credentialIdToBytes,
   discoverCredentialId, WrongPasskeyError,
 } from '@/lib/webauthn'
-import { getWalletAddress, getAgentWalletAddress, getCredentialFromChain } from '@/lib/wallet'
+import { getWalletAddress, getAgentWalletAddress } from '@/lib/wallet'
 import { validateGuardians, ZERO_ADDRESS } from '@/lib/guardianValidation'
 import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from '@/lib/abis'
 import { executeWithFaceId } from '@/lib/executeUserOp'
@@ -155,9 +155,9 @@ export default function Home() {
   const [fundingAmount, setFundingAmount] = useState<bigint | null>(null)
   const [setupStop, setSetupStop] = useState<SetupStop | null>(null)
   const [confirmingOwner, setConfirmingOwner] = useState(false)
-  // "Enter with address" on a wallet whose only on-chain credential is unauthenticated: the
-  // key to check the passkey against, waiting for the user's click.
-  const [entryCheck, setEntryCheck] = useState<{ wallet: Address; pubKeyX: bigint; pubKeyY: bigint; unreadable: boolean } | null>(null)
+  // "Enter with address" with no credential stored for that wallet: the owner key to check the
+  // passkey against, waiting for the user's click.
+  const [entryCheck, setEntryCheck] = useState<{ wallet: Address; pubKeyX: bigint; pubKeyY: bigint } | null>(null)
   const submitUserOp = useSubmitUserOp()
   const [guardians, setGuardians] = useState<[string, string, string]>(['', '', ''])
   const [addressInput, setAddressInput] = useState('')
@@ -429,30 +429,24 @@ export default function Home() {
 
     // The credential id is what every later signature narrows the passkey prompt to, so a
     // wrong one locks the owner out without saying why. One is kept only when it is known to
-    // be this wallet's: already stored for it, announced by the wallet's own CredentialSet
-    // event, or picked from the authenticator and checked against the contract's signer.
+    // be this wallet's: already stored for it, or picked from the authenticator and checked
+    // against the contract's signer. Nothing on-chain is taken instead: the factory event of a
+    // pre-V4 wallet is written by whoever deployed it, and a V4 wallet's own CredentialSet is
+    // left untouched by a guardian recovery, so after one it names the passkey that was replaced.
     const stored = loadCredential()
 
     if (!stored?.credentialId || stored.walletAddress?.toLowerCase() !== wallet.toLowerCase()) {
-      const found = await getCredentialFromChain(wallet, network)
-      if (found?.authenticated) {
-        saveCredential(found.credentialId, wallet)
-      } else if (found) {
-        // Pre-V4, the only record is the factory event, written by whoever deployed the
-        // wallet; or the network would not serve the logs at all, so whether the wallet
-        // announced a credential is unknown. Either way, check a passkey against the signer
-        // instead — in a click of its own, since the lookup above can outlast the user
-        // gesture Safari wants for a WebAuthn prompt. Nothing in storage changes until the
-        // user picks one of the two ways in.
-        try {
-          const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
-          const [pubKeyX, pubKeyY] = await client.readContract({
-            address: wallet, abi: BVCC_WALLET_ABI, functionName: 'signer',
-          }) as readonly [`0x${string}`, `0x${string}`]
-          setEntryCheck({ wallet, pubKeyX: BigInt(pubKeyX), pubKeyY: BigInt(pubKeyY), unreadable: !!found.unreadable })
-          return
-        } catch { /* no signer to check against: enter with no stored credential */ }
-      }
+      // The passkey is asked in a click of its own: reading the signer can outlast the user
+      // gesture Safari wants for a WebAuthn prompt. Nothing in storage changes until the user
+      // picks one of the two ways in.
+      try {
+        const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
+        const [pubKeyX, pubKeyY] = await client.readContract({
+          address: wallet, abi: BVCC_WALLET_ABI, functionName: 'signer',
+        }) as readonly [`0x${string}`, `0x${string}`]
+        setEntryCheck({ wallet, pubKeyX: BigInt(pubKeyX), pubKeyY: BigInt(pubKeyY) })
+        return
+      } catch { /* no signer to check against: enter with no stored credential */ }
     }
     enterWallet(wallet)
   }
@@ -1275,7 +1269,7 @@ export default function Home() {
           {entryCheck && (
             <div style={{ marginBottom: '16px', padding: '12px 14px', backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`, borderRadius: '6px' }}>
               <p style={{ margin: '0 0 10px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
-                {t(entryCheck.unreadable ? 'appshell.accessVerifyUnreadable' : 'appshell.accessVerifyBody')}
+                {t('appshell.accessVerifyBody')}
               </p>
               <button
                 onClick={handleConfirmEntryPasskey}
@@ -1296,6 +1290,14 @@ export default function Home() {
               >
                 {t('appshell.accessVerifySkip')}
               </button>
+              {/* The browser cannot tell "no passkey for this site" from a cancel, so the way out
+                  for an owner whose passkey predates the scoping is shown to everyone, as a condition. */}
+              <p style={{ margin: '8px 0 0', fontSize: '11.5px', color: C.subtle, lineHeight: 1.5 }}>
+                {t('appshell.accessOldPasskeyHint')}{' '}
+                <a href="/docs/recovery" style={{ color: C.gold, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                  {t('appshell.accessOldPasskeyLink')}
+                </a>
+              </p>
             </div>
           )}
 
