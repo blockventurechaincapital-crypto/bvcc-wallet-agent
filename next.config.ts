@@ -42,6 +42,9 @@ const PERMISSIONS_POLICY = [
 ].join(', ')
 
 const nextConfig: NextConfig = {
+  // Sin `X-Powered-By: Next.js`: no anuncia el framework a quien no lo necesita.
+  poweredByHeader: false,
+
   serverExternalPackages: [
     '@walletconnect/web3wallet',
     '@walletconnect/core',
@@ -69,21 +72,15 @@ const nextConfig: NextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
 
-          // HSTS: se copia EXACTAMENTE lo que producción ya sirve desde Apache
-          // (comprobado el 2026-08-11 en bvccwallet.… y en el apex). Poner aquí
-          // un valor más flojo —p. ej. sin `includeSubDomains`— sería un riesgo,
-          // no una precaución: si la cabecera de Next ganase sobre la de Apache,
-          // rebajaría una protección que ya está activa.
+          // HSTS: el mismo valor que sirve el dominio padre. Uno más flojo —p. ej.
+          // sin `includeSubDomains`— sería un riesgo, no una precaución.
           //
           // Sin `preload`: es un compromiso aparte (lista pública, salir lleva
           // meses) y se decide por separado.
           //
-          // Ojo: cuatro de las cabeceras de este bloque (X-Frame-Options, HSTS,
-          // Referrer-Policy, X-Content-Type-Options) YA las pone Apache en
-          // producción. Se dejan aquí igualmente para que quien despliegue sin
-          // ese Apache delante —el modo self-host de la documentación— no se
-          // quede sin ellas. La CSP y la Permissions-Policy sí son nuevas: en
-          // producción no había ninguna.
+          // Las cabeceras de seguridad de la app viven aquí y solo aquí: lo que
+          // haya delante (proxy inverso, CDN) no debe repetirlas. Dos copias
+          // iguales no rompen nada, pero cambiar una sola las contradiría.
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
         ],
       },
