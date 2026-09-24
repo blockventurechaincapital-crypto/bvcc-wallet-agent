@@ -85,7 +85,7 @@ export default function OutdatedWalletNotice() {
               {body}
             </p>
             <p style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.6, color: '#c3cbd8' }}>
-              {t('wallet.outdatedHow')}
+              {t('wallet.outdatedHow', { current: CURRENT_WALLET_VERSION })}
             </p>
             {upgradeAddress && (
               <div style={{

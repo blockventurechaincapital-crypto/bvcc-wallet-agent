@@ -5,7 +5,7 @@ import { isAddress, createPublicClient, encodeAbiParameters, encodeFunctionData,
 import { authenticateWebAuthn } from '@/lib/webauthn'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
-import { USEROP_TOTAL_GAS } from '@/lib/executeUserOp'
+import { USEROP_TOTAL_GAS, USEROP_VERIFICATION_GAS, USEROP_CALL_GAS, USEROP_PREVERIFICATION_GAS } from '@/lib/executeUserOp'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useTokens, type WalletToken } from '@/lib/useTokens'
@@ -326,8 +326,10 @@ function SendPageInner() {
         nonce,
         initCode: '0x' as Hex,
         callData,
-        accountGasLimits: packBytes32(400_000n, 400_000n),
-        preVerificationGas: 80_000n,
+        // Los mismos límites con los que se calcula la reserva de MAX: si se
+        // escribieran aquí a mano, acabarían divergiendo de ella.
+        accountGasLimits: packBytes32(USEROP_VERIFICATION_GAS, USEROP_CALL_GAS),
+        preVerificationGas: USEROP_PREVERIFICATION_GAS,
         gasFees: packBytes32(maxPriorityFeePerGas, maxFeePerGas),
         paymasterAndData: '0x' as Hex,
         signature: '0x' as Hex,

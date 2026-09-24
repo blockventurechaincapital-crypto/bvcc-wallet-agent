@@ -9,6 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useReadContracts,
+  useDisconnect,
 } from 'wagmi'
 import { registerWebAuthn, saveCredential } from '@/lib/webauthn'
 import { coordToHex, isValidP256Point, parseCoord } from '@/lib/p256'
@@ -16,6 +17,7 @@ import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import NetworkSelector from '@/components/NetworkSelector'
+import WcQrConnect from '@/components/WcQrConnect'
 
 const C = {
   bg: '#06080f',
@@ -75,6 +77,7 @@ export default function RecoverPage() {
   const { connect, connectors } = useConnect()
   const { address: connectedAddress, chainId } = useAccount()
   const { switchChain } = useSwitchChain()
+  const { disconnect } = useDisconnect()
   const isOnCorrectNetwork = chainId === network.chainId
   const injected = connectors.find(c => c.id === 'injected')
 
@@ -573,6 +576,11 @@ export default function RecoverPage() {
                   {t('recovery.connectMetaMask')}
                 </button>
               )}
+              {/* A guardian's key may live in a mobile wallet that is not MetaMask. */}
+              <WcQrConnect
+                label={t('recovery.connectWalletConnect')}
+                style={{ ...btnOutline, width: '100%', marginTop: injected ? '8px' : 0 }}
+              />
             </>
           ) : !isOnCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: network.chainId })} style={{ ...btnGold, width: '100%' }}>
@@ -591,6 +599,13 @@ export default function RecoverPage() {
                   {t('recovery.connectAnotherAccount')}
                 </button>
               )}
+              {/* Disconnecting brings back both options, WalletConnect included. */}
+              <button
+                onClick={() => disconnect()}
+                style={{ ...btnOutline, width: '100%', marginTop: injected ? '8px' : 0 }}
+              >
+                {t('recovery.disconnectWallet')}
+              </button>
             </div>
           ) : (
             <div>

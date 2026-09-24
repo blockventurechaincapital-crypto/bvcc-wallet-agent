@@ -43,8 +43,10 @@ export const recovery = {
 
       // Section: guardian
       guardianTitle: "I'm a guardian — sign recovery",
-      connectMetaMaskDesc: 'Connect your MetaMask wallet to verify if you are a guardian of this wallet.',
+      connectMetaMaskDesc: 'Connect the wallet that holds your guardian key (MetaMask, or any other through WalletConnect) to verify if you are a guardian of this wallet.',
       connectMetaMask: 'Connect MetaMask',
+      connectWalletConnect: 'Connect with WalletConnect',
+      disconnectWallet: 'Disconnect this wallet',
       switchNetwork: 'Switch to {network}',
       notGuardian: 'The connected wallet ({addr}) is not a guardian of this wallet.',
       connectAnotherAccount: 'Connect another account',
@@ -149,8 +151,10 @@ export const recovery = {
 
       // Section: guardian
       guardianTitle: 'Soy guardian — firmar recovery',
-      connectMetaMaskDesc: 'Conecta tu wallet MetaMask para verificar si eres guardian de esta wallet.',
+      connectMetaMaskDesc: 'Conecta la wallet que guarda tu clave de guardián (MetaMask, o cualquier otra por WalletConnect) para verificar si eres guardián de esta wallet.',
       connectMetaMask: 'Conectar MetaMask',
+      connectWalletConnect: 'Conectar con WalletConnect',
+      disconnectWallet: 'Desconectar esta wallet',
       switchNetwork: 'Cambiar a {network}',
       notGuardian: 'La wallet conectada ({addr}) no es guardian de esta wallet.',
       connectAnotherAccount: 'Conectar otra cuenta',

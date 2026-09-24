@@ -10,6 +10,32 @@ import { checkOrigin } from '@/lib/wcSignatures'
 import WcConnectModal from '@/components/WcConnectModal'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { rpcTransport } from '@/lib/rpc'
+import { DAPPS } from '@/lib/dapps'
+
+// El icono que manda una dApp es una URL que elige ella, de cualquier host: la
+// CSP la bloquea, y abrirle `img-src` dejaría a un tercero decidir a qué servidor
+// pide el navegador del usuario. Se enseña el logo propio de las dApps conocidas
+// —ya permitido— y, si no lo es, un marcador. Nunca se carga la URL de la dApp.
+function logoDe(url: string | undefined): string | null {
+  if (!url) return null
+  let host: string
+  try { host = new URL(url).host.toLowerCase() } catch { return null }
+  const d = DAPPS.find((x) => { try { return new URL(x.url).host.toLowerCase() === host } catch { return false } })
+  return d?.logo ?? null
+}
+
+function DappIcon({ url, size }: { url?: string; size: number }) {
+  const [roto, setRoto] = useState(false)
+  const logo = logoDe(url)
+  if (logo && !roto) {
+    return <img src={logo} alt="" width={size} height={size}
+      style={{ borderRadius: 5, flexShrink: 0, objectFit: 'contain' }}
+      onError={() => setRoto(true)} />
+  }
+  return (
+    <div style={{ width: size, height: size, borderRadius: 4, flexShrink: 0, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: COLORS.textSubtle }}>?</div>
+  )
+}
 
 const COLORS = {
   border: 'rgba(255,255,255,0.07)',
@@ -72,11 +98,8 @@ function ProposalCard({ proposal, busy, onApprove, onReject }: {
             {proposal.metadata.name || t('connect.unknownOrigin')}
           </p>
         </div>
-        {proposal.metadata.icons?.[0] && (
-          <img src={proposal.metadata.icons[0]} alt="" width={24} height={24}
-            style={{ borderRadius: 5, flexShrink: 0, objectFit: 'contain' }}
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-        )}
+        {/* Por el origen VERIFICADO: una dApp que declare ser Uniswap no se lleva su logo. */}
+        <DappIcon url={origin.level === 'safe' ? origin.origin : undefined} size={24} />
       </div>
 
       <p style={{ margin: '0 0 2px', fontSize: 11, color: '#7c93b5', fontFamily: 'IBM Plex Mono, monospace', wordBreak: 'break-all' }}>
@@ -315,13 +338,9 @@ export default function WalletConnectButton() {
                       padding: '8px 10px', background: 'rgba(255,255,255,0.02)',
                       border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px',
                     }}>
-                      {s.peer.metadata.icons[0] ? (
-                        <img src={s.peer.metadata.icons[0]} alt="" width={20} height={20}
-                          style={{ borderRadius: '4px', flexShrink: 0, objectFit: 'contain' }}
-                          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                      ) : (
-                        <div style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: COLORS.textSubtle }}>?</div>
-                      )}
+                      {/* La sesión ya no guarda el veredicto del relay: la url es la
+                          declarada, igual que el nombre que se pinta al lado. */}
+                      <DappIcon url={s.peer.metadata.url} size={20} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ margin: 0, fontSize: '12px', fontWeight: 500, color: COLORS.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.peer.metadata.name}</p>
                         <p style={{ margin: '1px 0 0', fontSize: '10px', color: COLORS.textSubtle, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.peer.metadata.url}</p>
@@ -375,6 +394,7 @@ export default function WalletConnectButton() {
           {pendingRequests.map((req, idx) => {
             const session = sessions.find(s => s.topic === req.topic)
             const meta = session?.peer.metadata
+            const reqOrigin = checkOrigin((req as { verifyContext?: unknown }).verifyContext, t)
             const method = req.params.request.method
             const isTx = method === 'eth_sendTransaction'
             // Estrictamente secuencial: solo la petición más antigua es accionable,
@@ -401,11 +421,7 @@ export default function WalletConnectButton() {
                       {t('connect.pendingFrom')} {meta?.name ?? 'dApp'} · {isTx ? t('connect.pendingTx') : t('connect.pendingSignature')}
                     </p>
                   </div>
-                  {meta?.icons?.[0] && (
-                    <img src={meta.icons[0]} alt="" width={24} height={24}
-                      style={{ borderRadius: 5, flexShrink: 0, objectFit: 'contain' }}
-                      onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                  )}
+                  <DappIcon url={reqOrigin.level === 'safe' ? reqOrigin.origin : undefined} size={24} />
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button

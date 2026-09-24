@@ -2,11 +2,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   createPublicClient, encodeAbiParameters, encodeFunctionData, parseGwei,
-  parseUnits, formatUnits, hashTypedData, hashMessage, type Address, type Hex,
+  parseUnits, formatUnits, hashTypedData, hashMessage, type Address, type Hex, type PublicClient,
 } from 'viem'
 import {
   classifyCall, buildKnownSet, getAtomicBatchEnabled, getMaxGas, newBatchId, recordBatch,
-  getApproveInfo, encodeApproveAmount, MAX_UINT256,
+  getApproveInfo, encodeApproveAmount, MAX_UINT256, PCS_PERMIT2,
   type WcCall, type CallRisk, type RiskLevel,
   type Tr,
 } from '@/lib/wcCalls'
@@ -19,14 +19,16 @@ import { erc7739TypedDataDigest } from '@/lib/erc7739'
 import type { PendingRequestTypes } from '@walletconnect/types'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
+import { USEROP_VERIFICATION_GAS, USEROP_PREVERIFICATION_GAS } from '@/lib/executeUserOp'
 import { authenticateWebAuthn } from '@/lib/webauthn'
 import { useNetwork } from '@/lib/NetworkContext'
-import { getNetwork } from '@/lib/networks'
+import { getNetwork, NETWORKS } from '@/lib/networks'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { waitForUserOp, txUrl } from '@/lib/waitForUserOp'
 import { suggestGasFees } from '@/lib/gasFees'
 import { rpcTransport } from '@/lib/rpc'
+import { sanitizeTokenMeta, safeDecimals } from '@/lib/tokenMeta'
 
 const ERC1271_ABI = [{
   name: 'isValidSignature',
@@ -54,6 +56,41 @@ const ERC20_META_ABI = [
   { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
   { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] },
 ] as const
+
+// Lo aprobado al contrato que verifica un permiso firmado: es el tope real de
+// ese permiso, porque Permit2 no puede mover más de lo que el token le deja.
+const ERC20_ALLOWANCE_ABI = [{
+  name: 'allowance',
+  type: 'function',
+  stateMutability: 'view',
+  inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+  outputs: [{ name: '', type: 'uint256' }],
+}] as const
+
+// Permit2 de Uniswap y el de PancakeSwap: el mismo contrato, dos despliegues.
+const PERMIT2S = ['0x000000000022d473030f116ddee9f6b43ac78ba3', ...PCS_PERMIT2]
+
+// Símbolo y decimales de unos tokens, leídos en la cadena y saneados. El símbolo
+// lo escribe quien despliega el token: si trae invisibles, no es ASCII o no cabe,
+// NO se enseña (se queda la dirección abreviada) — un "USDC" con una C cirílica
+// no debe poder vestir un importe. Sin decimales representables, el token no
+// entra: se sigue formateando como desconocido.
+async function leerTokenMeta(client: PublicClient, addrs: string[]): Promise<Record<string, TokenMeta>> {
+  const out: Record<string, TokenMeta> = {}
+  await Promise.all(addrs.map(async (addr) => {
+    try {
+      const [rawSym, rawDec] = await Promise.all([
+        client.readContract({ address: addr as Address, abi: ERC20_META_ABI, functionName: 'symbol' }),
+        client.readContract({ address: addr as Address, abi: ERC20_META_ABI, functionName: 'decimals' }),
+      ])
+      const decimals = safeDecimals(rawDec)
+      if (decimals === null) return
+      const m = sanitizeTokenMeta(rawSym, '')
+      out[addr] = { symbol: m.suspicious ? `${addr.slice(0, 6)}…` : m.symbol, decimals }
+    } catch { /* token ilegible → se queda como desconocido */ }
+  }))
+  return out
+}
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
@@ -89,8 +126,8 @@ const RISK_DOT: Record<RiskLevel, string> = { safe: '🟢', caution: '🟡', dan
 
 // Parámetros de gas de un userOp (editables en el panel Avanzado).
 type GasParams = { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint; callGasLimit: bigint }
-const VERIF_GAS = 400_000n     // verificationGasLimit (firma WebAuthn) — fijo
-const PREVERIF_GAS = 80_000n   // preVerificationGas — fijo
+const VERIF_GAS = USEROP_VERIFICATION_GAS       // verificationGasLimit (firma WebAuthn) — fijo
+const PREVERIF_GAS = USEROP_PREVERIFICATION_GAS // preVerificationGas — fijo
 const fmtGwei = (wei: bigint) => (Number(wei) / 1e9).toString()
 
 // Address completa, clickable, que abre el explorer en pestaña nueva.
@@ -171,12 +208,20 @@ function friendlyError(raw: string, t: Tr): string {
   return raw
 }
 
-function formatValue(value: string | undefined): string {
-  if (!value) return '0'
+// Importe nativo exacto, recortado (nunca redondeado hacia arriba: 0,0008075 no
+// puede enseñarse como 0,000808 cuando la dApp dice 0,000807) y con el símbolo de
+// la red de la petición, no "ETH" siempre.
+function formatNative(wei: bigint, symbol: string, dec = 8): string {
+  const [i, f = ''] = formatUnits(wei, 18).split('.')
+  const ff = f.slice(0, dec).replace(/0+$/, '')
+  if (!ff && wei > 0n && i === '0') return `<0.${'0'.repeat(dec - 1)}1 ${symbol}`
+  return `${ff ? `${i}.${ff}` : i} ${symbol}`
+}
+
+function formatValue(value: string | undefined, symbol: string): string {
+  if (!value) return `0 ${symbol}`
   try {
-    const wei = BigInt(value)
-    const eth = Number(wei) / 1e18
-    return eth.toFixed(6) + ' ETH'
+    return formatNative(BigInt(value), symbol)
   } catch {
     return value
   }
@@ -227,19 +272,56 @@ export default function WcConnectModal({
 
   // La petición trae su propio chainId ('eip155:42161') — la sesión es multi-red,
   // así que NO asumimos la red activa del wallet: usamos la que pide la dApp.
-  const network = useMemo(() => {
+  const requestedId = useMemo(() => {
     const c = request.params.chainId
-    const id = c?.startsWith('eip155:') ? parseInt(c.slice(7), 10) : NaN
-    if (Number.isFinite(id)) {
-      try { return getNetwork(id) } catch { /* red no soportada → red actual */ }
+    return c?.startsWith('eip155:') ? parseInt(c.slice(7), 10) : NaN
+  }, [request.params.chainId])
+  // Una red que la app no soporta NO se sustituye por la activa: se firmaría o
+  // se enviaría en otra red de la que la dApp cree, y la firma no le valdría.
+  const unsupportedChain = useMemo(() => {
+    if (!Number.isFinite(requestedId)) return false
+    try { getNetwork(requestedId); return false } catch { return true }
+  }, [requestedId])
+  const network = useMemo(() => {
+    if (Number.isFinite(requestedId)) {
+      try { return getNetwork(requestedId) } catch { /* se bloquea abajo con unsupportedChain */ }
     }
     return currentNetwork
-  }, [request.params.chainId, currentNetwork])
+  }, [requestedId, currentNetwork])
 
   const publicClient = useMemo(
     () => createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
+
+  // ¿Existe la wallet en la red que pide la dApp? Una firma la valida el propio
+  // contrato (ERC-1271) y una operación la ejecuta él: sin contrato en esa red,
+  // las dos fallan — y antes se descubría al final, con un error interno de viem.
+  // null = no se sabe (RPC caído): no se bloquea por una lectura fallida.
+  const [deployedHere, setDeployedHere] = useState<boolean | null>(null)
+  const [deployedOn, setDeployedOn] = useState<string[]>([])
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      let code: string | undefined
+      try { code = await publicClient.getCode({ address: walletAddress as Address }) } catch { return }
+      const existe = !!code && code !== '0x'
+      if (cancelled) return
+      setDeployedHere(existe)
+      if (existe) return
+      // Dónde sí existe, para decirlo con nombres.
+      const otras = await Promise.all(NETWORKS.filter((n) => n.chainId !== network.chainId).map(async (n) => {
+        try {
+          const c = await createPublicClient({ chain: n.viemChain, transport: rpcTransport(n) })
+            .getCode({ address: walletAddress as Address })
+          return c && c !== '0x' ? n.name : null
+        } catch { return null }
+      }))
+      if (!cancelled) setDeployedOn(otras.filter((x): x is string => !!x))
+    })()
+    return () => { cancelled = true }
+  }, [publicClient, walletAddress, network.chainId])
+  const blocked = unsupportedChain || deployedHere === false
 
   const { method, params } = request.params.request
   // Quién pide la firma. El relay de WalletConnect ya compara el origen real con
@@ -299,10 +381,36 @@ export default function WcConnectModal({
     return () => { cancelled = true }
   }, [allCalls, publicClient, walletAddress])
 
+  // Tokens de la operación que el decodificador no conoce: se leen en la cadena y
+  // se vuelve a clasificar con su símbolo y decimales. Sin esto, un importe de un
+  // token de 6 decimales se escribía como si tuviera 18.
+  const [callTokenMeta, setCallTokenMeta] = useState<Record<string, TokenMeta>>({})
   const risks = useMemo(
-    () => effectiveCalls.map((c, i) => classifyCall(c, known, t, { self: walletAddress, saldoToken: approveBalances[i] })),
-    [effectiveCalls, known, walletAddress, approveBalances], // eslint-disable-line react-hooks/exhaustive-deps
+    () => effectiveCalls.map((c, i) => classifyCall(c, known, t, { self: walletAddress, saldoToken: approveBalances[i], nativeSymbol: network.nativeToken.symbol, tokenMeta: callTokenMeta })),
+    [effectiveCalls, known, walletAddress, approveBalances, network.nativeToken.symbol, callTokenMeta], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const callTokens = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of risks) for (const a of r.unknownTokens ?? []) set.add(a)
+    for (const c of allCalls) {
+      const info = getApproveInfo(c, callTokenMeta)
+      if (info && !info.decimalsKnown) set.add(info.token)
+    }
+    return [...set].filter((a) => !(a in callTokenMeta)).sort().join(',')
+  }, [risks, allCalls, callTokenMeta])
+  const [tokensLeidos, setTokensLeidos] = useState('')
+  useEffect(() => {
+    // Se lee cada lista una sola vez: si un token no se deja leer, no se reintenta en bucle.
+    if (!callTokens || callTokens === tokensLeidos) return
+    let cancelled = false
+    ;(async () => {
+      const out = await leerTokenMeta(publicClient as PublicClient, callTokens.split(','))
+      if (cancelled) return
+      setTokensLeidos(callTokens)
+      if (Object.keys(out).length) setCallTokenMeta((prev) => ({ ...prev, ...out }))
+    })()
+    return () => { cancelled = true }
+  }, [callTokens, tokensLeidos, publicClient])
 
   const seqMode = method === 'wallet_sendCalls' && !atomicMode
 
@@ -313,13 +421,22 @@ export default function WcConnectModal({
   // mirar qué traía. No mueven gas, y por eso son la forma más barata de vaciar
   // una wallet: un PermitSingle es una firma y el gasto viene después.
   const [sigTokenMeta, setSigTokenMeta] = useState<Record<string, TokenMeta>>({})
+  const [sigCaps, setSigCaps] = useState<Record<string, bigint>>({})
   const typedRisk = useMemo(
-    () => (typedData ? analyzeTypedData(typedData, known, t, { self: walletAddress, meta: sigTokenMeta }) : null),
-    [typedData, known, walletAddress, sigTokenMeta], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (typedData ? analyzeTypedData(typedData, known, t, { self: walletAddress, meta: sigTokenMeta, caps: sigCaps }) : null),
+    [typedData, known, walletAddress, sigTokenMeta, sigCaps], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  // Un login SIWE solo queda atado al dominio que escribe la dApp en el mensaje;
+  // se compara con el origen que verificó el relay, que es lo que la cabecera
+  // enseña con su ✓ justo encima.
   const msgRisk = useMemo(
-    () => (signMessage ? analyzeMessage(String(signMessage), t) : null),
-    [signMessage], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (signMessage ? analyzeMessage(String(signMessage), t, {
+      origin: originCheck.known ? originCheck.origin : undefined,
+      originVerified: originCheck.level === 'safe',
+      self: walletAddress,
+      chainId: network.chainId,
+    }) : null),
+    [signMessage, originCheck, walletAddress, network.chainId], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   // Símbolo y decimales de los tokens del permiso. Se piden por la lista que
@@ -330,20 +447,33 @@ export default function WcConnectModal({
     if (!sigTokens) return
     let cancelled = false
     ;(async () => {
-      const out: Record<string, TokenMeta> = {}
-      await Promise.all(sigTokens.split(',').map(async (addr) => {
-        try {
-          const [symbol, decimals] = await Promise.all([
-            publicClient.readContract({ address: addr as Address, abi: ERC20_META_ABI, functionName: 'symbol' }),
-            publicClient.readContract({ address: addr as Address, abi: ERC20_META_ABI, functionName: 'decimals' }),
-          ])
-          out[addr] = { symbol: String(symbol), decimals: Number(decimals) }
-        } catch { /* token ilegible → el importe sale con los decimales por defecto */ }
-      }))
+      const out = await leerTokenMeta(publicClient as PublicClient, sigTokens.split(','))
       if (!cancelled && Object.keys(out).length) setSigTokenMeta(out)
     })()
     return () => { cancelled = true }
   }, [sigTokens, publicClient])
+
+  // Un permiso de Permit2 queda vivo hasta su caducidad; lo que de verdad lo
+  // limita es lo aprobado al contrato verificador. Se lee para poder decirlo.
+  const sigKind = typedRisk?.kind
+  const sigVerifier = typedRisk?.verifyingContract
+  useEffect(() => {
+    if (!sigTokens || !sigVerifier || (sigKind !== 'permitSingle' && sigKind !== 'permitBatch')) return
+    let cancelled = false
+    ;(async () => {
+      const out: Record<string, bigint> = {}
+      await Promise.all(sigTokens.split(',').map(async (addr) => {
+        try {
+          out[addr] = await publicClient.readContract({
+            address: addr as Address, abi: ERC20_ALLOWANCE_ABI, functionName: 'allowance',
+            args: [walletAddress as Address, sigVerifier as Address],
+          }) as bigint
+        } catch { /* ilegible → la nota dice el tope sin cifra */ }
+      }))
+      if (!cancelled && Object.keys(out).length) setSigCaps(out)
+    })()
+    return () => { cancelled = true }
+  }, [sigTokens, sigKind, sigVerifier, publicClient, walletAddress])
 
   // ¿Hay que marcar el checkbox de riesgo? En secuencial, según la call actual;
   // en atómico / tx única, si cualquiera es peligrosa. Y ahora también por lo que
@@ -356,7 +486,7 @@ export default function WcConnectModal({
       : risks.some((r) => r.level === 'danger')
     if (callsDanger) out.push(t(seqMode ? 'connect.ackCalls' : 'connect.ackCallsBatch'))
     if (typedRisk?.level === 'danger') out.push(t('connect.ackSignature'))
-    if (msgRisk?.level === 'danger') out.push(t('connect.ackMessage'))
+    if (msgRisk?.level === 'danger') out.push(t(msgRisk.siwe?.match === 'mismatch' ? 'connect.ackSiwe' : 'connect.ackMessage'))
     if (originCheck.level === 'danger') out.push(originCheck.warn ?? t('connect.ackOrigin'))
     return out
   }, [risks, seqIndex, seqMode, typedRisk, msgRisk, originCheck]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -698,8 +828,17 @@ export default function WcConnectModal({
   // Editor del límite de un approve (estilo MetaMask). Solo se muestra si la call
   // de índice `i` es un approve. Re-codifica la calldata vía approveOverrides.
   function approveEditor(i: number) {
-    const info = getApproveInfo(allCalls[i])
+    const info = getApproveInfo(allCalls[i], callTokenMeta)
     if (!info) return null
+    // Sin decimales no hay forma segura de convertir lo que se escriba: "100"
+    // con 18 supuestos en un token de 6 aprobaría un billón de veces más.
+    if (!info.decimalsKnown) {
+      return (
+        <div style={{ marginTop: '8px', padding: '10px', borderRadius: '8px', background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.18)', fontSize: '10px', color: '#8892a4', lineHeight: 1.5 }}>
+          {t('connect.approveNoDecimals')}
+        </div>
+      )
+    }
     const ov = approveOverrides[i]
     const effective = ov ?? info.amount
     const effectiveLabel = isUnlimited(effective)
@@ -739,6 +878,11 @@ export default function WcConnectModal({
         <div style={{ marginTop: '6px', fontSize: '10px', color: '#8892a4' }}>
           Aprobarás: <span style={{ color: '#f0f4f8' }}>{effectiveLabel}</span>
         </div>
+        {info.kind === 'erc20' && PERMIT2S.includes(info.spender) && (
+          <div style={{ marginTop: '6px', fontSize: '10px', color: '#8892a4', lineHeight: 1.5 }}>
+            ℹ️ {t('connect.permit2CapHint')}
+          </div>
+        )}
       </div>
     )
   }
@@ -876,7 +1020,7 @@ export default function WcConnectModal({
               <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.04)', margin: '8px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
                 <span style={{ color: '#4a5568' }}>{t('connect.value')}</span>
-                <span style={{ color: '#f0f4f8' }}>{formatValue(txData.value)}</span>
+                <span style={{ color: '#f0f4f8' }}>{formatValue(txData.value, network.nativeToken.symbol)}</span>
               </div>
               {risks[0] && (
                 <>
@@ -911,6 +1055,17 @@ export default function WcConnectModal({
               <div style={{ color: '#4a5568', fontSize: '10px', marginBottom: '6px' }}>
                 {t('connect.messagePanelTitle')}
               </div>
+              {msgRisk.siwe && (
+                <div style={{ marginBottom: '8px', fontSize: '11px', wordBreak: 'break-all' }}>
+                  <span style={{ color: '#8892a4' }}>{t('connect.siweFor')} </span>
+                  <span style={{ color: '#f0f4f8' }}>{msgRisk.siwe.domain}</span>
+                  <span style={{ color: msgRisk.siwe.match === 'match' ? RISK_COLOR.safe : msgRisk.siwe.match === 'mismatch' ? RISK_COLOR.danger : RISK_COLOR.caution }}>
+                    {' · '}{msgRisk.siwe.match === 'match' ? `✓ ${t('connect.siweMatch')}`
+                      : msgRisk.siwe.match === 'mismatch' ? `⛔ ${t('connect.siweMismatch')}`
+                      : `• ${t('connect.siweUnverified')}`}
+                  </span>
+                </div>
+              )}
               <div style={{
                 wordBreak: 'break-all', whiteSpace: 'pre-wrap',
                 color: msgRisk.raw ? '#D4AF37' : '#f0f4f8',
@@ -975,6 +1130,11 @@ export default function WcConnectModal({
                   ⚠️ {typedRisk.warn}
                 </div>
               )}
+              {typedRisk.info && (
+                <div style={{ marginTop: '8px', color: '#8892a4', fontSize: '10px', lineHeight: 1.5 }}>
+                  ℹ️ {typedRisk.info}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1012,8 +1172,8 @@ export default function WcConnectModal({
                   const exceeds = prefund !== null && walletBalance !== null && prefund > walletBalance
                   return (
                     <div style={{ marginTop: '2px', fontSize: '10px', color: exceeds ? '#fc8181' : '#4a5568', lineHeight: 1.6 }}>
-                      Prefund estimado: ~{prefund !== null ? (Number(prefund) / 1e18).toFixed(6) : '—'} ETH
-                      {walletBalance !== null && <> · saldo: {(Number(walletBalance) / 1e18).toFixed(6)} ETH</>}
+                      Prefund estimado: ~{prefund !== null ? formatNative(prefund, network.nativeToken.symbol) : '—'}
+                      {walletBalance !== null && <> · saldo: {formatNative(walletBalance, network.nativeToken.symbol)}</>}
                       {exceeds && (
                         <div style={{ color: '#fc8181', marginTop: '3px' }}>
                           ⚠️ El prefund supera tu saldo: la operación fallará. Baja el gas limit o el max fee.
@@ -1023,6 +1183,25 @@ export default function WcConnectModal({
                   )
                 })()}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* La red pedida no sirve: se dice ANTES de ofrecer el botón */}
+        {blocked && (
+          <div style={{
+            padding: '10px 12px', marginBottom: '16px',
+            backgroundColor: 'rgba(252,129,129,0.06)',
+            border: '1px solid rgba(252,129,129,0.25)',
+            borderRadius: '6px', fontSize: '11px', color: '#fc8181', lineHeight: 1.5,
+          }}>
+            ⛔ {unsupportedChain
+              ? t('connect.chainUnsupported', { id: requestedId })
+              : deployedOn.length
+                ? t('connect.walletNotHere', { net: network.name, where: deployedOn.join(', ') })
+                : t('connect.walletNotHereNowhere', { net: network.name })}
+            {!unsupportedChain && (
+              <div style={{ marginTop: '6px', color: '#8892a4' }}>{t('connect.walletNotHereHow', { net: network.name })}</div>
             )}
           </div>
         )}
@@ -1085,15 +1264,15 @@ export default function WcConnectModal({
 
           <button
             onClick={handleApprove}
-            disabled={loading || (needsAck && !ack)}
+            disabled={loading || blocked || (needsAck && !ack)}
             style={{
               flex: 1, padding: '11px 0',
-              backgroundColor: (loading || (needsAck && !ack)) ? 'rgba(212,175,55,0.4)' : '#D4AF37',
+              backgroundColor: (loading || blocked || (needsAck && !ack)) ? 'rgba(212,175,55,0.4)' : '#D4AF37',
               border: 'none',
               borderRadius: '6px',
               color: '#000',
               fontSize: '13px', fontWeight: '600',
-              cursor: (loading || (needsAck && !ack)) ? 'not-allowed' : 'pointer',
+              cursor: (loading || blocked || (needsAck && !ack)) ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
               transition: 'opacity 0.15s',
             }}

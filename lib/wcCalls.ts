@@ -103,6 +103,29 @@ export function getBatch(id: string): BatchRecord | undefined {
 // Listamos las variantes por red — basta con que la address coincida; no
 // dependemos de la red activa. Si alguna no coincide, la operación se decodifica
 // igual (resumen legible) pero el destino sale como "no reconocido" → precaución.
+// PancakeSwap despliega su propio Permit2 (mismo código que el de Uniswap, otra
+// dirección) y dos generaciones de Universal Router. Los dos routers son copias
+// del de Uniswap y comparten los comandos 0x00–0x0e, pero de 0x10 en adelante el
+// mismo número significa otra cosa en cada uno: leerlos con la tabla de Uniswap
+// pintaría una acción con el nombre de otra.
+export const PCS_PERMIT2 = [
+  '0x31c2f6fcff4f8759b3bd5bf0e1084a055615c768', // BNB, Ethereum, Arbitrum, Base, Arbitrum Sepolia
+]
+const PCS_INFINITY_UR = [
+  '0xd9c500dff816a1da21a48a732d3498bf09dc9aeb', // Infinity Universal Router — BNB, Base
+]
+const PCS_V3_UR = [
+  '0x1a0a18ac4becddbd6389559687d1a73d8927e416', // v3 Universal Router — BNB
+  '0x65b382653f7c31bc0af67f188122035461ec9c76', // Ethereum
+  '0xfe6508f0015c778bdcc1fb5465ba5ebe224c9912', // Arbitrum, Base, Arbitrum Sepolia
+]
+type UrFlavor = 'uniswap' | 'pcsInfinity' | 'pcsV3'
+function urFlavor(target: string): UrFlavor {
+  if (PCS_INFINITY_UR.includes(target)) return 'pcsInfinity'
+  if (PCS_V3_UR.includes(target)) return 'pcsV3'
+  return 'uniswap'
+}
+
 const INFRA = [
   '0x000000000022d473030f116ddee9f6b43ac78ba3', // Permit2 (todas las redes)
   // Uniswap V3 NonfungiblePositionManager
@@ -148,6 +171,24 @@ const INFRA = [
   '0x5e325eda8064b456f4781070c0738d849c824258', // Arbitrum One (v3; 1 tx en la medición)
   '0x4dae2f939acf50408e13d58534ff8c2776d45265', // BNB Chain (antiguo; 0 tx, se deja por si
                                                 // alguien tiene una sesión vieja abierta)
+  // Universal Router 2.1.2 y 2.2.0, tal como los lista el SDK de Uniswap
+  // (universal-router-sdk/src/utils/constants.ts). A 2026-09-23 la mayoría de los
+  // permisos firmados en Ethereum y Base ya iban a estos, y ninguno estaba aquí.
+  '0x23617e59a5925b2a4bf75d73ff6711cd0b29de85', // Ethereum — 2.1.2
+  '0xab863e752bf67d8dcdd929eaae9be9dc83fb3bbb', // Ethereum — 2.2.0
+  '0x2d01411773c8c24805306e89a41f7855c3c4fe65', // Arbitrum One — 2.1.2
+  '0xd6145b2d3f379919e8cdeda7b97e37c4b2ca9c40', // Base — 2.1.2
+  '0xdc264714f68d84cf29bc605589405e78bdbe7c9f', // BNB Chain y Polygon — 2.1.2
+  '0xec7be89e9d109e7e3fec59c222cf297125fefda2', // Polygon — 1.2
+  // PancakeSwap. Entra por su PROPIA documentación de despliegues
+  // (pancakeswap/pancake-developer: contracts/universal-router/addresses.md y
+  // contracts/permit2/addresses.md), con el mismo criterio que Uniswap entra por la
+  // suya — no por aparecer en el tráfico. Solo las redes que soporta esta app.
+  // Sus routers NO se leen con la tabla de comandos de Uniswap: ver PCS_INFINITY_UR
+  // y PCS_V3_UR más abajo.
+  ...PCS_PERMIT2,
+  ...PCS_INFINITY_UR,
+  ...PCS_V3_UR,
   // Aave V3 Pool
   '0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2', // Ethereum
   '0x794a61358d6845594f94dc1db02a252b5b4814ad', // Arbitrum One
@@ -192,17 +233,38 @@ function trimNum(s: string): string {
   return i
 }
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
+// Símbolo del token nativo de la red de la petición. Lo fija classifyCall al
+// empezar y lo repone al acabar (todo es síncrono): así los ~30 sitios que
+// formatean importes no necesitan recibir la red. Sin esto, un swap en BNB Chain
+// enseñaba "ETH".
+let NATIVE = 'ETH'
+// Símbolo y decimales de los tokens que NO están en TOKEN_META, leídos en la
+// cadena por el modal y ya saneados (lib/tokenMeta.ts). Mismo mecanismo que
+// NATIVE: classifyCall los fija y los repone. `VISTOS` recoge los tokens que se
+// han tenido que formatear sin conocerlos, para que el modal sepa cuáles leer.
+// Solo cambian cómo se ESCRIBE un importe: el nivel de riesgo se decide por
+// direcciones, porque un token falso puede llamarse "USDC".
+export type TokenMeta = { symbol: string; decimals: number }
+let EXTRA: Record<string, TokenMeta> = {}
+let VISTOS: Set<string> | null = null
+function metaDe(addr: string): TokenMeta | undefined {
+  const k = addr.toLowerCase()
+  const m = TOKEN_META.get(k) ?? EXTRA[k]
+  if (!m && k !== ZERO_ADDR && /^0x[0-9a-f]{40}$/.test(k)) VISTOS?.add(k)
+  return m
+}
 // Formatea un monto crudo usando los decimales del token si lo conocemos (18 si no).
-// La address cero = ETH nativo (convención de Uniswap v4).
+// La address cero = token nativo (convención de Uniswap v4).
 function fmtAmt(raw: bigint, addr?: string): string {
-  if (addr && addr.toLowerCase() === ZERO_ADDR) return `${trimNum(formatUnits(raw, 18))} ETH`
-  const meta = addr ? TOKEN_META.get(addr.toLowerCase()) : undefined
+  if (addr && addr.toLowerCase() === ZERO_ADDR) return `${trimNum(formatUnits(raw, 18))} ${NATIVE}`
+  const meta = addr ? metaDe(addr) : undefined
   const num = trimNum(formatUnits(raw, meta?.decimals ?? 18))
   return meta?.symbol ? `${num} ${meta.symbol}` : num
 }
 function tokenSym(addr?: string): string {
   if (!addr) return ''
-  return TOKEN_META.get(addr.toLowerCase())?.symbol ?? `${addr.slice(0, 6)}…`
+  if (addr.toLowerCase() === ZERO_ADDR) return NATIVE
+  return metaDe(addr)?.symbol ?? `${addr.slice(0, 6)}…`
 }
 
 /** Importe con decimales y símbolo que ya se conocen (los lee el modal on-chain
@@ -231,6 +293,9 @@ export type CallRisk = {
   target: string        // destino
   targetKnown: boolean
   warn?: string         // motivo si caution/danger
+  /** Tokens que se han formateado sin conocer sus decimales: el modal los lee
+   *  en la cadena y vuelve a clasificar con `tokenMeta`. */
+  unknownTokens?: string[]
 }
 
 const ABI = parseAbi([
@@ -431,6 +496,11 @@ function comision(d: Decoded, bips: bigint, dest: string, ctx: Ctx): Decoded {
 // aviso, solo se avisa de un tercero identificado con certeza. Al revés —
 // convertir "no lo entiendo" en peligro aquí dentro— pintaría de rojo el swap
 // más común que existe.
+//
+// Los números son los de `Actions.sol` de v4-periphery (TAKE 0x0e, TAKE_PORTION
+// 0x10, TAKE_PAIR 0x11, SWEEP 0x14), y PancakeSwap Infinity usa los mismos para
+// estas cuatro. Estuvieron desplazados en uno: el TAKE de verdad no se miraba y
+// un TAKE_PAIR se leía como una comisión.
 function v4Destinos(acts: Hex, params: readonly Hex[]): { takes: string[]; fees: { addr: string; bips: bigint }[] } {
   const takes: string[] = []
   const fees: { addr: string; bips: bigint }[] = []
@@ -440,13 +510,13 @@ function v4Destinos(acts: Hex, params: readonly Hex[]): { takes: string[]; fees:
     const p = params[i]
     if (!p) continue
     try {
-      if (a === 0x0f) {        // TAKE(currency, recipient, amount)
+      if (a === 0x0e) {        // TAKE(currency, recipient, amount)
         takes.push(String(decodeAbiParameters(parseAbiParameters('address currency, address recipient, uint256 amount'), p)[1]))
-      } else if (a === 0x15) { // SWEEP(currency, recipient)
+      } else if (a === 0x14) { // SWEEP(currency, recipient)
         takes.push(String(decodeAbiParameters(parseAbiParameters('address currency, address recipient'), p)[1]))
-      } else if (a === 0x12) { // TAKE_PAIR(currency0, currency1, recipient)
+      } else if (a === 0x11) { // TAKE_PAIR(currency0, currency1, recipient)
         takes.push(String(decodeAbiParameters(parseAbiParameters('address c0, address c1, address recipient'), p)[2]))
-      } else if (a === 0x11) { // TAKE_PORTION(currency, recipient, bips)
+      } else if (a === 0x10) { // TAKE_PORTION(currency, recipient, bips)
         const d = decodeAbiParameters(parseAbiParameters('address currency, address recipient, uint256 bips'), p)
         fees.push({ addr: String(d[1]), bips: d[2] as bigint })
       }
@@ -463,18 +533,33 @@ function urV4Swap(input: Hex, ctx: Ctx): Decoded {
   const a0 = acts.length >= 4 ? parseInt(acts.slice(2, 4), 16) : -1
   const p = ps[0]
   let summary = t('wc.swapV4')
+  // Los routers 2.1.x añadieron `minHopPriceX36` a los parámetros del swap; los
+  // anteriores no lo llevan. Se prueban los dos. Si ninguno encaja, el resumen se
+  // queda en genérico, pero el comando NO se da por ilegible: lo que decide el
+  // riesgo —a quién va la salida y qué comisión se cobra— se lee aparte, abajo.
+  const single = (campos: string) => {
+    for (const extra of ['uint256 minHopPriceX36, ', '']) {
+      try {
+        const d = decodeAbiParameters(parseAbiParameters(`(${POOLKEY}, bool zeroForOne, ${campos}, ${extra}bytes hookData) p`), p)
+        return d[0] as { poolKey: { currency0: string; currency1: string }; zeroForOne: boolean } & Record<string, unknown>
+      } catch { /* siguiente formato */ }
+    }
+    return null
+  }
   if (a0 === 0x06) { // SWAP_EXACT_IN_SINGLE
-    const d = decodeAbiParameters(parseAbiParameters(`(${POOLKEY}, bool zeroForOne, uint128 amountIn, uint128 amountOutMinimum, bytes hookData) p`), p)
-    const x = d[0] as { poolKey: { currency0: string; currency1: string }; zeroForOne: boolean; amountIn: bigint; amountOutMinimum: bigint }
-    const tin = x.zeroForOne ? x.poolKey.currency0 : x.poolKey.currency1
-    const tout = x.zeroForOne ? x.poolKey.currency1 : x.poolKey.currency0
-    summary = t('wc.swapIn', { amt: fmtAmt(x.amountIn, tin), sym: tokenSym(tout), min: fmtAmt(x.amountOutMinimum, tout) })
+    const x = single('uint128 amountIn, uint128 amountOutMinimum')
+    if (x) {
+      const tin = x.zeroForOne ? x.poolKey.currency0 : x.poolKey.currency1
+      const tout = x.zeroForOne ? x.poolKey.currency1 : x.poolKey.currency0
+      summary = t('wc.swapIn', { amt: fmtAmt(x.amountIn as bigint, tin), sym: tokenSym(tout), min: fmtAmt(x.amountOutMinimum as bigint, tout) })
+    }
   } else if (a0 === 0x08) { // SWAP_EXACT_OUT_SINGLE
-    const d = decodeAbiParameters(parseAbiParameters(`(${POOLKEY}, bool zeroForOne, uint128 amountOut, uint128 amountInMaximum, bytes hookData) p`), p)
-    const x = d[0] as { poolKey: { currency0: string; currency1: string }; zeroForOne: boolean; amountOut: bigint; amountInMaximum: bigint }
-    const tin = x.zeroForOne ? x.poolKey.currency0 : x.poolKey.currency1
-    const tout = x.zeroForOne ? x.poolKey.currency1 : x.poolKey.currency0
-    summary = t('wc.swapOut', { sym: tokenSym(tin), amt: fmtAmt(x.amountOut, tout), max: fmtAmt(x.amountInMaximum, tin) })
+    const x = single('uint128 amountOut, uint128 amountInMaximum')
+    if (x) {
+      const tin = x.zeroForOne ? x.poolKey.currency0 : x.poolKey.currency1
+      const tout = x.zeroForOne ? x.poolKey.currency1 : x.poolKey.currency0
+      summary = t('wc.swapOut', { sym: tokenSym(tin), amt: fmtAmt(x.amountOut as bigint, tout), max: fmtAmt(x.amountInMaximum as bigint, tin) })
+    }
   }
   let d: Decoded = { fn: 'V4_SWAP', summary, level: 'safe' }
   const { takes, fees } = v4Destinos(acts, ps)
@@ -511,9 +596,49 @@ function urV2Swap(input: Hex, exactIn: boolean, ctx: Ctx): Decoded {
   return conDestino({ fn: 'V2_SWAP', summary, level: 'safe' }, d[0], ctx)
 }
 
+// PancakeSwap Infinity: las acciones de entrega (TAKE…) son las de v4, pero los
+// swaps llevan otra PoolKey. El resumen se queda en genérico; lo que importa —a
+// quién va la salida y qué comisión se cobra— sí se mira.
+function urInfiSwap(input: Hex, ctx: Ctx): Decoded {
+  const [actions, params] = decodeAbiParameters(parseAbiParameters('bytes, bytes[]'), input)
+  let d: Decoded = { fn: 'INFI_SWAP', summary: ctx.t('wc.swapInfinity'), level: 'safe' }
+  const { takes, fees } = v4Destinos(actions as Hex, params as Hex[])
+  for (const dest of takes) d = conDestino(d, dest, ctx)
+  for (const f of fees) d = comision(d, f.bips, f.addr, ctx)
+  return d
+}
+
+// STABLE_SWAP de PancakeSwap: como un V2_SWAP con un array `flag` detrás del path.
+function urStableSwap(input: Hex, exactIn: boolean, ctx: Ctx): Decoded {
+  const t = ctx.t
+  const d = decodeAbiParameters(parseAbiParameters('address recipient, uint256 amount, uint256 amountLimit, address[] path, uint256[] flag, bool payerIsUser'), input)
+  const path = d[3] as readonly string[]
+  const tin = exactIn ? path[0] : path[path.length - 1]
+  const tout = exactIn ? path[path.length - 1] : path[0]
+  const amount = d[1] as bigint, limit = d[2] as bigint
+  const summary = exactIn
+    ? t('wc.swapIn', { amt: fmtAmt(amount, tin), sym: tokenSym(tout), min: fmtAmt(limit, tout) })
+    : t('wc.swapOut', { sym: tokenSym(tin), amt: fmtAmt(amount, tout), max: fmtAmt(limit, tin) })
+  return conDestino({ fn: 'STABLE_SWAP', summary, level: 'safe' }, d[0], ctx)
+}
+
 // Un comando del Universal Router. Devuelve null si NO lo sabemos leer — quien
 // llama decide qué hacer con eso, y lo que hace es no fiarse.
-function decodeURCommand(cmd: number, input: Hex, ctx: Ctx): Decoded | null {
+function decodeURCommand(cmd: number, input: Hex, ctx: Ctx, flavor: UrFlavor = 'uniswap'): Decoded | null {
+  // De 0x10 en adelante cada router tiene su tabla. Un comando que en la tabla de
+  // ESTE router no existe (o no sabemos leer) devuelve null, que acaba en rojo.
+  if (cmd >= 0x10 && flavor !== 'uniswap') {
+    switch (cmd) {
+      case 0x10: return flavor === 'pcsInfinity' ? urInfiSwap(input, ctx) : null   // INFI_SWAP
+      case 0x13: case 0x14:                                                        // INFI_*_INITIALIZE_POOL
+        return flavor === 'pcsInfinity'
+          ? { fn: 'INITIALIZE_POOL', summary: ctx.t('wc.urInitPool'), level: 'caution', warn: ctx.t('wc.warnUrInitPool') }
+          : null
+      case 0x22: return urStableSwap(input, true, ctx)                             // STABLE_SWAP_EXACT_IN
+      case 0x23: return urStableSwap(input, false, ctx)                            // STABLE_SWAP_EXACT_OUT
+      default: return null
+    }
+  }
   const t = ctx.t
   const tokenRecipiente = (spec: string, iTok: number, iDest: number, key: string): Decoded => {
     const d = decodeAbiParameters(parseAbiParameters(spec), input)
@@ -528,7 +653,24 @@ function decodeURCommand(cmd: number, input: Hex, ctx: Ctx): Decoded | null {
     case 0x09: return urV2Swap(input, false, ctx)                   // V2_SWAP_EXACT_OUT
     case 0x02: return tokenRecipiente('address token, address recipient, uint160 amount', 0, 1, 'wc.urPermitTransfer')
     case 0x04: return tokenRecipiente('address token, address recipient, uint256 amountMin', 0, 1, 'wc.urSweep')
-    case 0x05: return tokenRecipiente('address token, address recipient, uint256 value', 0, 1, 'wc.urTransfer')
+    case 0x05: {                                                    // TRANSFER(token, recipient, value)
+      // `pay()` transfiere exactamente `value` (solo CONTRACT_BALANCE significa
+      // "todo"): un TRANSFER de 0 no mueve nada, aunque apunte a un tercero.
+      // Algunos bots lo usan como marca de referido.
+      const d = decodeAbiParameters(parseAbiParameters('address token, address recipient, uint256 value'), input)
+      if ((d[2] as bigint) === 0n) return { fn: 'TRANSFER', summary: t('wc.urTransferZero'), level: 'safe' }
+      return tokenRecipiente('address token, address recipient, uint256 value', 0, 1, 'wc.urTransfer')
+    }
+    case 0x07: {                                                    // PAY_PORTION_FULL_PRECISION (solo Uniswap)
+      if (flavor !== 'uniswap') return null
+      // La misma comisión que PAY_PORTION, en partes de 1e18 en vez de bips. Se
+      // redondea hacia arriba al pasar a bips para no dejar pasar un 1,009 % como 1 %.
+      const d = decodeAbiParameters(parseAbiParameters('address token, address recipient, uint256 portion'), input)
+      const portion = d[2] as bigint
+      const bips = (portion + 10n ** 14n - 1n) / 10n ** 14n
+      const base: Decoded = { fn: 'PAY_PORTION', summary: t('wc.urPayPortion', { sym: tokenSym(String(d[0])) }), level: 'safe' }
+      return comision(base, bips, String(d[1]), ctx)
+    }
     case 0x06: {                                                    // PAY_PORTION
       const d = decodeAbiParameters(parseAbiParameters('address token, address recipient, uint256 bips'), input)
       const base: Decoded = { fn: 'PAY_PORTION', summary: t('wc.urPayPortion', { sym: tokenSym(String(d[0])) }), level: 'safe' }
@@ -585,6 +727,7 @@ function decodeURCommand(cmd: number, input: Hex, ctx: Ctx): Decoded | null {
 
 function decodeUR(commands: Hex, inputs: readonly Hex[], ctx: Ctx): Decoded {
   const t = ctx.t
+  const flavor = urFlavor(ctx.target)
   const parts: string[] = []
   const warns: string[] = []
   const sinLeer: string[] = []
@@ -594,7 +737,7 @@ function decodeUR(commands: Hex, inputs: readonly Hex[], ctx: Ctx): Decoded {
     const raw = commands.slice(2 + i * 2, 4 + i * 2)
     const cmd = parseInt(raw, 16) & 0x3f   // el bit alto es la flag de "permitir revert"
     let d: Decoded | null = null
-    try { d = decodeURCommand(cmd, inputs[i], ctx) } catch { d = null }
+    try { d = decodeURCommand(cmd, inputs[i], ctx, flavor) } catch { d = null }
     if (!d) { sinLeer.push(`0x${raw}`); continue }
     parts.push(d.summary ?? d.fn)
     level = worse(level, d.level)
@@ -647,6 +790,7 @@ function interpret(data: Hex, value: bigint, ctx: Ctx, depth = 0): Decoded {
         const fn = `approve · ${unlimited ? t('wc.unlimited') : amount.toString()}`
         const spenderLabel = spender === '0x000000000022d473030f116ddee9f6b43ac78ba3'
           ? t('wc.spenderPermit2')
+          : PCS_PERMIT2.includes(spender) ? t('wc.spenderPermit2Pcs')
           : t(spenderKnown ? 'wc.spenderKnown' : 'wc.spenderUnknown')
         const summary = t('wc.approve', { amt: amtStr, spender: spenderLabel })
         if (!spenderKnown) return { fn, summary, level: 'danger', warn: t('wc.warnApproveUnknown') }
@@ -816,9 +960,29 @@ export type ClassifyOpts = {
   self: string
   /** Saldo del usuario en el token del approve, si se pudo leer. */
   saldoToken?: bigint
+  /** Símbolo del token nativo de la red de la petición (ETH, BNB, POL…). */
+  nativeSymbol?: string
+  /** Metadatos leídos en la cadena (saneados) de tokens que no están en la lista. */
+  tokenMeta?: Record<string, TokenMeta>
 }
 
-export function classifyCall(call: WcCall, known: Set<string>, t: Tr, opts: ClassifyOpts): CallRisk {
+export function classifyCall(call: WcCall, known: Set<string>, tBase: Tr, opts: ClassifyOpts): CallRisk {
+  const nat = opts.nativeSymbol || 'ETH'
+  const antes = { NATIVE, EXTRA, VISTOS }
+  NATIVE = nat
+  EXTRA = opts.tokenMeta ?? {}
+  VISTOS = new Set()
+  try {
+    // {nat} / {wnat} en los textos: el nativo y su versión envuelta (WETH, WBNB, WPOL).
+    const t: Tr = (k, v) => tBase(k, { ...(v ?? {}), nat, wnat: `W${nat}` })
+    const r = classifyCallEn(call, known, t, opts)
+    return VISTOS.size ? { ...r, unknownTokens: [...VISTOS] } : r
+  } finally {
+    ;({ NATIVE, EXTRA, VISTOS } = antes)
+  }
+}
+
+function classifyCallEn(call: WcCall, known: Set<string>, t: Tr, opts: ClassifyOpts): CallRisk {
   const target = ((call.to ?? call.target) ?? '').toLowerCase()
   const targetKnown = known.has(target)
   const data = call.data
@@ -862,12 +1026,15 @@ export type ApproveInfo = {
   spender: string
   amount: bigint
   decimals: number
+  /** false → los decimales no se conocen (se asumen 18): el importe que se
+   *  escriba en el editor NO se puede convertir con seguridad. */
+  decimalsKnown: boolean
   symbol: string
   unlimited: boolean
 }
 
 // Si la call es un approve (ERC-20 o Permit2) devuelve sus datos; si no, null.
-export function getApproveInfo(call: WcCall): ApproveInfo | null {
+export function getApproveInfo(call: WcCall, extra: Record<string, TokenMeta> = {}): ApproveInfo | null {
   const data = call.data
   if (!data || data.length < 10) return null
   try {
@@ -877,12 +1044,13 @@ export function getApproveInfo(call: WcCall): ApproveInfo | null {
     const token = (isPermit2 ? String(args[0]) : (call.to ?? call.target ?? '')).toLowerCase()
     const spender = String(args[isPermit2 ? 1 : 0]).toLowerCase()
     const amount = args[isPermit2 ? 2 : 1] as bigint
-    const meta = TOKEN_META.get(token)
+    const meta = TOKEN_META.get(token) ?? extra[token]
     return {
       kind: isPermit2 ? 'permit2' : 'erc20',
       token, spender, amount,
       decimals: meta?.decimals ?? 18,
-      symbol: meta?.symbol ?? tokenSym(token),
+      decimalsKnown: !!meta,
+      symbol: meta?.symbol ?? `${token.slice(0, 6)}…`,
       unlimited: isUnlimited(amount),
     }
   } catch { return null }

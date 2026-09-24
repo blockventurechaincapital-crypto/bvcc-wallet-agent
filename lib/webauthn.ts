@@ -1,6 +1,9 @@
 'use client'
 
-import { decode as cborDecode } from 'cbor-x'
+// El build normal de cbor-x prueba `new Function('')` al cargarse para decidir
+// si puede generar decodificadores con eval, y la CSP (sin 'unsafe-eval') lo
+// corta con una violación en consola. Este build no lo intenta.
+import { Decoder } from 'cbor-x/decode-no-eval'
 
 // ---------------------------------------------------------------------------
 // Helpers de encoding
@@ -83,7 +86,6 @@ function extractPublicKeyFromAuthData(authData: Uint8Array): { pubKeyX: bigint; 
   const coseKeyBytes = authData.slice(coseKeyOffset)
   // CBOR decode — cbor-x devuelve un Map o un objeto plano segun mapsAsObjects
   // Usamos Decoder con mapsAsObjects: false para recibir un Map nativo
-  const { Decoder } = require('cbor-x') as typeof import('cbor-x')
   const decoder = new Decoder({ mapsAsObjects: false, useRecords: false })
   const coseKey: Map<number, unknown> = decoder.decode(coseKeyBytes)
 
@@ -163,7 +165,6 @@ export async function registerWebAuthn(username: string): Promise<{
 
   // El attestationObject esta en CBOR: { fmt, attStmt, authData }
   const attestationObject: Map<string, unknown> = (() => {
-    const { Decoder } = require('cbor-x') as typeof import('cbor-x')
     const dec = new Decoder({ mapsAsObjects: false, useRecords: false })
     return dec.decode(new Uint8Array(response.attestationObject))
   })()
