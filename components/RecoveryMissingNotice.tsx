@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPublicClient, type Address } from 'viem'
+import { readGuardians } from '@/lib/walletGeneration'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
@@ -46,12 +47,9 @@ export default function RecoveryMissingNotice() {
     let cancelled = false
     const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
 
-    Promise.all([0n, 1n, 2n].map(i =>
-      client.readContract({
-        address: address as Address, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [i],
-      }).catch(() => null),
-    )).then(slots => {
+    readGuardians(client, address as Address).then(read => {
       if (cancelled) return
+      const slots = read ?? [null, null, null]
       // Only an unambiguous read of three empty slots counts. A revert or a dead RPC
       // returns nulls, and telling someone their recovery is gone when it is not would be
       // worse than staying quiet.

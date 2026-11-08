@@ -39,7 +39,6 @@ export interface WalletIdentity {
 }
 
 /** Generation the current build deploys, taken from the configured factory. */
-const CURRENT_GENERATION = 'V4'
 
 export function useWalletIdentity(walletAddress: string | null): WalletIdentity {
   const { network } = useNetwork()
@@ -101,7 +100,7 @@ export function useWalletIdentity(walletAddress: string | null): WalletIdentity 
       setState({
         contractName,
         generation,
-        isCurrent: generation ? generation === CURRENT_GENERATION : null,
+        isCurrent: generation ? generation === `V${network.contracts.walletVersion}` : null,
         createdAt: creation?.timestamp ?? null,
         factory: creation?.factory ? safeChecksum(creation.factory) : null,
         isLoading: false,

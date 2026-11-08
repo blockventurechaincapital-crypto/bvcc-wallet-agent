@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createPublicClient, type Address } from 'viem'
+import { readGuardians, readRecoveryActive } from '@/lib/walletGeneration'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
@@ -12,6 +13,8 @@ import { feeNumerator, feeRateLabel } from '@/lib/fees'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { getAtomicBatchEnabled, setAtomicBatchEnabled, getMaxGasOverride, setMaxGasOverride, getUseBundler, setUseBundler } from '@/lib/wcCalls'
 import GuardianSetup from '@/components/GuardianSetup'
+import NetworkLogo from '@/components/NetworkLogo'
+import { useActiveNetworks, explorerAddressUrl } from '@/lib/useActiveNetworks'
 import { rpcTransport } from '@/lib/rpc'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
@@ -223,6 +226,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const { network } = useNetwork()
   const { address: walletAddress, credentialId, isLoaded } = useWalletAddress()
+  const activeNetworks = useActiveNetworks(walletAddress)
   const { t, lang } = useI18n()
 
   const identity = useWalletIdentity(walletAddress)
@@ -288,37 +292,12 @@ export default function SettingsPage() {
     // Only the guardians are read here. BVCC_FEE_WALLET used to be fetched alongside
     // them and never rendered — the same address for every wallet, so nothing to show.
     Promise.all([
-      publicClient.readContract({
-        address: walletAddress as Address,
-        abi: BVCC_WALLET_ABI,
-        functionName: 'guardians',
-        args: [0n],
-      }).catch(() => null),
-      publicClient.readContract({
-        address: walletAddress as Address,
-        abi: BVCC_WALLET_ABI,
-        functionName: 'guardians',
-        args: [1n],
-      }).catch(() => null),
-      publicClient.readContract({
-        address: walletAddress as Address,
-        abi: BVCC_WALLET_ABI,
-        functionName: 'guardians',
-        args: [2n],
-      }).catch(() => null),
-      publicClient.readContract({
-        address: walletAddress as Address,
-        abi: BVCC_WALLET_ABI,
-        functionName: 'recoveryInProgress',
-      }).catch(() => null),
+      readGuardians(publicClient, walletAddress as Address),
+      readRecoveryActive(publicClient, walletAddress as Address),
     ])
-      .then(([g0, g1, g2, inProgress]) => {
-        setGuardians([
-          g0 as string | null,
-          g1 as string | null,
-          g2 as string | null,
-        ])
-        setRecoveryInProgress(inProgress as boolean | null)
+      .then(([slots, inProgress]) => {
+        setGuardians(slots ? [...slots] : [null, null, null])
+        setRecoveryInProgress(inProgress)
       })
       .catch(() => setChainError(true))
       .finally(() => setLoadingChain(false))
@@ -489,6 +468,50 @@ export default function SettingsPage() {
             </Card>
           </div>
 
+
+          {/* ── Redes activas: dónde existe esta wallet ────────── */}
+          {walletAddress && (
+            <div className="settings-section" style={{ marginBottom: '28px' }}>
+              <SectionLabel>{t('settings.sectionActiveNetworks')}</SectionLabel>
+              <Card>
+                <Row last={!activeNetworks.data?.length}>
+                  <p style={{ margin: 0, fontSize: '12px', color: COLORS.textSecondary }}>
+                    {activeNetworks.isLoading
+                      ? t('settings.activeNetworksLoading')
+                      : activeNetworks.data?.length
+                        ? t('settings.activeNetworksDesc')
+                        : t('settings.activeNetworksNone')}
+                  </p>
+                </Row>
+                {activeNetworks.data?.map((n, i, arr) => (
+                  <Row key={n.chainId} last={i === arr.length - 1}>
+                    <a
+                      href={explorerAddressUrl(n, walletAddress)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <NetworkLogo network={n} size={20} />
+                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 500, color: COLORS.textPrimary }}>
+                        {n.name}
+                        {n.chainId === network.chainId && (
+                          <span style={{ marginLeft: '8px', fontSize: '10px', color: COLORS.gold, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                            {t('settings.sectionNetwork')}
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ fontSize: '12px', color: COLORS.gold, whiteSpace: 'nowrap' }}>
+                        {n.blockExplorer.name} ↗
+                      </span>
+                    </a>
+                  </Row>
+                ))}
+              </Card>
+            </div>
+          )}
 
           {/* ── Sección 3: Guardians ──────────────────────────── */}
           <div className="settings-section" style={{ marginBottom: '28px' }}>
@@ -788,6 +811,49 @@ export default function SettingsPage() {
                 </button>
               </Row>
             </Card>
+          </div>
+
+          {/* ── Desarrolladores: documentación en otra pestaña ── */}
+          <div className="settings-section" style={{ marginBottom: '28px' }}>
+            <SectionLabel>{t('settings.sectionDevelopers')}</SectionLabel>
+            <a
+              href="/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '14px',
+                padding: '16px 18px',
+                backgroundColor: 'rgba(212,175,55,0.06)',
+                border: '1px solid rgba(212,175,55,0.35)',
+                borderRadius: '8px',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{
+                flexShrink: 0, width: '36px', height: '36px', borderRadius: '8px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                backgroundColor: 'rgba(212,175,55,0.12)', color: COLORS.gold,
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="16 18 22 12 16 6" />
+                  <polyline points="8 6 2 12 8 18" />
+                </svg>
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: COLORS.gold }}>
+                  {t('settings.devDocsTitle')}
+                </span>
+                <span style={{ display: 'block', fontSize: '12px', color: COLORS.textSecondary, marginTop: '2px' }}>
+                  {t('settings.devDocsDesc')}
+                </span>
+              </span>
+              {/* Opens in a new tab */}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={COLORS.gold} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
           </div>
 
           {/* ── Sección 5: Legal ──────────────────────────────── */}

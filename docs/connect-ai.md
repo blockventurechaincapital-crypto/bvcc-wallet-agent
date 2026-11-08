@@ -6,7 +6,7 @@ Any MCP client can drive a BVCC Agent Wallet: Claude, Cursor, LM Studio, Hermes.
 command, no plugin, no adapter.
 
 ```bash
-npx -y @bvcc/agent-mcp
+npx -y @bvcc/agent-mcp@latest
 ```
 
 The MCP server grants no authority of its own. It is a convenience layer over the same
@@ -43,7 +43,7 @@ The agent must be authorized **on the chain you target**, or the call reverts.
   "mcpServers": {
     "bvcc-agent-wallet": {
       "command": "npx",
-      "args": ["-y", "@bvcc/agent-mcp"],
+      "args": ["-y", "@bvcc/agent-mcp@latest"],
       "env": {
         "AGENT_PRIVATE_KEY": "0xYOUR_AGENT_KEY",
         "WALLET_ADDRESS": "0xYOUR_WALLET",
@@ -65,7 +65,7 @@ whichever shape the field already shows.
 
 ## What gets registered
 
-**53 tools** — 12 read, 15 simulate, 26 write — plus 4 operating guides the model can read
+**57 tools** — 12 read, 17 simulate, 28 write — plus 4 operating guides the model can read
 before acting. Most writes have a matching dry-run.
 
 | Group | Tools | Covers |
@@ -78,7 +78,7 @@ before acting. Most writes have a matching dry-run.
 ### Try it without risking anything
 
 ```bash
-BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp
+BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest
 ```
 
 Drops every write tool and leaves 27. It can read balances, quote swaps and simulate

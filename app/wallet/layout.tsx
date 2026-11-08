@@ -11,6 +11,8 @@ import { useI18n } from '@/lib/i18n/I18nContext'
 import { loadCredential } from '@/lib/webauthn'
 import OutdatedWalletNotice from '@/components/OutdatedWalletNotice'
 import RecoveryMissingNotice from '@/components/RecoveryMissingNotice'
+import StaleCredentialNotice from '@/components/StaleCredentialNotice'
+import ActiveNetworkIcons from '@/components/ActiveNetworkIcons'
 
 const COLORS = {
   bg: '#06080f',
@@ -297,6 +299,10 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
           cursor: default;
           opacity: 0.38;
         }
+        /* Logos de las redes activas: cada uno abre su explorador */
+        .net-icon-link { opacity: 0.8; transition: opacity 0.15s, box-shadow 0.15s; }
+        .net-icon-link:hover { opacity: 1; box-shadow: 0 0 0 1px rgba(212,175,55,0.6); }
+        .net-icon-link:focus-visible { outline: 1px solid #D4AF37; outline-offset: 2px; }
         /* Address row: copiar y abrir en el explorador */
         .addr-btn:hover:not([disabled]):not([aria-disabled="true"]) {
           background: rgba(212,175,55,0.08);
@@ -346,6 +352,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
           left: -31px; top: -25px;
         }
         @media (min-width: 768px) {
+          .topbar-network { display: none; }
           .topbar-logo { display: none; }
         }
         /* One flag instead of two: 26px back, and the language is set once. */
@@ -462,18 +469,17 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
               </a>
             </div>
 
-            {/* Network badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '6px' }}>
-              <span style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: network.color,
-                display: 'inline-block',
-                flexShrink: 0,
-              }} />
-              <span style={{ fontSize: '11px', color: COLORS.textSubtle, letterSpacing: '0.04em' }}>{network.shortName}</span>
+            {/* Active network — same selector as the topbar (the topbar copy is mobile-only) */}
+            <div style={{ display: 'flex', marginTop: '10px' }}>
+              <NetworkSelector align="left" />
             </div>
+
+            {/* Networks where this wallet exists; each opens its explorer */}
+            {address && (
+              <div style={{ marginTop: '10px' }}>
+                <ActiveNetworkIcons address={address} size={18} />
+              </div>
+            )}
 
           </div>
 
@@ -589,11 +595,12 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             <LanguageSwitcher compact className="topbar-lang" />
             <LanguageSwitcher className="topbar-lang-full" />
             <WalletConnectButton />
-            <NetworkSelector />
+            <NetworkSelector className="topbar-network" />
             <ConnectButton />
           </div>
           <OutdatedWalletNotice />
           <RecoveryMissingNotice />
+          <StaleCredentialNotice />
           <div className="wallet-main" style={{ flex: 1, overflowY: 'auto' }}>
             {children}
           </div>

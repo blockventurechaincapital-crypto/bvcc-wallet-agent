@@ -6,7 +6,8 @@ import {
   encodeAbiParameters, encodeFunctionData,
   type Address, type Hex,
 } from 'viem'
-import { loadCredential, authenticateWebAuthn } from '@/lib/webauthn'
+import { signUserOpHash } from '@/lib/walletGeneration'
+import { loadCredential } from '@/lib/webauthn'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
 import { useNetwork } from '@/lib/NetworkContext'
@@ -20,14 +21,6 @@ function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
 }
 
-function hexToBytes(hex: Hex): Uint8Array {
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex
-  const bytes = new Uint8Array(clean.length / 2)
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16)
-  }
-  return bytes
-}
 
 type Status = 'idle' | 'signing' | 'sending' | 'success' | 'error'
 
@@ -118,32 +111,9 @@ export default function CancelRecoveryPage() {
       }) as Hex
 
       // 6. Face ID
-      const { r, s, authenticatorData, clientDataJSON: clientDataHex } =
-        await authenticateWebAuthn(credentialId, hexToBytes(userOpHash))
-
-      // 7. Signature
-      const clientDataStr = new TextDecoder().decode(hexToBytes(clientDataHex))
-      const challengeIndex = BigInt(clientDataStr.indexOf('"challenge":'))
-      const typeIndex = BigInt(clientDataStr.indexOf('"type":'))
-
-      const signature = encodeAbiParameters(
-        [
-          { name: 'r', type: 'bytes32' },
-          { name: 's', type: 'bytes32' },
-          { name: 'challengeIndex', type: 'uint256' },
-          { name: 'typeIndex', type: 'uint256' },
-          { name: 'authenticatorData', type: 'bytes' },
-          { name: 'clientDataJSON', type: 'string' },
-        ],
-        [
-          `0x${r.toString(16).padStart(64, '0')}` as Hex,
-          `0x${s.toString(16).padStart(64, '0')}` as Hex,
-          challengeIndex,
-          typeIndex,
-          authenticatorData,
-          clientDataStr,
-        ]
-      )
+      const signature = await signUserOpHash({
+        client: publicClient, network, walletAddress: walletAddress as Address, credentialId, userOpHash,
+      })
 
       // 8. Bundler (o fallback wallet conectada)
       setStatus('sending')

@@ -319,6 +319,9 @@ export const agentIntegration: LocalizedDoc = {
         type: 'p',
         text: 'If the call reverts, simulate it first (`client.simulateContract` with the same args) — viem decodes the custom error name, which maps directly to the error reference above.',
       },
+
+      {"type": "h2", "text": "V5 wallets: differences for integrators"},
+      {"type": "list", "items": ["`executeAsAgent(bytes32 mode, bytes executionData)` accepts only the batch mode (`0x01` followed by zeroes). `executionData` is `abi.encode(Execution[])`; a single call is a batch of one.", "`getAgentPermission(agent)` returns a new struct: it adds `paused` and drops the spending counters. Read spending with `getAgentSpending(agent)`, `getDailySpent(agent)` and `getTokenSpent(agent, token)`.", "Limits: `0` means nothing allowed and `type(uint128).max` means unlimited. An empty recipient list means no recipient.", "Every protocol call needs a validator: Universal Router `execute` (V3 exact in/out and V4 swaps, ERC-20 only, output to the wallet), PositionManager `modifyLiquidities`, and the Aave Pool (`supply`, `withdraw`, `borrow`, `repay`, `setUserUseReserveAsCollateral`, `setUserEMode`; health factor at least 1.2 after the batch).", "Approvals made inside a batch are reset when it ends. Permit2 allowances for the Universal Router and the PositionManager come from the owner.", "The 0.15% agent fee is taken on what leaves the wallet, in the same asset, and counts inside the limits.", "New errors include `AgentPermissionsExpired`, `AgentPaused`, `EnforcedPause` (all agents paused), `TargetIsBlocked`, `PolicyValidationFailed`, `PostCheckFailed`, `AgentCannotCallWallet` and `UnsupportedExecutionMode`.", "The SDK and the MCP server currently target V4 wallets."]},
     ],
   },
 
@@ -515,6 +518,9 @@ export const agentIntegration: LocalizedDoc = {
         type: 'p',
         text: 'Si la llamada revierte, simúlala primero (`client.simulateContract` con los mismos args) — viem decodifica el nombre del custom error, que mapea directo a la referencia de errores de arriba.',
       },
+
+      {"type": "h2", "text": "Wallets V5: diferencias para integradores"},
+      {"type": "list", "items": ["`executeAsAgent(bytes32 mode, bytes executionData)` solo acepta el modo lote (`0x01` seguido de ceros). `executionData` es `abi.encode(Execution[])`; una llamada sola es un lote de una.", "`getAgentPermission(agent)` devuelve una estructura nueva: añade `paused` y quita los contadores de gasto. El gasto se lee con `getAgentSpending(agent)`, `getDailySpent(agent)` y `getTokenSpent(agent, token)`.", "Límites: `0` significa nada permitido y `type(uint128).max`, sin límite. Una lista de destinos vacía significa ningún destino.", "Toda llamada a un protocolo necesita un validador: `execute` del Universal Router (swaps V3 de entrada o salida exacta y swaps V4, solo ERC-20, salida a la wallet), `modifyLiquidities` del PositionManager y el Pool de Aave (`supply`, `withdraw`, `borrow`, `repay`, `setUserUseReserveAsCollateral`, `setUserEMode`; factor de salud de al menos 1,2 tras el lote).", "Los approve hechos dentro de un lote vuelven a cero al terminar. Los permisos de Permit2 para el Universal Router y el PositionManager los da el dueño.", "La comisión del agente, 0,15 %, se cobra sobre lo que sale de la wallet, en el mismo activo, y cuenta dentro de los límites.", "Errores nuevos, entre otros: `AgentPermissionsExpired`, `AgentPaused`, `EnforcedPause` (todos los agentes pausados), `TargetIsBlocked`, `PolicyValidationFailed`, `PostCheckFailed`, `AgentCannotCallWallet` y `UnsupportedExecutionMode`.", "El SDK y el servidor MCP están hoy pensados para wallets V4."]},
     ],
   },
 }

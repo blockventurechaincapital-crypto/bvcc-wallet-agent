@@ -6,16 +6,24 @@ import {
   formatEther,
   type Address, type Hex,
 } from 'viem'
-import { authenticateWebAuthn } from '@/lib/webauthn'
-import { BVCC_WALLET_ABI, BVCC_AGENT_WALLET_ABI } from '@/lib/abis'
+import { signUserOpHash, readWalletGeneration } from '@/lib/walletGeneration'
+import { BVCC_WALLET_ABI, BVCC_AGENT_WALLET_ABI, BVCC_AGENT_WALLET_V5_ABI } from '@/lib/abis'
+import {
+  capState, readAgentPermission, permit2AllowanceCalls,
+  V5_MAX_AGENT_LIFETIME_SECONDS,
+  type AgentPermissionView, type OwnerCall,
+} from '@/lib/agentPermissions'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useWalletType } from '@/lib/useWalletType'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
-import { waitForUserOp } from '@/lib/waitForUserOp'
-import { policyCallsFor, presetProtocolSuggestions } from '@/lib/callPolicies'
+import { waitForUserOp, txUrl } from '@/lib/waitForUserOp'
+import {
+  policyCallsFor, presetProtocolSuggestions,
+  policyCallsForAgentV5, presetProtocolSuggestionsV5,
+} from '@/lib/callPolicies'
 import {
   formatEthDisplay, formatTokenDisplay, formatEthLimit, formatTokenLimit,
   parseEthInput, parseTokenAmount,
@@ -31,6 +39,7 @@ import { CapabilityPicker } from '@/components/CapabilityPicker'
 import { ExplorerAddress } from '@/components/ExplorerAddress'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import { AgentAvatar, AgentAvatarPicker } from '@/components/AgentAvatar'
+import { AgentToolVersion } from '@/components/AgentToolVersion'
 import type { NetworkConfig } from '@/lib/networks'
 import { suggestGasFees } from '@/lib/gasFees'
 import { rpcTransport } from '@/lib/rpc'
@@ -56,12 +65,6 @@ function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
 }
 
-function hexToBytes(hex: Hex): Uint8Array {
-  const h = hex.slice(2)
-  const arr = new Uint8Array(h.length / 2)
-  for (let i = 0; i < arr.length; i++) arr[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
-  return arr
-}
 
 function shortAddr(addr: string) {
   return addr.length >= 10 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr
@@ -75,24 +78,9 @@ function getTokenLabel(address: string, network: NetworkConfig): string {
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
-interface AgentPermission {
-  maxPerTxWei: bigint
-  dailyLimitWei: bigint
-  totalBudgetWei: bigint
-  totalSpentWei: bigint
-  periodBudgetWei: bigint
-  periodSpentWei: bigint
-  allowedTokens: readonly Address[]
-  tokenMaxAmounts: readonly bigint[]
-  tokenDailyLimits: readonly bigint[]
-  tokenTotalBudgets: readonly bigint[]
-  allowedProtocols: readonly Address[]
-  allowedRecipients: readonly Address[]
-  expiry: bigint
-  periodDuration: bigint
-  periodStart: bigint
-  active: boolean
-}
+// Same shape for V4 and V5 wallets; see lib/agentPermissions.ts for how the two
+// generations read a cap differently.
+type AgentPermission = AgentPermissionView
 
 interface AgentInfo {
   address: Address
@@ -117,6 +105,10 @@ interface Revision {
   args: AuthorizeArgs
   /** Frases del tipo "gasto diario: sin límite". Vacío = todo tiene tope. */
   sinTope: string[]
+  /** V5: what the agent will not be able to do because a cap is 0. */
+  bloqueado: string[]
+  /** V5: Permit2 allowances signed together with the authorization. */
+  permit2Calls: OwnerCall[]
 }
 
 interface AuthorizeArgs {
@@ -141,6 +133,7 @@ type Modal =
   | { type: 'none' }
   | { type: 'authorize'; editAgent?: AgentInfo }
   | { type: 'increase'; agent: AgentInfo }
+  | { type: 'renew'; agent: AgentInfo }
   | { type: 'agentDisclaimer' }
 
 export default function AgentsPage() {
@@ -155,6 +148,10 @@ export default function AgentsPage() {
     [network.chainId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  // The wallet's own generation (from its EIP-712 domain): a V5 network can still hold
+  // older wallets, and the two generations read agent caps the opposite way.
+  const [generation, setGeneration] = useState<number>(network.contracts.walletVersion)
+  const isV5 = generation >= 5
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [loadingAgents, setLoadingAgents] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -194,6 +191,14 @@ export default function AgentsPage() {
   // Se firma ESTO, no una segunda pasada del formulario, para que no pueda haber
   // diferencia entre lo que el usuario leyó y lo que se envió.
   const [revision, setRevision] = useState<Revision | null>(null)
+  // Any change to the form drops the review, so the button goes back to "Review"
+  // and what gets signed is always the form as it is now.
+  useEffect(() => {
+    setRevision(null)
+  }, [fAgent, fMaxPerTx, fDailyLimit, fTotalBudget, fPeriodBudget, fPeriodDays, fTokenLimits,
+      fProtocols, fRecipients, fExpiry, fAnyRecipient, fCaps])
+  // Set once the sent operation is confirmed on-chain; the success popup reads it.
+  const [txConfirmed, setTxConfirmed] = useState(false)
   // What the agent already has ON-CHAIN when the edit modal opens (lowercased).
   // Suggestion chips use it to show green (already accepted on-chain) vs blue
   // (staged in this form, not yet signed). Empty when authorizing a new agent.
@@ -204,12 +209,20 @@ export default function AgentsPage() {
   // ── Increase budget state ──────────────────────────────────────────────────
   const [fIncrease, setFIncrease] = useState('')
 
+  // ── V5: renew and blocked targets ──────────────────────────────────────────
+  const [fRenewExpiry, setFRenewExpiry] = useState('')
+  const [fBlockInput, setFBlockInput] = useState('')
+  const [blockState, setBlockState] = useState<{ target: Address; blocked: boolean } | null>(null)
+  const [blockStatus, setBlockStatus] = useState<ActionStatus>('idle')
+
   // ── Load agents ────────────────────────────────────────────────────────────
   async function loadAgents() {
     if (!walletAddress) return
     setLoadingAgents(true)
     setLoadError('')
     try {
+      const gen = (await readWalletGeneration(publicClient, walletAddress as Address)) ?? network.contracts.walletVersion
+      setGeneration(gen)
       const agentAddrs = await publicClient.readContract({
         address: walletAddress as Address,
         abi: BVCC_AGENT_WALLET_ABI,
@@ -235,12 +248,7 @@ export default function AgentsPage() {
 
       const infos = await Promise.all(agentAddrs.map(async (addr) => {
         const [perm, dailySpent] = await Promise.all([
-          publicClient.readContract({
-            address: walletAddress as Address,
-            abi: BVCC_AGENT_WALLET_ABI,
-            functionName: 'getAgentPermission',
-            args: [addr],
-          }),
+          readAgentPermission(publicClient, walletAddress as Address, addr, gen),
           publicClient.readContract({
             address: walletAddress as Address,
             abi: BVCC_AGENT_WALLET_ABI,
@@ -248,7 +256,7 @@ export default function AgentsPage() {
             args: [addr],
           }),
         ])
-        const typedPerm = perm as AgentPermission
+        const typedPerm: AgentPermission = perm
 
         // Per-token spent (daily + total), one read per allowed token.
         const tokenSpent: Record<string, { daily: bigint; total: bigint }> = {}
@@ -284,10 +292,12 @@ export default function AgentsPage() {
     // Esperar el recibo no bastaba: la transacción puede minarse con exito y la
     // UserOperation haber fallado dentro, dejando "autorizado" un agente que no
     // lo esta. Ver lib/waitForUserOp.ts.
+    setTxConfirmed(false)
     const res = await waitForUserOp(txHash as Hex, network, {
       wallet: walletAddress as Address, timeoutMs: 60_000,
     })
     await loadAgents()
+    if (res.estado === 'confirmada') setTxConfirmed(true)
     if (res.estado === 'fallida' || res.estado === 'reemplazada') {
       throw new Error(res.estado === 'reemplazada'
         ? 'Otra transaccion ocupo su lugar antes de confirmar. No se ha cambiado nada: vuelve a intentarlo.'
@@ -340,7 +350,8 @@ export default function AgentsPage() {
       const p = editAgent.perm
       // Vacío on-chain significa "cualquier destino": se refleja tal cual, para no
       // cambiarle los permisos a nadie por abrir la pantalla de edición.
-      setFAnyRecipient(p.allowedRecipients.length === 0)
+      // En V5 la lista vacía significa "ningún destino", así que no hay casilla.
+      setFAnyRecipient(!isV5 && p.allowedRecipients.length === 0)
       setFAgent(editAgent.address)
       // Exacto, no `formatEthDisplay`: esto vuelve a `parseEther` al guardar. Abrir
       // un agente, cambiar solo el nombre y guardar tiene que devolver al contrato
@@ -362,8 +373,8 @@ export default function AgentsPage() {
       // Split the on-chain lists into "covered by a capability" and "manual". The
       // picker owns the composed addresses; the raw lists show only the rest (e.g.
       // a hand-added 1inch address), so nothing appears twice.
-      const caps = capabilitiesFromProtocols(network.chainId, [...p.allowedProtocols] as Address[])
-      const composed = composeFromCapabilities(network.chainId, caps)
+      const caps = capabilitiesFromProtocols(network.chainId, [...p.allowedProtocols] as Address[], generation)
+      const composed = composeFromCapabilities(network.chainId, caps, generation)
       const composedProto = new Set(composed.protocols.map(a => a.toLowerCase()))
       const composedRecip = new Set(composed.recipients.map(a => a.toLowerCase()))
       setFCaps(caps)
@@ -399,10 +410,11 @@ export default function AgentsPage() {
   }
 
   // ── Send UserOp helper ─────────────────────────────────────────────────────
-  // Accepts a single inner call or a batch — all items are self-calls on the wallet
-  // (owner functions require msg.sender == wallet). One Face ID signature covers the
-  // whole batch, so authorizeAgent + setCallPolicy(...) go together atomically.
-  async function sendUserOp(inner: Hex | Hex[]): Promise<string> {
+  // Accepts a single inner call or a batch. A bare calldata is a self-call on the wallet
+  // (owner functions require msg.sender == wallet); an OwnerCall goes to another
+  // contract (V5 Permit2 allowances). One passkey signature covers the whole batch, so
+  // authorizeAgent + its call policies go together atomically.
+  async function sendUserOp(inner: Hex | (Hex | OwnerCall)[]): Promise<string> {
     if (!walletAddress || !credentialId) throw new Error(t('connect.errNoWallet'))
 
     const innerCalls = Array.isArray(inner) ? inner : [inner]
@@ -420,7 +432,9 @@ export default function AgentsPage() {
         { name: 'value', type: 'uint256' },
         { name: 'callData', type: 'bytes' },
       ]}],
-      [innerCalls.map(callData => ({ target: walletAddress as Address, value: 0n, callData }))]
+      [innerCalls.map(c => typeof c === 'string'
+        ? { target: walletAddress as Address, value: 0n, callData: c }
+        : c)]
     )
 
     const callData = encodeFunctionData({
@@ -431,12 +445,24 @@ export default function AgentsPage() {
 
     const { maxFeePerGas, maxPriorityFeePerGas } = await suggestGasFees(publicClient, network.chainId)
 
+    // V5: authorizing an agent with several capabilities (policies + Permit2 allowances)
+    // can pass the fixed 1.5M call gas, so the batch is simulated first. A batch that
+    // would revert stops here, before the passkey is asked for.
+    let callGasLimit = 1_500_000n
+    if (isV5) {
+      const estimated = await publicClient.estimateGas({
+        account: ENTRYPOINT_ADDRESS, to: walletAddress as Address, data: callData,
+      })
+      const padded = (estimated * 13n) / 10n
+      if (padded > callGasLimit) callGasLimit = padded
+    }
+
     const userOp = {
       sender: walletAddress as Address,
       nonce,
       initCode: '0x' as Hex,
       callData,
-      accountGasLimits: packBytes32(1_500_000n, 1_500_000n),
+      accountGasLimits: packBytes32(1_500_000n, callGasLimit),
       preVerificationGas: 300_000n,
       gasFees: packBytes32(maxPriorityFeePerGas, maxFeePerGas),
       paymasterAndData: '0x' as Hex,
@@ -451,31 +477,9 @@ export default function AgentsPage() {
     }) as Hex
 
     setActionStatus('signing')
-    const { r, s, authenticatorData, clientDataJSON: clientDataHex } =
-      await authenticateWebAuthn(credentialId, hexToBytes(userOpHash))
-
-    const clientDataStr = new TextDecoder().decode(hexToBytes(clientDataHex))
-    const challengeIndex = BigInt(clientDataStr.indexOf('"challenge":'))
-    const typeIndex = BigInt(clientDataStr.indexOf('"type":'))
-
-    const signature = encodeAbiParameters(
-      [
-        { name: 'r', type: 'bytes32' },
-        { name: 's', type: 'bytes32' },
-        { name: 'challengeIndex', type: 'uint256' },
-        { name: 'typeIndex', type: 'uint256' },
-        { name: 'authenticatorData', type: 'bytes' },
-        { name: 'clientDataJSON', type: 'string' },
-      ],
-      [
-        `0x${r.toString(16).padStart(64, '0')}` as Hex,
-        `0x${s.toString(16).padStart(64, '0')}` as Hex,
-        challengeIndex,
-        typeIndex,
-        authenticatorData,
-        clientDataStr,
-      ]
-    )
+    const signature = await signUserOpHash({
+      client: publicClient, network, walletAddress: walletAddress as Address, credentialId, userOpHash,
+    })
 
     setActionStatus('sending')
     const { txHash } = await submitUserOp({
@@ -498,7 +502,7 @@ export default function AgentsPage() {
   // usuario autorice un número y no un hueco. Si ya existe la fila, no se toca.
   function alElegirCapacidades(caps: CapabilityId[]) {
     setFCaps(caps)
-    const requeridos = composeFromCapabilities(network.chainId, caps).requiredTokens
+    const requeridos = composeFromCapabilities(network.chainId, caps, generation).requiredTokens
     if (requeridos.length === 0) return
     setFTokenLimits(prev => {
       const hay = new Set(prev.map(t => t.address.toLowerCase()))
@@ -517,7 +521,7 @@ export default function AgentsPage() {
   // ── Submit authorize/edit ──────────────────────────────────────────────────
   // Paso 1 de 2: validar y calcular. NO firma nada — deja el resultado en
   // `revision` para que el usuario lea antes de poner la passkey.
-  function prepararAutorizacion() {
+  async function prepararAutorizacion() {
     if (!isAddress(fAgent)) { setActionError(t('agents.invalidAgent')); return }
     setActionError('')
     setActionTxHash(null)
@@ -533,13 +537,22 @@ export default function AgentsPage() {
       // `0` en el contrato significa SIN LÍMITE, y el formulario arrancaba con
       // todos los campos vacíos: aceptar en blanco era autorizar un agente sin
       // tope de gasto y sin caducidad, sin que nadie lo dijera en voz alta.
-      if (maxPerTx <= 0n) { setActionError(t('agents.errMaxPerTxRequired')); return }
-      const ahora = BigInt(Math.floor(Date.now() / 1000))
+      // En V5 un tope vacío es 0 = nada permitido, así que no hace falta exigirlo: el
+      // repaso dice qué no podrá hacer el agente.
+      if (!isV5 && maxPerTx <= 0n) { setActionError(t('agents.errMaxPerTxRequired')); return }
       if (expiry <= 0n) { setActionError(t('agents.errExpiryRequired')); return }
+      // V5 comprueba la caducidad contra la hora de la cadena (el reloj del equipo puede
+      // ir desfasado) y con un máximo de un año.
+      const ahora = isV5
+        ? (await publicClient.getBlock({ blockTag: 'latest' })).timestamp
+        : BigInt(Math.floor(Date.now() / 1000))
       if (expiry <= ahora) { setActionError(t('agents.errExpiryPast')); return }
+      if (isV5 && expiry > ahora + BigInt(V5_MAX_AGENT_LIFETIME_SECONDS)) {
+        setActionError(t('agents.v5.errExpiryTooFar')); return
+      }
 
       // Compose what the selected capabilities entail, then merge with manual entries.
-      const composed = composeFromCapabilities(network.chainId, fCaps)
+      const composed = composeFromCapabilities(network.chainId, fCaps, generation)
       const lc = (a: string) => a.toLowerCase()
 
       const validTokenLimits = fTokenLimits.filter(t => isAddress(t.address))
@@ -605,17 +618,50 @@ export default function AgentsPage() {
       // formulario enseña huecos vacíos y un `∞` pequeño; aquí se dice en una frase,
       // porque es lo último que el usuario lee antes de poner la passkey.
       const sinTope: string[] = []
-      if (dailyLimit <= 0n) sinTope.push(t('agents.revNoDaily'))
-      if (totalBudget <= 0n) sinTope.push(t('agents.revNoTotal'))
+      const sinLimite = (v: bigint) => capState(v, generation) === 'unlimited'
+      if (sinLimite(dailyLimit)) sinTope.push(t('agents.revNoDaily'))
+      if (sinLimite(totalBudget)) sinTope.push(t('agents.revNoTotal'))
       if (fAnyRecipient) sinTope.push(t('agents.revAnyRecipient'))
       for (let i = 0; i < validTokens.length; i++) {
         const etiqueta = getTokenLabel(validTokens[i], network)
-        if (tokenMaxAmounts[i] <= 0n) sinTope.push(t('agents.revNoTokenMax', { token: etiqueta }))
-        if (tokenDailyLimits[i] <= 0n) sinTope.push(t('agents.revNoTokenDaily', { token: etiqueta }))
+        if (sinLimite(tokenMaxAmounts[i])) sinTope.push(t('agents.revNoTokenMax', { token: etiqueta }))
+        if (sinLimite(tokenDailyLimits[i])) sinTope.push(t('agents.revNoTokenDaily', { token: etiqueta }))
       }
 
-      setRevision({ args, sinTope })
+      // V5: un tope a 0 no es "sin límite" sino "nada". Se dice qué se queda bloqueado
+      // por eso, para que nadie lo descubra cuando el agente falle.
+      const bloqueado: string[] = []
+      let permit2Calls: OwnerCall[] = []
+      if (isV5) {
+        const faltaEth: string[] = []
+        if (maxPerTx === 0n) faltaEth.push(t('agents.v5.missingPerTx'))
+        if (dailyLimit === 0n) faltaEth.push(t('agents.v5.missingDaily'))
+        if (totalBudget === 0n) faltaEth.push(t('agents.v5.missingTotal'))
+        if (periodDuration > 0n && periodBudget === 0n) faltaEth.push(t('agents.v5.missingPeriod'))
+        if (faltaEth.length) bloqueado.push(t('agents.v5.revBlockedEth', { missing: faltaEth.join(', ') }))
+        for (let i = 0; i < validTokens.length; i++) {
+          const falta: string[] = []
+          if (tokenMaxAmounts[i] === 0n) falta.push(t('agents.v5.missingPerTx'))
+          if (tokenDailyLimits[i] === 0n) falta.push(t('agents.v5.missingDaily'))
+          if (tokenTotalBudgets[i] === 0n) falta.push(t('agents.v5.missingTotal'))
+          if (falta.length) {
+            bloqueado.push(t('agents.v5.revBlockedToken', {
+              token: getTokenLabel(validTokens[i], network), missing: falta.join(', '),
+            }))
+          }
+        }
+        if (validRecipients.length === 0) bloqueado.push(t('agents.v5.revNoRecipients'))
+
+        setActionStatus('building')
+        permit2Calls = await permit2AllowanceCalls(
+          publicClient, walletAddress as Address, validTokens, composed.permit2Spenders, expiry,
+        )
+        setActionStatus('idle')
+      }
+
+      setRevision({ args, sinTope, bloqueado, permit2Calls })
     } catch (e) {
+      setActionStatus('idle')
       setActionError(e instanceof Error ? e.message : t('common.error'))
     }
   }
@@ -628,6 +674,23 @@ export default function AgentsPage() {
     setActionError('')
     setActionTxHash(null)
     try {
+      // V5: same authorizeAgent shape, but call policies are per agent and the
+      // Permit2 allowances the routers pull through are granted by the owner here.
+      if (isV5) {
+        const authorizeCall = encodeFunctionData({
+          abi: BVCC_AGENT_WALLET_V5_ABI,
+          functionName: 'authorizeAgent',
+          args: [rev.args],
+        })
+        const policyCalls = policyCallsForAgentV5(network.chainId, rev.args.agent, rev.args.allowedProtocols)
+        const txHash = await sendUserOp([authorizeCall, ...policyCalls, ...rev.permit2Calls])
+        setActionTxHash(txHash)
+        setActionStatus('success')
+        setRevision(null)
+        await settleAndReload(txHash)
+        return
+      }
+
       const innerCallData = encodeFunctionData({
         abi: BVCC_AGENT_WALLET_ABI,
         functionName: 'authorizeAgent',
@@ -713,6 +776,106 @@ export default function AgentsPage() {
     }
   }
 
+  // ── V5: pause one agent ────────────────────────────────────────────────────
+  async function handleAgentPause(agentAddr: Address, pause: boolean) {
+    setActionStatus('building')
+    setActionError('')
+    setActionTxHash(null)
+    try {
+      const innerCallData = encodeFunctionData({
+        abi: BVCC_AGENT_WALLET_V5_ABI,
+        functionName: pause ? 'pauseAgent' : 'unpauseAgent',
+        args: [agentAddr],
+      })
+      const txHash = await sendUserOp(innerCallData)
+      setActionTxHash(txHash)
+      setActionStatus('success')
+      await settleAndReload(txHash)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t('common.error'))
+      setActionStatus('error')
+    }
+  }
+
+  // ── V5: renew ──────────────────────────────────────────────────────────────
+  function openRenew(agent: AgentInfo) {
+    setFRenewExpiry('')
+    setActionStatus('idle')
+    setActionError('')
+    setActionTxHash(null)
+    setModal({ type: 'renew', agent })
+  }
+
+  // The Permit2 allowances were granted until the old expiry, so they move with it:
+  // otherwise the agent's swaps would stop at the old date.
+  async function handleRenew(agent: AgentInfo) {
+    const expiry = fRenewExpiry ? BigInt(Math.floor(new Date(fRenewExpiry).getTime() / 1000)) : 0n
+    if (expiry <= 0n) { setActionError(t('agents.errExpiryRequired')); return }
+    setActionStatus('building')
+    setActionError('')
+    setActionTxHash(null)
+    try {
+      const ahora = (await publicClient.getBlock({ blockTag: 'latest' })).timestamp
+      if (expiry <= ahora) throw new Error(t('agents.errExpiryPast'))
+      if (expiry > ahora + BigInt(V5_MAX_AGENT_LIFETIME_SECONDS)) throw new Error(t('agents.v5.errExpiryTooFar'))
+      const protocols = [...agent.perm.allowedProtocols] as Address[]
+      const spenders = composeFromCapabilities(
+        network.chainId, capabilitiesFromProtocols(network.chainId, protocols, generation), generation,
+      ).permit2Spenders
+      const permit2Calls = await permit2AllowanceCalls(
+        publicClient, walletAddress as Address, agent.perm.allowedTokens, spenders, expiry,
+      )
+      const renewCall = encodeFunctionData({
+        abi: BVCC_AGENT_WALLET_V5_ABI,
+        functionName: 'renewAgent',
+        args: [agent.address, expiry],
+      })
+      const txHash = await sendUserOp([renewCall, ...permit2Calls])
+      setActionTxHash(txHash)
+      setActionStatus('success')
+      await settleAndReload(txHash)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t('common.error'))
+      setActionStatus('error')
+    }
+  }
+
+  // ── V5: block a target for every agent ─────────────────────────────────────
+  async function checkBlocked() {
+    if (!isAddress(fBlockInput) || !walletAddress) return
+    const target = fBlockInput as Address
+    setBlockState(null)
+    try {
+      const blocked = await publicClient.readContract({
+        address: walletAddress as Address,
+        abi: BVCC_AGENT_WALLET_V5_ABI,
+        functionName: 'isTargetBlocked',
+        args: [target],
+      })
+      setBlockState({ target, blocked })
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async function handleSetBlocked(target: Address, blocked: boolean) {
+    setBlockStatus('building')
+    try {
+      const innerCallData = encodeFunctionData({
+        abi: BVCC_AGENT_WALLET_V5_ABI,
+        functionName: 'setTargetBlocked',
+        args: [target, blocked],
+      })
+      const txHash = await sendUserOp(innerCallData)
+      await waitForUserOp(txHash as Hex, network, { wallet: walletAddress as Address, timeoutMs: 60_000 })
+      await checkBlocked()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setBlockStatus('idle')
+    }
+  }
+
   // ── Block if not agent wallet ──────────────────────────────────────────────
   if (wtLoading) {
     return (
@@ -735,12 +898,20 @@ export default function AgentsPage() {
     )
   }
 
+  /** A cap as text: "No permitido" (V5 zero), "Sin límite", or the amount. */
+  function capText(v: bigint, fmt: (v: bigint) => string): string {
+    const st = capState(v, generation)
+    return st === 'none' ? t('agents.v5.notAllowed') : st === 'unlimited' ? t('agents.noLimit') : fmt(v)
+  }
+  const limited = (v: bigint) => capState(v, generation) === 'limited'
+
   function agentStatus(info: AgentInfo): { label: string; color: string } {
     const p = info.perm
     if (!p.active) return { label: t('agents.statusRevoked'), color: C.error }
     if (p.expiry > 0n && BigInt(now) >= p.expiry) return { label: t('agents.statusExpired'), color: C.subtle }
-    if (p.totalBudgetWei > 0n && p.totalSpentWei >= p.totalBudgetWei) return { label: t('agents.statusBudgetDepleted'), color: C.warn }
-    if (p.periodBudgetWei > 0n && p.periodDuration > 0n && p.periodSpentWei >= p.periodBudgetWei) {
+    if (p.paused) return { label: t('agents.v5.statusPaused'), color: C.warn }
+    if (limited(p.totalBudgetWei) && p.totalSpentWei >= p.totalBudgetWei) return { label: t('agents.statusBudgetDepleted'), color: C.warn }
+    if (limited(p.periodBudgetWei) && p.periodDuration > 0n && p.periodSpentWei >= p.periodBudgetWei) {
       return { label: t('agents.statusPeriodDepleted'), color: C.warn }
     }
     return { label: t('agents.statusActive'), color: C.success }
@@ -760,6 +931,8 @@ export default function AgentsPage() {
     const p = info.perm
     const status = agentStatus(info)
     const isActive = status.label === t('agents.statusActive')
+    // V5: a paused or expired agent can still be resumed or renewed.
+    const isLive = p.active && !(p.expiry > 0n && BigInt(now) >= p.expiry)
     const [revoking, setRevoking] = useState(false)
     const [editingAlias, setEditingAlias] = useState(false)
     const [aliasInput, setAliasInput] = useState('')
@@ -849,7 +1022,31 @@ export default function AgentsPage() {
             </span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {isV5 && isLive && (
+              <button
+                onClick={() => handleAgentPause(info.address, !p.paused)}
+                style={{
+                  padding: '6px 12px', fontSize: '12px', fontWeight: '500',
+                  backgroundColor: 'transparent', border: `1px solid ${C.border}`,
+                  borderRadius: '5px', color: p.paused ? C.success : C.warn, cursor: 'pointer',
+                }}
+              >
+                {p.paused ? t('agents.v5.unpauseAgent') : t('agents.v5.pauseAgent')}
+              </button>
+            )}
+            {isV5 && p.active && (
+              <button
+                onClick={() => openRenew(info)}
+                style={{
+                  padding: '6px 12px', fontSize: '12px', fontWeight: '500',
+                  backgroundColor: 'transparent', border: `1px solid ${C.border}`,
+                  borderRadius: '5px', color: C.muted, cursor: 'pointer',
+                }}
+              >
+                {t('agents.v5.renewBtn')}
+              </button>
+            )}
             <button
               onClick={() => openAuthorize(info)}
               style={{
@@ -860,7 +1057,7 @@ export default function AgentsPage() {
             >
               {t('agents.edit')}
             </button>
-            {isActive && (
+            {(isActive || (isV5 && isLive)) && (
               <button
                 onClick={doRevoke}
                 disabled={revoking}
@@ -881,14 +1078,18 @@ export default function AgentsPage() {
           <AgentAvatarPicker wallet={walletAddress ?? ''} agent={info.address} onClose={() => setPicking(false)} onSaved={() => forceAvatar(n => n + 1)} />
         )}
 
+        {walletAddress && (
+          <AgentToolVersion chainId={network.chainId} wallet={walletAddress} agent={info.address} />
+        )}
+
         {/* ETH Limits grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-          <Limit label={t('agents.maxPerTx')} value={p.maxPerTxWei > 0n ? `${formatEthLimit(p.maxPerTxWei)} ETH` : t('agents.noLimit')} />
-          <Limit label={t('agents.dailyLimit')} value={p.dailyLimitWei > 0n ? `${formatEthLimit(p.dailyLimitWei)} ETH` : t('agents.noLimit')} />
+          <Limit label={t('agents.maxPerTx')} value={capText(p.maxPerTxWei, v => `${formatEthLimit(v)} ETH`)} />
+          <Limit label={t('agents.dailyLimit')} value={capText(p.dailyLimitWei, v => `${formatEthLimit(v)} ETH`)} />
         </div>
 
         {/* Daily spent bar */}
-        {p.dailyLimitWei > 0n && (
+        {limited(p.dailyLimitWei) && (
           <div style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.spentToday')}</span>
@@ -899,7 +1100,7 @@ export default function AgentsPage() {
         )}
 
         {/* Total budget */}
-        {p.totalBudgetWei > 0n && (
+        {limited(p.totalBudgetWei) && (
           <div style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.totalBudget')}</span>
@@ -910,7 +1111,7 @@ export default function AgentsPage() {
         )}
 
         {/* Period budget */}
-        {p.periodBudgetWei > 0n && p.periodDuration > 0n && (
+        {limited(p.periodBudgetWei) && p.periodDuration > 0n && (
           <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '6px', border: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ fontSize: '11px', color: C.subtle }}>
@@ -955,12 +1156,12 @@ export default function AgentsPage() {
                         {shortAddr(tokenAddr)}
                       </span>
                       <span style={{ fontSize: '11px', color: C.muted }}>
-                        {t('agents.maxPerTxShort')}: {maxTx > 0n ? formatTokenLimit(maxTx, decimals) : '∞'}
+                        {t('agents.maxPerTxShort')}: {capState(maxTx, generation) === 'unlimited' ? '∞' : capText(maxTx, v => formatTokenLimit(v, decimals))}
                       </span>
                     </div>
 
                     {/* Daily spent bar */}
-                    {daily > 0n && (
+                    {limited(daily) && (
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                           <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.dailyShort')}</span>
@@ -973,7 +1174,7 @@ export default function AgentsPage() {
                     )}
 
                     {/* Total budget bar */}
-                    {total > 0n && (
+                    {limited(total) && (
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                           <span style={{ fontSize: '11px', color: C.subtle }}>{t('agents.totalShort')}</span>
@@ -993,7 +1194,7 @@ export default function AgentsPage() {
 
         {/* Plain-language capability line — what this agent can actually do */}
         {(() => {
-          const caps = capabilitiesFromProtocols(network.chainId, [...p.allowedProtocols] as Address[])
+          const caps = capabilitiesFromProtocols(network.chainId, [...p.allowedProtocols] as Address[], generation)
           if (caps.length === 0) return null
           return (
             <div style={{ marginBottom: '8px', fontSize: '11px', color: C.muted }}>
@@ -1023,6 +1224,10 @@ export default function AgentsPage() {
           </div>
         )}
 
+        {isV5 && p.allowedRecipients.length === 0 && (
+          <div style={{ marginBottom: '8px', fontSize: '11px', color: C.subtle }}>{t('agents.v5.noRecipients')}</div>
+        )}
+
         {/* Expiry */}
         {p.expiry > 0n && (
           <div style={{ fontSize: '11px', color: C.subtle }}>
@@ -1031,7 +1236,7 @@ export default function AgentsPage() {
         )}
 
         {/* Increase budget button */}
-        {isActive && p.totalBudgetWei > 0n && (
+        {isActive && (isV5 ? capState(p.totalBudgetWei, generation) !== 'unlimited' : p.totalBudgetWei > 0n) && (
           <button
             onClick={() => openIncrease(info)}
             style={{
@@ -1056,6 +1261,9 @@ export default function AgentsPage() {
     )
   }
 
+  // Called as plain functions, not as <Components />: declared inside the page, a
+  // component would be a new type on every render and remount, so the input being
+  // typed in would lose focus after each key.
   function AddressListInput({
     items, onAdd, onRemove, input, setInput, placeholder, suggestions, onChain, alsoStaged,
   }: {
@@ -1219,6 +1427,12 @@ export default function AgentsPage() {
           </div>
         )}
 
+        {isV5 && fTokenLimits.length > 0 && (
+          <p style={{ margin: '0 0 8px', fontSize: '11px', color: C.subtle, lineHeight: '1.4' }}>
+            {t('agents.v5.tokenHint')} {t('agents.v5.feeNoteShort')}
+          </p>
+        )}
+
         {/* Token entries */}
         {fTokenLimits.map((tok, i) => {
           const label = getTokenLabel(tok.address, network)
@@ -1250,7 +1464,7 @@ export default function AgentsPage() {
                     type="text"
                     value={tok.maxPerTx}
                     onChange={e => updateToken(i, 'maxPerTx', e.target.value)}
-                    placeholder={t('agents.unlimitedPlaceholder')}
+                    placeholder={isV5 ? t('agents.v5.tokenPlaceholder') : t('agents.unlimitedPlaceholder')}
                     style={{ ...inputStyle, fontSize: '12px', padding: '7px 10px' }}
                   />
                 </div>
@@ -1260,7 +1474,7 @@ export default function AgentsPage() {
                     type="text"
                     value={tok.dailyLimit}
                     onChange={e => updateToken(i, 'dailyLimit', e.target.value)}
-                    placeholder={t('agents.unlimitedPlaceholder')}
+                    placeholder={isV5 ? t('agents.v5.tokenPlaceholder') : t('agents.unlimitedPlaceholder')}
                     style={{ ...inputStyle, fontSize: '12px', padding: '7px 10px' }}
                   />
                 </div>
@@ -1270,7 +1484,7 @@ export default function AgentsPage() {
                     type="text"
                     value={tok.totalBudget}
                     onChange={e => updateToken(i, 'totalBudget', e.target.value)}
-                    placeholder={t('agents.unlimitedPlaceholder')}
+                    placeholder={isV5 ? t('agents.v5.tokenPlaceholder') : t('agents.unlimitedPlaceholder')}
                     style={{ ...inputStyle, fontSize: '12px', padding: '7px 10px' }}
                   />
                 </div>
@@ -1297,6 +1511,8 @@ export default function AgentsPage() {
 
   const knownProtocolSuggestions = (() => {
     const list: { label: string; address: Address }[] = []
+    // V5: only contracts with a validator can be called by an agent at all.
+    if (isV5) return presetProtocolSuggestionsV5(network.chainId)
     if (network.uniswap) list.push({ label: 'Uniswap SwapRouter', address: network.uniswap.swapRouter })
     // V3 preset protocols (SwapRouter02 / Universal Router / Aave) — deduped by address.
     for (const s of presetProtocolSuggestions(network.chainId)) {
@@ -1308,7 +1524,7 @@ export default function AgentsPage() {
   // Protocols/recipients the selected capabilities compose (managed by the picker,
   // not the manual lists). Used so a preset chip shows as staged (blue/green), not
   // gold, when a capability already pulls it in.
-  const composedFromCaps = composeFromCapabilities(network.chainId, fCaps)
+  const composedFromCaps = composeFromCapabilities(network.chainId, fCaps, generation)
   const composedProtoSet = new Set(composedFromCaps.protocols.map(a => a.toLowerCase()))
   const composedRecipSet = new Set(composedFromCaps.recipients.map(a => a.toLowerCase()))
 
@@ -1385,6 +1601,12 @@ export default function AgentsPage() {
         </div>
       )}
 
+      {actionStatus === 'error' && actionError && modal.type === 'none' && (
+        <div style={{ padding: '12px 16px', backgroundColor: 'rgba(252,129,129,0.06)', border: '1px solid rgba(252,129,129,0.25)', borderRadius: '6px', marginBottom: '20px' }}>
+          <span style={{ fontSize: '13px', color: C.error }}>{actionError}</span>
+        </div>
+      )}
+
       {/* Agent list */}
       {loadingAgents ? (
         <div style={{ color: C.muted, fontSize: '14px' }}>{t('agents.loadingAgents')}</div>
@@ -1397,6 +1619,55 @@ export default function AgentsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {agents.map(info => <AgentCard key={info.address} info={info} />)}
+        </div>
+      )}
+
+      {/* ── V5: block a contract for every agent ───────────────────────────── */}
+      {isV5 && !loadingAgents && (
+        <div style={{ marginTop: '24px', padding: '18px 20px', backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: '10px' }}>
+          <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 600, color: C.text }}>{t('agents.v5.blockTitle')}</p>
+          <p style={{ margin: '0 0 12px', fontSize: '12px', color: C.subtle, lineHeight: 1.5 }}>{t('agents.v5.blockHint')}</p>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={fBlockInput}
+              onChange={e => { setFBlockInput(e.target.value); setBlockState(null) }}
+              onKeyDown={e => { if (e.key === 'Enter') void checkBlocked() }}
+              placeholder="0x... contract address"
+              style={{ ...inputStyle, fontFamily: 'monospace' }}
+            />
+            <button
+              onClick={() => void checkBlocked()}
+              disabled={!isAddress(fBlockInput)}
+              style={{
+                padding: '9px 14px', backgroundColor: C.goldDim, border: `1px solid ${C.goldBorder}`,
+                borderRadius: '6px', color: C.gold, fontSize: '13px', fontWeight: 600, flexShrink: 0,
+                cursor: isAddress(fBlockInput) ? 'pointer' : 'not-allowed', opacity: isAddress(fBlockInput) ? 1 : 0.4,
+              }}
+            >
+              {t('agents.v5.blockCheck')}
+            </button>
+          </div>
+          {blockState && blockState.target.toLowerCase() === fBlockInput.toLowerCase() && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px' }}>
+              <span style={{ fontSize: '12px', color: blockState.blocked ? C.error : C.success }}>
+                {blockState.blocked ? t('agents.v5.blockedYes') : t('agents.v5.blockedNo')}
+              </span>
+              <button
+                onClick={() => void handleSetBlocked(blockState.target, !blockState.blocked)}
+                disabled={blockStatus !== 'idle'}
+                style={{
+                  padding: '6px 12px', fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+                  backgroundColor: 'transparent', borderRadius: '5px',
+                  border: `1px solid ${blockState.blocked ? 'rgba(104,211,145,0.35)' : 'rgba(252,129,129,0.35)'}`,
+                  color: blockState.blocked ? C.success : C.error,
+                  opacity: blockStatus !== 'idle' ? 0.5 : 1,
+                }}
+              >
+                {blockStatus !== 'idle' ? '...' : blockState.blocked ? t('agents.v5.unblockBtn') : t('agents.v5.blockBtn')}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1428,8 +1699,52 @@ export default function AgentsPage() {
         />
       )}
 
+      {/* ── Success popup: shown over the form once signed; OK closes everything ── */}
+      {actionStatus === 'success' && actionTxHash &&
+        (modal.type === 'authorize' || modal.type === 'increase' || modal.type === 'renew') && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '24px', zIndex: 110,
+        }}>
+          <div style={{
+            backgroundColor: C.bg, border: '1px solid rgba(104,211,145,0.35)',
+            borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '380px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '28px', color: C.success, marginBottom: '8px' }}>✓</div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 600, color: C.text }}>
+              {t('agents.v5.successTitle')}
+            </h3>
+            <p style={{ margin: '0 0 12px', fontSize: '12px', color: txConfirmed ? C.success : C.muted }}>
+              {txConfirmed ? t('agents.v5.successConfirmed') : t('agents.v5.successConfirming')}
+            </p>
+            <a
+              href={txUrl(network, actionTxHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'block', marginBottom: '18px', fontSize: '12px', fontFamily: 'monospace', color: C.gold }}
+            >
+              {t('agents.v5.viewTx')}: {shortAddr(actionTxHash)} ↗
+            </a>
+            <button
+              onClick={() => {
+                closeModal()
+                setActionStatus('idle')
+                setActionTxHash(null)
+              }}
+              style={{
+                width: '100%', padding: '12px', backgroundColor: C.gold, border: 'none',
+                borderRadius: '6px', color: '#000', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {t('agents.v5.ok')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal overlay ───────────────────────────────────────────────────── */}
-      {(modal.type === 'authorize' || modal.type === 'increase') && (
+      {(modal.type === 'authorize' || modal.type === 'increase' || modal.type === 'renew') && (
         <div
           onClick={e => { if (e.target === e.currentTarget) closeModal() }}
           style={{
@@ -1479,18 +1794,23 @@ export default function AgentsPage() {
                     <p style={{ fontSize: '11px', color: C.subtle, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 10px' }}>
                       {t('agents.ethLimits')}
                     </p>
+                    {isV5 && (
+                      <p style={{ margin: '0 0 10px', fontSize: '11px', color: C.subtle, lineHeight: '1.4' }}>
+                        {t('agents.v5.ethLimitsHint')} {t('agents.v5.feeNote')}
+                      </p>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                       <div>
-                        <label style={labelStyle}>{t('agents.maxPerTxLabel')}</label>
+                        <label style={labelStyle}>{isV5 ? t('agents.v5.maxPerTxLabel') : t('agents.maxPerTxLabel')}</label>
                         <input type="text" value={fMaxPerTx} onChange={e => setFMaxPerTx(e.target.value)} placeholder="0" style={inputStyle} />
                       </div>
                       <div>
-                        <label style={labelStyle}>{t('agents.dailyLimitLabel')}</label>
+                        <label style={labelStyle}>{isV5 ? t('agents.v5.dailyLimitLabel') : t('agents.dailyLimitLabel')}</label>
                         <input type="text" value={fDailyLimit} onChange={e => setFDailyLimit(e.target.value)} placeholder="0" style={inputStyle} />
                       </div>
                     </div>
                     <div>
-                      <label style={labelStyle}>{t('agents.totalBudgetLabel')}</label>
+                      <label style={labelStyle}>{isV5 ? t('agents.v5.totalBudgetLabel') : t('agents.totalBudgetLabel')}</label>
                       <input type="text" value={fTotalBudget} onChange={e => setFTotalBudget(e.target.value)} placeholder="0" style={inputStyle} />
                     </div>
                   </div>
@@ -1513,9 +1833,10 @@ export default function AgentsPage() {
                   </div>
 
                   {/* Capability picker — the guided way to compose config */}
-                  {agentCapabilitiesFor(network.chainId).length > 0 && (
+                  {agentCapabilitiesFor(network.chainId, generation).length > 0 && (
                     <CapabilityPicker
                       chainId={network.chainId}
+                      generation={generation}
                       explorerBase={network.blockExplorer.url}
                       selected={fCaps}
                       onChange={alElegirCapacidades}
@@ -1535,43 +1856,43 @@ export default function AgentsPage() {
                   {/* Tokens */}
                   <div>
                     <label style={labelStyle}>{t('agents.allowedTokens')}</label>
-                    <TokenLimitsInput />
+                    {TokenLimitsInput()}
                   </div>
 
                   {/* Protocols (extra, hand-added) */}
                   <div>
                     <label style={labelStyle}>{t('agents.allowedProtocols')}</label>
-                    <AddressListInput
-                      items={fProtocols}
-                      onAdd={v => setFProtocols(prev => [...prev, v])}
-                      onRemove={i => setFProtocols(prev => prev.filter((_, idx) => idx !== i))}
-                      input={fProtocolInput}
-                      setInput={setFProtocolInput}
-                      placeholder="0x... protocol address"
-                      suggestions={knownProtocolSuggestions}
-                      onChain={onChainBaseline.protocols}
-                      alsoStaged={composedProtoSet}
-                    />
+                    {AddressListInput({
+                      items: fProtocols,
+                      onAdd: v => setFProtocols(prev => [...prev, v]),
+                      onRemove: i => setFProtocols(prev => prev.filter((_, idx) => idx !== i)),
+                      input: fProtocolInput,
+                      setInput: setFProtocolInput,
+                      placeholder: '0x... protocol address',
+                      suggestions: knownProtocolSuggestions,
+                      onChain: onChainBaseline.protocols,
+                      alsoStaged: composedProtoSet,
+                    })}
                   </div>
 
                   {/* Recipients whitelist */}
                   <div>
                     <label style={labelStyle}>{t('agents.ethRecipientsLabel')}</label>
                     <p style={{ margin: '0 0 8px', fontSize: '11px', color: C.subtle, lineHeight: '1.4' }}>
-                      {t('agents.ethRecipientsHint')}
+                      {isV5 ? t('agents.v5.recipientsHint') : t('agents.ethRecipientsHint')}
                     </p>
                     {!fAnyRecipient && (
-                      <AddressListInput
-                        items={fRecipients}
-                        onAdd={v => setFRecipients(prev => [...prev, v])}
-                        onRemove={i => setFRecipients(prev => prev.filter((_, idx) => idx !== i))}
-                        input={fRecipientInput}
-                        setInput={setFRecipientInput}
-                        placeholder="0x... recipient address"
-                        onChain={onChainBaseline.recipients}
-                      />
+                      AddressListInput({
+                        items: fRecipients,
+                        onAdd: v => setFRecipients(prev => [...prev, v]),
+                        onRemove: i => setFRecipients(prev => prev.filter((_, idx) => idx !== i)),
+                        input: fRecipientInput,
+                        setInput: setFRecipientInput,
+                        placeholder: '0x... recipient address',
+                        onChain: onChainBaseline.recipients,
+                      })
                     )}
-                    <label style={{
+                    {!isV5 && <label style={{
                       display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px',
                       padding: '10px', borderRadius: '6px', cursor: 'pointer',
                       backgroundColor: fAnyRecipient ? 'rgba(246,173,85,0.06)' : 'transparent',
@@ -1591,7 +1912,7 @@ export default function AgentsPage() {
                           </span>
                         )}
                       </span>
-                    </label>
+                    </label>}
                   </div>
 
                   {/* Expiry */}
@@ -1630,13 +1951,28 @@ export default function AgentsPage() {
                       {t('agents.revTitle')}
                     </p>
                     <div style={{ display: 'grid', gap: '5px', fontSize: '12px', color: C.muted }}>
-                      <div>{t('agents.revMaxPerTx', { v: `${formatEther(revision.args.maxPerTxWei)} ETH` })}</div>
+                      <div>{t('agents.revMaxPerTx', { v: capText(revision.args.maxPerTxWei, v => `${formatEther(v)} ETH`) })}</div>
                       <div>{t('agents.revExpiry', { v: new Date(Number(revision.args.expiry) * 1000).toLocaleString() })}</div>
                       <div>{t('agents.revTokens', { n: revision.args.allowedTokens.length })}</div>
-                      <div>{revision.args.allowedRecipients.length > 0
-                        ? t('agents.revRecipients', { n: revision.args.allowedRecipients.length })
-                        : t('agents.revAnyRecipient')}</div>
+                      {(revision.args.allowedRecipients.length > 0 || !isV5) && (
+                        <div>{revision.args.allowedRecipients.length > 0
+                          ? t('agents.revRecipients', { n: revision.args.allowedRecipients.length })
+                          : t('agents.revAnyRecipient')}</div>
+                      )}
+                      {revision.permit2Calls.length > 0 && (
+                        <div>{t('agents.v5.revPermit2', { n: revision.permit2Calls.length })}</div>
+                      )}
                     </div>
+                    {revision.bloqueado.length > 0 && (
+                      <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${C.border}` }}>
+                        <p style={{ margin: '0 0 6px', fontSize: '12px', color: C.info, fontWeight: 600 }}>
+                          {t('agents.v5.revBlockedTitle')}
+                        </p>
+                        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: C.muted, lineHeight: 1.6 }}>
+                          {revision.bloqueado.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
                     {revision.sinTope.length > 0 && (
                       <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${C.border}` }}>
                         <p style={{ margin: '0 0 6px', fontSize: '12px', color: C.warn, fontWeight: 600 }}>
@@ -1766,6 +2102,74 @@ export default function AgentsPage() {
                      actionStatus === 'signing' ? t('agents.faceId') :
                      actionStatus === 'sending' ? t('agents.sending') :
                      t('agents.modalIncreaseTitle')}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── V5: renew modal ─────────────────────────────────────────── */}
+            {modal.type === 'renew' && (
+              <>
+                <h2 style={{ fontSize: '18px', fontWeight: '600', color: C.text, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+                  {t('agents.v5.modalRenewTitle')}
+                </h2>
+                <p style={{ fontSize: '13px', color: C.muted, margin: '0 0 16px' }}>
+                  {shortAddr(modal.agent.address)}
+                </p>
+                <p style={{ fontSize: '12px', color: C.subtle, margin: '0 0 12px' }}>
+                  {t('agents.v5.renewCurrent')}
+                  <span style={{ color: C.muted }}>{new Date(Number(modal.agent.perm.expiry) * 1000).toLocaleString()}</span>
+                </p>
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={labelStyle}>{t('agents.expiry')}</label>
+                  <input
+                    type="datetime-local"
+                    value={fRenewExpiry}
+                    onChange={e => setFRenewExpiry(e.target.value)}
+                    style={{ ...inputStyle, colorScheme: 'dark' }}
+                  />
+                </div>
+                <p style={{ fontSize: '11px', color: C.subtle, margin: '0 0 16px', lineHeight: '1.5' }}>
+                  {t('agents.v5.renewHint')}
+                </p>
+
+                {actionError && (
+                  <p style={{ fontSize: '12px', color: C.error, margin: '0 0 12px' }}>{actionError}</p>
+                )}
+                {actionStatus === 'success' && actionTxHash && (
+                  <div style={{ marginBottom: '12px', padding: '10px 14px', backgroundColor: 'rgba(104,211,145,0.06)', border: '1px solid rgba(104,211,145,0.2)', borderRadius: '6px' }}>
+                    <span style={{ fontSize: '12px', color: C.success }}>✓ TX: </span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '12px', color: C.muted }}>{shortAddr(actionTxHash)}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={closeModal}
+                    style={{
+                      flex: 1, padding: '12px', backgroundColor: 'transparent',
+                      border: `1px solid ${C.border}`, borderRadius: '6px',
+                      color: C.muted, fontSize: '14px', cursor: 'pointer',
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={() => handleRenew(modal.agent)}
+                    disabled={actionStatus === 'building' || actionStatus === 'signing' || actionStatus === 'sending'}
+                    className="agent-btn"
+                    style={{
+                      flex: 2, padding: '12px', backgroundColor: C.gold,
+                      border: 'none', borderRadius: '6px',
+                      color: '#000', fontSize: '14px', fontWeight: '600',
+                      cursor: 'pointer',
+                      opacity: ['building', 'signing', 'sending'].includes(actionStatus) ? 0.7 : 1,
+                    }}
+                  >
+                    {actionStatus === 'building' ? t('agents.preparing') :
+                     actionStatus === 'signing' ? t('agents.faceId') :
+                     actionStatus === 'sending' ? t('agents.sending') :
+                     t('agents.v5.renewBtn')}
                   </button>
                 </div>
               </>

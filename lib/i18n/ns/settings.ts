@@ -52,7 +52,7 @@ export const settings = {
       guardianRotateConfirm: 'I understand this replaces all three current guardians',
       guardianRotateCtaSubmit: 'Replace guardians',
       guardianRotateDone: 'Guardians replaced. Only the new three can start a recovery now.',
-      guardianRotateBlocked: 'A recovery is under way on this wallet, so the contract will not allow the guardians to be changed — otherwise a stolen passkey could swap them out mid-recovery. Cancel the recovery first.',
+      guardianRotateBlocked: 'A recovery is under way on this wallet. While it lasts, the contract does not allow changing the guardians. If you did not ask for it, cancel it: until it is executed, your current passkey is still the owner.',
       guardianRotateBlockedCta: 'Cancel recovery',
       guardianRotateOldGeneration: 'This wallet runs {generation} bytecode, where the guardians are fixed once and for all — changing them was added in V4. Nothing in the app can work around that: it is the contract you are already running. Moving to a V4 wallet is what gives you the ability to change them.',
       loading: 'Loading...',
@@ -64,8 +64,16 @@ export const settings = {
       signOut: 'Sign out',
       clearAll: 'Delete all local data',
       clearConfirm: 'Delete all local data? This will remove your session, biometric credential and address book. You will not be able to recover access without your original WebAuthn device.',
+      // Developers
+      sectionDevelopers: 'Developers',
+      sectionActiveNetworks: 'Active networks',
+      activeNetworksDesc: 'Networks where this wallet exists. Click one to open it in its explorer.',
+      activeNetworksLoading: 'Checking networks…',
+      activeNetworksNone: 'This wallet does not exist on any network yet.',
+      devDocsTitle: 'Developer documentation',
+      devDocsDesc: 'SDK, MCP server, contracts and how to connect your AI. Opens in a new tab.',
       // Footer
-      version: 'v1.1.8',
+      version: 'v1.1.9',
     },
   },
   es: {
@@ -121,7 +129,7 @@ export const settings = {
       guardianRotateConfirm: 'Entiendo que esto sustituye a los tres guardianes actuales',
       guardianRotateCtaSubmit: 'Sustituir guardianes',
       guardianRotateDone: 'Guardianes sustituidos. Ahora solo los tres nuevos pueden iniciar una recuperación.',
-      guardianRotateBlocked: 'Hay una recuperación en marcha en esta wallet, así que el contrato no deja cambiar los guardianes — si no, una passkey robada podría cambiarlos a mitad de la recuperación. Cancela primero la recuperación.',
+      guardianRotateBlocked: 'Hay una recuperación en marcha en esta wallet. Mientras dure, el contrato no deja cambiar los guardianes. Si no la has pedido tú, cancélala: hasta que se ejecute, tu passkey actual sigue siendo la dueña.',
       guardianRotateBlockedCta: 'Cancelar recuperación',
       guardianRotateOldGeneration: 'Esta wallet lleva bytecode {generation}, donde los guardianes se fijan una sola vez y para siempre — poder cambiarlos llegó con la V4. La app no puede sortearlo: es el contrato que ya tienes desplegado. Pasar a una wallet V4 es lo que te da esa posibilidad.',
       loading: 'Cargando...',
@@ -134,7 +142,15 @@ export const settings = {
       clearAll: 'Borrar todos los datos locales',
       clearConfirm: '¿Borrar todos los datos locales? Esta acción eliminará tu sesión, credencial biométrica y libreta de direcciones. No podrás recuperar acceso sin tu dispositivo WebAuthn original.',
       // Footer
-      version: 'v1.1.8',
+      // Desarrolladores
+      sectionDevelopers: 'Desarrolladores',
+      sectionActiveNetworks: 'Redes activas',
+      activeNetworksDesc: 'Redes en las que existe esta wallet. Pulsa una para abrirla en su explorador.',
+      activeNetworksLoading: 'Comprobando redes…',
+      activeNetworksNone: 'Esta wallet todavía no existe en ninguna red.',
+      devDocsTitle: 'Documentación para desarrolladores',
+      devDocsDesc: 'SDK, servidor MCP, contratos y cómo conectar tu IA. Se abre en otra pestaña.',
+      version: 'v1.1.9',
     },
   },
 }

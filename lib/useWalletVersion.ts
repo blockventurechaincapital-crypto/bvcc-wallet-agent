@@ -3,17 +3,23 @@ import { useState, useEffect } from 'react'
 import { createPublicClient, type Address } from 'viem'
 import { useWalletAddress } from './useWalletAddress'
 import { useNetwork } from './NetworkContext'
-import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from './abis'
+import { BVCC_WALLET_ABI } from './abis'
+import { getWalletAddress, getAgentWalletAddress } from './wallet'
 import { rpcTransport } from './rpc'
 
-/** The generation currently deployed. Wallets on anything older should migrate. */
-export const CURRENT_WALLET_VERSION = 4
+/**
+ * The generation the active network's factories create now (network.contracts.walletVersion).
+ * Wallets on anything older should migrate. It can differ between networks while a new
+ * generation is rolled out one network at a time.
+ */
 
 export interface WalletVersionState {
-  /** 1..4, or null while loading / if the wallet does not report a domain. */
+  /** 1..5, or null while loading / if the wallet does not report a domain. */
   version: number | null
+  /** The generation this network's factories create now. */
+  current: number
   isOutdated: boolean
-  /** Where this passkey's V4 wallet would live, so the user can be shown the target. */
+  /** Where this passkey's current-generation wallet would live, so the user can be shown the target. */
   upgradeAddress: Address | null
   isLoading: boolean
 }
@@ -30,13 +36,14 @@ export interface WalletVersionState {
 export function useWalletVersion(): WalletVersionState {
   const { address, isLoaded } = useWalletAddress()
   const { network } = useNetwork()
+  const current = network.contracts.walletVersion
   const [state, setState] = useState<WalletVersionState>({
-    version: null, isOutdated: false, upgradeAddress: null, isLoading: true,
+    version: null, current, isOutdated: false, upgradeAddress: null, isLoading: true,
   })
 
   useEffect(() => {
     if (!isLoaded || !address) {
-      setState({ version: null, isOutdated: false, upgradeAddress: null, isLoading: false })
+      setState({ version: null, current, isOutdated: false, upgradeAddress: null, isLoading: false })
       return
     }
     let cancelled = false
@@ -47,7 +54,7 @@ export function useWalletVersion(): WalletVersionState {
         const { domain } = await client.getEip712Domain({ address: address as Address })
         const match = /^BVCCSmartWalletV(\d+)$/.exec(domain.name ?? '')
         const version = match ? Number(match[1]) : null
-        const isOutdated = version !== null && version < CURRENT_WALLET_VERSION
+        const isOutdated = version !== null && version < current
 
         let upgradeAddress: Address | null = null
         if (isOutdated) {
@@ -61,23 +68,17 @@ export function useWalletVersion(): WalletVersionState {
               abi: [{ type: 'function', name: 'walletType', inputs: [], outputs: [{ type: 'uint8' }], stateMutability: 'view' }],
               functionName: 'walletType',
             }).catch(() => 0)
-            const factory = walletType === 1 ? network.contracts.agentFactory : network.contracts.factory
-            if (factory) {
-              upgradeAddress = await client.readContract({
-                address: factory,
-                abi: walletType === 1 ? BVCC_AGENT_WALLET_FACTORY_ABI : BVCC_WALLET_FACTORY_ABI,
-                functionName: 'getWalletAddress',
-                args: [BigInt(qx), BigInt(qy)],
-              }) as Address
-            }
+            upgradeAddress = walletType === 1
+              ? await getAgentWalletAddress(BigInt(qx), BigInt(qy), network)
+              : await getWalletAddress(BigInt(qx), BigInt(qy), network)
           } catch {
             // The banner is worth showing even without the target address.
           }
         }
-        if (!cancelled) setState({ version, isOutdated, upgradeAddress, isLoading: false })
+        if (!cancelled) setState({ version, current, isOutdated, upgradeAddress, isLoading: false })
       } catch {
         // Not a BVCC wallet, or the network is down: say nothing rather than cry wolf.
-        if (!cancelled) setState({ version: null, isOutdated: false, upgradeAddress: null, isLoading: false })
+        if (!cancelled) setState({ version: null, current, isOutdated: false, upgradeAddress: null, isLoading: false })
       }
     })()
 

@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { isAddress, createPublicClient, encodeAbiParameters, encodeFunctionData, parseUnits, formatUnits, type Address, type Hex } from 'viem'
-import { authenticateWebAuthn } from '@/lib/webauthn'
+import { signUserOpHash } from '@/lib/walletGeneration'
 import { BVCC_WALLET_ABI } from '@/lib/abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from '@/lib/entrypoint'
 import { USEROP_TOTAL_GAS, USEROP_VERIFICATION_GAS, USEROP_CALL_GAS, USEROP_PREVERIFICATION_GAS } from '@/lib/executeUserOp'
@@ -91,12 +91,6 @@ function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
 }
 
-function hexToBytes(hex: Hex): Uint8Array {
-  const h = hex.slice(2)
-  const arr = new Uint8Array(h.length / 2)
-  for (let i = 0; i < arr.length; i++) arr[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
-  return arr
-}
 
 function SendPageInner() {
   const router = useRouter()
@@ -345,32 +339,9 @@ function SendPageInner() {
 
       // ── 6. Face ID ──────────────────────────────────────────────────────────
       setStatus('signing')
-      const { r, s, authenticatorData, clientDataJSON: clientDataHex } =
-        await authenticateWebAuthn(credentialId, hexToBytes(userOpHash))
-
-      // ── 7. WebAuthn signature ───────────────────────────────────────────────
-      const clientDataStr = new TextDecoder().decode(hexToBytes(clientDataHex))
-      const challengeIndex = BigInt(clientDataStr.indexOf('"challenge":'))
-      const typeIndex = BigInt(clientDataStr.indexOf('"type":'))
-
-      const signature = encodeAbiParameters(
-        [
-          { name: 'r', type: 'bytes32' },
-          { name: 's', type: 'bytes32' },
-          { name: 'challengeIndex', type: 'uint256' },
-          { name: 'typeIndex', type: 'uint256' },
-          { name: 'authenticatorData', type: 'bytes' },
-          { name: 'clientDataJSON', type: 'string' },
-        ],
-        [
-          `0x${r.toString(16).padStart(64, '0')}` as Hex,
-          `0x${s.toString(16).padStart(64, '0')}` as Hex,
-          challengeIndex,
-          typeIndex,
-          authenticatorData,
-          clientDataStr,
-        ]
-      )
+      const signature = await signUserOpHash({
+        client: publicClient, network, walletAddress: walletAddress as Address, credentialId, userOpHash,
+      })
 
       // ── 8. Submit via server bundler ────────────────────────────────────────
       setStatus('sending')

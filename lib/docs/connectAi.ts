@@ -13,7 +13,7 @@ CHAIN_ID=42161
 
 const CODE_CLAUDE_CODE = `claude mcp add bvcc-agent-wallet \\
   --env BVCC_ENV_FILE=/secure/agent.env \\
-  -- npx -y @bvcc/agent-mcp`
+  -- npx -y @bvcc/agent-mcp@latest`
 
 const CODE_MCP_JSON = `{
   "mcpServers": {
@@ -41,7 +41,7 @@ export const connectAi: LocalizedDoc = {
   en: {
     title: 'Connect an AI Assistant (MCP)',
     intro:
-      'Connect Hermes, Claude, Cursor or LM Studio to a BVCC Agent Wallet over MCP. One command exposes 53 tools — transfers, swaps, Aave v3 lending and Uniswap v3/v4 liquidity — that the assistant calls on your behalf; every spend limit, allowed token and recipient is enforced on-chain, not by the MCP. The MCP adds no powers: the agent can only do what you authorized in the dashboard.',
+      'Connect Hermes, Claude, Cursor or LM Studio to a BVCC Agent Wallet over MCP. One command exposes 57 tools — transfers, swaps, Aave v3 lending and Uniswap v3/v4 liquidity — that the assistant calls on your behalf; every spend limit, allowed token and recipient is enforced on-chain, not by the MCP. The MCP adds no powers: the agent can only do what you authorized in the dashboard.',
     blocks: [
       {
         type: 'callout',
@@ -54,7 +54,7 @@ export const connectAi: LocalizedDoc = {
         type: 'list',
         items: [
           'Your assistant speaks **MCP** natively (Hermes, Claude Code, the Claude app, Cursor, LM Studio).',
-          '`npx -y @bvcc/agent-mcp` registers the tools — no plugin to install, no adapter to write.',
+          '`npx -y @bvcc/agent-mcp@latest` registers the tools — no plugin to install, no adapter to write.',
           'The agent is a normal EOA with its **own keypair** that signs `executeAsAgent` and pays its own gas.',
           'The **contract** is the source of truth: a blocked action reverts and the tool returns a `humanMessage` + `suggestedAction`.',
           'Current wallets are `BVCCAgentWalletV4`. On top of spend limits, V4 requires the agent to stay a plain EOA and gates every DeFi call through a **call policy** — see step 3.',
@@ -184,7 +184,7 @@ export const connectAi: LocalizedDoc = {
       {
         type: 'callout',
         tone: 'info',
-        text: 'Then **Save server → Reload MCP**. The first launch is slow — npx is downloading the package. The tools will **not** appear under "Skills & Tools" (that tab lists built-in tools), but the model has them: the log shows `registered 53 tool(s)`.',
+        text: 'Then **Save server → Reload MCP**. The first launch is slow — npx is downloading the package. The tools will **not** appear under "Skills & Tools" (that tab lists built-in tools), but the model has them: the log shows `registered 57 tool(s)`.',
       },
 
       { type: 'h2', text: 'Narrowing the surface' },
@@ -239,7 +239,7 @@ export const connectAi: LocalizedDoc = {
   es: {
     title: 'Conecta un asistente IA (MCP)',
     intro:
-      'Conecta Hermes, Claude, Cursor o LM Studio a una BVCC Agent Wallet vía MCP. Un solo comando expone 53 tools — transferencias, swaps, préstamos en Aave v3 y liquidez en Uniswap v3/v4 — que el asistente llama por ti; cada límite de gasto, token permitido y destinatario se impone on-chain, no en el MCP. El MCP no añade poderes: el agente solo puede hacer lo que autorizaste en el dashboard.',
+      'Conecta Hermes, Claude, Cursor o LM Studio a una BVCC Agent Wallet vía MCP. Un solo comando expone 57 tools — transferencias, swaps, préstamos en Aave v3 y liquidez en Uniswap v3/v4 — que el asistente llama por ti; cada límite de gasto, token permitido y destinatario se impone on-chain, no en el MCP. El MCP no añade poderes: el agente solo puede hacer lo que autorizaste en el dashboard.',
     blocks: [
       {
         type: 'callout',
@@ -252,7 +252,7 @@ export const connectAi: LocalizedDoc = {
         type: 'list',
         items: [
           'Tu asistente habla **MCP** de forma nativa (Hermes, Claude Code, la app de Claude, Cursor, LM Studio).',
-          '`npx -y @bvcc/agent-mcp` registra las tools — sin plugins que instalar ni adaptadores que escribir.',
+          '`npx -y @bvcc/agent-mcp@latest` registra las tools — sin plugins que instalar ni adaptadores que escribir.',
           'El agente es una EOA normal con su **propio par de claves** que firma `executeAsAgent` y paga su propio gas.',
           'El **contrato** es la fuente de verdad: una acción bloqueada revierte y la tool devuelve `humanMessage` + `suggestedAction`.',
           'Las wallets actuales son `BVCCAgentWalletV4`. Además de los límites de gasto, V4 exige que el agente siga siendo una EOA pura y filtra cada llamada DeFi por una **call policy** — mira el paso 3.',
@@ -382,7 +382,7 @@ export const connectAi: LocalizedDoc = {
       {
         type: 'callout',
         tone: 'info',
-        text: 'Luego **Save server → Reload MCP**. El primer arranque tarda — npx está descargando el paquete. Las tools **no** aparecen en "Skills & Tools" (esa pestaña lista las tools integradas), pero el modelo las tiene: el log muestra `registered 53 tool(s)`.',
+        text: 'Luego **Save server → Reload MCP**. El primer arranque tarda — npx está descargando el paquete. Las tools **no** aparecen en "Skills & Tools" (esa pestaña lista las tools integradas), pero el modelo las tiene: el log muestra `registered 57 tool(s)`.',
       },
 
       { type: 'h2', text: 'Reducir la superficie' },

@@ -20,6 +20,7 @@ export type CapabilityId =
   | 'swap'
   | 'swapNative'
   | 'swapV4'
+  | 'wrapNative'
   | 'provideLiquidityV3'
   | 'provideLiquidityV4'
   | 'aaveLend'
@@ -30,6 +31,7 @@ export const CAPABILITY_ORDER: CapabilityId[] = [
   'swap',
   'swapNative',
   'swapV4',
+  'wrapNative',
   'provideLiquidityV3',
   'provideLiquidityV4',
   'aaveLend',
@@ -115,31 +117,94 @@ export interface CapabilityBundle {
   requiredTokens: Address[]
   /** Added to allowedRecipients *only if the destination whitelist is active*. */
   recipients: Address[]
+  /**
+   * V5: contracts that pull the agent's tokens through Permit2. The owner grants those
+   * allowances when authorizing (see permit2AllowanceCalls); the agent cannot.
+   */
+  permit2Spenders: Address[]
+}
+
+/**
+ * V5: every protocol call by an agent needs an on-chain validator: the Universal Router
+ * (ERC-20 swaps), the v4 PositionManager, the Aave v3 Pool, the v3 NFPM and the wrapped
+ * native token (wrap / unwrap). SwapRouter02 and Permit2 have none, so the capabilities
+ * built on them are not offered. An approve's spender only has to be an allowed
+ * protocol, so no capability needs recipients.
+ */
+function bundlesForV5(a: ChainAddrs): Partial<Record<CapabilityId, CapabilityBundle>> {
+  const bundles: Partial<Record<CapabilityId, CapabilityBundle>> = {
+    swapV4: {
+      id: 'swapV4',
+      protocols: [a.universalRouter],
+      requiredTokens: [],
+      recipients: [],
+      permit2Spenders: [a.universalRouter],
+    },
+    // Wrap / unwrap: the wrapped token is charged to its own limits, so it must be an
+    // allowed token too.
+    wrapNative: {
+      id: 'wrapNative',
+      protocols: [a.weth],
+      requiredTokens: [a.weth],
+      recipients: [],
+      permit2Spenders: [],
+    },
+    // The NFPM pulls both pair tokens through a plain approve inside the batch (reset
+    // after it), not Permit2. The pair tokens are the user's choice.
+    provideLiquidityV3: {
+      id: 'provideLiquidityV3',
+      protocols: [a.nfpm],
+      requiredTokens: [],
+      recipients: [],
+      permit2Spenders: [],
+    },
+    aaveLend: {
+      id: 'aaveLend',
+      protocols: [a.aavePool],
+      requiredTokens: [],
+      recipients: [],
+      permit2Spenders: [],
+    },
+  }
+  if (a.positionManagerV4) {
+    bundles.provideLiquidityV4 = {
+      id: 'provideLiquidityV4',
+      protocols: [a.positionManagerV4],
+      requiredTokens: [],
+      recipients: [],
+      permit2Spenders: [a.positionManagerV4],
+    }
+  }
+  return bundles
 }
 
 // Partial: some capabilities exist only where the chain has the contract (v4 LP
 // needs a v4 PositionManager, absent on Polygon/Arb-Sepolia).
-function bundlesFor(chainId: number): Partial<Record<CapabilityId, CapabilityBundle>> | null {
+function bundlesFor(chainId: number, generation = 4): Partial<Record<CapabilityId, CapabilityBundle>> | null {
   const a = ADDRS[chainId]
   if (!a) return null
+  if (generation >= 5) return bundlesForV5(a)
   const bundles: Partial<Record<CapabilityId, CapabilityBundle>> = {
     swap: {
       id: 'swap',
       protocols: [a.swapRouter02],
       requiredTokens: [],
       recipients: [a.swapRouter02], // approve(SwapRouter02) is Case 2b
+      permit2Spenders: [],
     },
     swapNative: {
       id: 'swapNative',
       protocols: [a.swapRouter02, a.weth], // WETH has its own deposit/withdraw policies
       requiredTokens: [a.weth], // and must be an allowed token for the swap's approve
       recipients: [a.swapRouter02],
+      permit2Spenders: [],
     },
     swapV4: {
       id: 'swapV4',
       protocols: [a.universalRouter, a.permit2],
       requiredTokens: [],
       recipients: [a.permit2], // approve(Permit2) is Case 2b; the UR is reached via Permit2
+      permit2Spenders: [],
     },
     provideLiquidityV3: {
       id: 'provideLiquidityV3',
@@ -148,18 +213,21 @@ function bundlesFor(chainId: number): Partial<Record<CapabilityId, CapabilityBun
       // themselves, so nothing is forced here (leaving it empty avoids implying a pair).
       requiredTokens: [],
       recipients: [a.nfpm], // mint approves BOTH tokens to the NFPM — Case 2b
+      permit2Spenders: [],
     },
     aaveLend: {
       id: 'aaveLend',
       protocols: [a.aavePool],
       requiredTokens: [],
       recipients: [a.aavePool], // approve(Pool) on supply/repay is Case 2b
+      permit2Spenders: [],
     },
     aaveUnwind: {
       id: 'aaveUnwind',
       protocols: [a.aavePool, a.swapRouter02], // planners swap collateral via SwapRouter02
       requiredTokens: [],
       recipients: [a.aavePool, a.swapRouter02],
+      permit2Spenders: [],
     },
   }
   if (a.positionManagerV4) {
@@ -170,26 +238,33 @@ function bundlesFor(chainId: number): Partial<Record<CapabilityId, CapabilityBun
       protocols: [a.positionManagerV4, a.permit2],
       requiredTokens: [],
       recipients: [a.permit2], // approve(Permit2) on each ERC-20 side is Case 2b
+      permit2Spenders: [],
     }
   }
   return bundles
 }
 
+/** The protocol contracts the capabilities are built on, for a chain. */
+export function protocolAddresses(chainId: number): Readonly<ChainAddrs> | null {
+  return ADDRS[chainId] ?? null
+}
+
 /** Capability ids offered on a chain — only those whose contracts exist there. */
-export function agentCapabilitiesFor(chainId: number): CapabilityId[] {
-  const b = bundlesFor(chainId)
+export function agentCapabilitiesFor(chainId: number, generation = 4): CapabilityId[] {
+  const b = bundlesFor(chainId, generation)
   if (!b) return []
   return CAPABILITY_ORDER.filter((id) => b[id] != null)
 }
 
-export function capabilityBundle(chainId: number, id: CapabilityId): CapabilityBundle | null {
-  return bundlesFor(chainId)?.[id] ?? null
+export function capabilityBundle(chainId: number, id: CapabilityId, generation = 4): CapabilityBundle | null {
+  return bundlesFor(chainId, generation)?.[id] ?? null
 }
 
 export interface ComposedConfig {
   protocols: Address[]
   requiredTokens: Address[]
   recipients: Address[]
+  permit2Spenders: Address[]
 }
 
 function dedupe(xs: Address[]): Address[] {
@@ -206,28 +281,35 @@ function dedupe(xs: Address[]): Address[] {
 }
 
 /** Merge the bundles of the selected capabilities into one deduped config. */
-export function composeFromCapabilities(chainId: number, selected: CapabilityId[]): ComposedConfig {
-  const b = bundlesFor(chainId)
-  if (!b) return { protocols: [], requiredTokens: [], recipients: [] }
+export function composeFromCapabilities(chainId: number, selected: CapabilityId[], generation = 4): ComposedConfig {
+  const b = bundlesFor(chainId, generation)
+  if (!b) return { protocols: [], requiredTokens: [], recipients: [], permit2Spenders: [] }
   const protocols: Address[] = []
   const requiredTokens: Address[] = []
   const recipients: Address[] = []
+  const permit2Spenders: Address[] = []
   for (const id of selected) {
     const bundle = b[id]
     if (!bundle) continue
     protocols.push(...bundle.protocols)
     requiredTokens.push(...bundle.requiredTokens)
     recipients.push(...bundle.recipients)
+    permit2Spenders.push(...bundle.permit2Spenders)
   }
-  return { protocols: dedupe(protocols), requiredTokens: dedupe(requiredTokens), recipients: dedupe(recipients) }
+  return {
+    protocols: dedupe(protocols),
+    requiredTokens: dedupe(requiredTokens),
+    recipients: dedupe(recipients),
+    permit2Spenders: dedupe(permit2Spenders),
+  }
 }
 
 /**
  * Which capabilities a set of whitelisted protocols already covers.
  * Used to pre-select the picker when editing, and to describe an agent's card.
  */
-export function capabilitiesFromProtocols(chainId: number, protocols: Address[]): CapabilityId[] {
-  const b = bundlesFor(chainId)
+export function capabilitiesFromProtocols(chainId: number, protocols: Address[], generation = 4): CapabilityId[] {
+  const b = bundlesFor(chainId, generation)
   if (!b) return []
   const have = new Set(protocols.map((p) => p.toLowerCase()))
   return CAPABILITY_ORDER.filter((id) => {
@@ -237,8 +319,8 @@ export function capabilitiesFromProtocols(chainId: number, protocols: Address[])
 }
 
 /** Reverse lookup: which selected capabilities pulled in a given address (for "added by" labels). */
-export function capabilitiesForAddress(chainId: number, selected: CapabilityId[], address: string): CapabilityId[] {
-  const b = bundlesFor(chainId)
+export function capabilitiesForAddress(chainId: number, selected: CapabilityId[], address: string, generation = 4): CapabilityId[] {
+  const b = bundlesFor(chainId, generation)
   if (!b) return []
   const k = address.toLowerCase()
   return selected.filter((id) => {

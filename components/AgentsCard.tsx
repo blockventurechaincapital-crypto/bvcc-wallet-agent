@@ -55,14 +55,14 @@ function AgentCard({ wallet, agent, t }: { wallet: string; agent: AgentSummary; 
           <div style={{ fontSize: 12.5, fontWeight: 600, color: '#f0f4f8', fontFamily: 'IBM Plex Mono, monospace' }}>
             {agent.kind === 'unlimited' ? t('dashboard.agentUnlimited') : `${fmtEth(agent.remainingWei)} ETH`}
           </div>
-          {agent.remainingUsd !== undefined && agent.kind !== 'unlimited' && (
+          {agent.remainingUsd !== undefined && agent.kind !== 'unlimited' && agent.kind !== 'none' && (
             <div style={{ fontSize: 10.5, color: '#8892a4' }}>≈ ${agent.remainingUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
           )}
         </div>
       </div>
 
       {/* Barra de presupuesto ETH */}
-      {agent.kind !== 'unlimited' && (
+      {agent.kind !== 'unlimited' && agent.kind !== 'none' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
           <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
             <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 2, transition: 'width 0.3s' }} />

@@ -38,7 +38,7 @@ export const contracts: LocalizedDoc = {
   en: {
     title: 'Contract Reference',
     intro:
-      'Solidity sources live in the `contracts/` folder of the monorepo. Built with Foundry + OpenZeppelin; the V4 line uses a frozen toolchain (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) so the CREATE2 addresses stay deterministic.',
+      'Solidity sources live in the monorepo: V4 in `contracts/`, V5 in `contracts-v5/`. Built with Foundry + OpenZeppelin; the V4 line uses a frozen toolchain (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) so the CREATE2 addresses stay deterministic.',
     blocks: [
       { type: 'h2', text: 'Deployed addresses' },
       { type: 'p', text: 'Deterministic CREATE2 — the factories and both registries have the same address on every network:' },
@@ -155,13 +155,18 @@ export const contracts: LocalizedDoc = {
         ],
       },
       { type: 'callout', tone: 'warn', text: 'No external audit yet — this is experimental beta software.' },
+
+      {"type": "h2", "text": "V5 — new generation"},
+      {"type": "p", "text": "Same CREATE2 addresses on Ethereum, Arbitrum One, Base, BNB Chain, Polygon and Arbitrum Sepolia:"},
+      {"type": "table", "headers": ["Contract", "Address"], "rows": [["BVCCWalletFactoryV5 (personal)", "`0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2`"], ["BVCCWalletFactoryV5 (agent)", "`0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52`"], ["BVCCSmartWalletV5 (logic)", "`0xc9dE89d54BeB786Bc916131CA6C8c5374507Bd15`"], ["BVCCAgentWalletV5 (logic)", "`0x360f991B23a3D5202Dc422292697aB07dA279cFA`"], ["BVCCAgentLogicV5 (library)", "`0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E`"], ["BVCCValidatorRegistryV5", "`0x7269334AE74DCE4e607eec36268383DD35f28350`"], ["BVCCHookRegistryV5", "`0xEaEaC7F6071f7F576Be2aD97898Dd0c0F51BE78A`"]]},
+      {"type": "list", "items": ["Every DeFi call an agent makes goes through a per-chain validator in the registry: Universal Router (swaps), Uniswap v4 and v3 position managers (liquidity), Aave v3 Pool, and the wrapped native token (wrap and unwrap). A validator becomes active 48 hours after it is proposed.", "Guardian recovery works by votes for a concrete key, with a 48-hour wait once two guardians agree; the owner can cancel during the wait.", "Agents can be paused, renewed and blocked from specific contracts one by one."]},
     ],
   },
 
   es: {
     title: 'Referencia de contratos',
     intro:
-      'El código Solidity vive en la carpeta `contracts/` del monorepo. Compilado con Foundry + OpenZeppelin; la línea V4 usa un toolchain congelado (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) para que las direcciones CREATE2 sean deterministas.',
+      'El código Solidity vive en el monorepo: V4 en `contracts/` y V5 en `contracts-v5/`. Compilado con Foundry + OpenZeppelin; la línea V4 usa un toolchain congelado (solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true`) para que las direcciones CREATE2 sean deterministas.',
     blocks: [
       { type: 'h2', text: 'Direcciones desplegadas' },
       { type: 'p', text: 'CREATE2 determinista — las factories y ambos registries tienen la misma dirección en todas las redes:' },
@@ -278,6 +283,11 @@ export const contracts: LocalizedDoc = {
         ],
       },
       { type: 'callout', tone: 'warn', text: 'Aún sin auditoría externa — es software experimental en beta.' },
+
+      {"type": "h2", "text": "V5 — nueva generación"},
+      {"type": "p", "text": "Mismas direcciones CREATE2 en Ethereum, Arbitrum One, Base, BNB Chain, Polygon y Arbitrum Sepolia:"},
+      {"type": "table", "headers": ["Contrato", "Dirección"], "rows": [["BVCCWalletFactoryV5 (personal)", "`0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2`"], ["BVCCWalletFactoryV5 (agente)", "`0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52`"], ["BVCCSmartWalletV5 (lógica)", "`0xc9dE89d54BeB786Bc916131CA6C8c5374507Bd15`"], ["BVCCAgentWalletV5 (lógica)", "`0x360f991B23a3D5202Dc422292697aB07dA279cFA`"], ["BVCCAgentLogicV5 (librería)", "`0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E`"], ["BVCCValidatorRegistryV5", "`0x7269334AE74DCE4e607eec36268383DD35f28350`"], ["BVCCHookRegistryV5", "`0xEaEaC7F6071f7F576Be2aD97898Dd0c0F51BE78A`"]]},
+      {"type": "list", "items": ["Cada llamada DeFi de un agente pasa por un validador de su red en el registro: Universal Router (swaps), los gestores de posiciones de Uniswap v4 y v3 (liquidez), el Pool de Aave v3 y el token nativo envuelto (envolver y desenvolver). Un validador se activa 48 horas después de proponerse.", "La recuperación con guardianes funciona por votos a una clave concreta, con una espera de 48 horas cuando dos guardianes coinciden; el dueño puede cancelar durante la espera.", "Los agentes se pueden pausar, renovar y bloquear en contratos concretos uno a uno."]},
     ],
   },
 }

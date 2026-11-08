@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { createPublicClient, type Address } from 'viem'
-import { BVCC_WALLET_ABI } from '@/lib/abis'
+import { BVCC_WALLET_ABI, BVCC_WALLET_V5_ABI } from '@/lib/abis'
 import { useWalletAddress } from '@/lib/useWalletAddress'
 import { useNetwork } from '@/lib/NetworkContext'
 import { useViewNetworks } from '@/lib/useViewNetworks'
@@ -136,6 +136,21 @@ export default function WalletPage() {
     staleTime: 10_000,
     refetchInterval: 20_000,
     queryFn: async () => {
+      // V5: votes per proposal. A recovery is under way as soon as a guardian votes;
+      // the count shown is the votes of the leading key, the timer that of the armed one.
+      try {
+        const [votes, armed] = await Promise.all([
+          publicClient.readContract({ address: address as Address, abi: BVCC_WALLET_V5_ABI, functionName: 'recoveryVotes' }),
+          publicClient.readContract({ address: address as Address, abi: BVCC_WALLET_V5_ABI, functionName: 'armedRecovery' }),
+        ])
+        const cast = votes.filter(v => BigInt(v) !== 0n)
+        const leading = Math.max(0, ...cast.map(v => cast.filter(w => w === v).length))
+        return {
+          active: cast.length > 0 || BigInt(armed[0]) !== 0n,
+          approvals: leading,
+          readyAt: armed[1] > 0n ? armed[1] : null,
+        }
+      } catch { /* not V5: read the V4 recovery below */ }
       const [inProgress, approvals, readyAt] = await Promise.all([
         publicClient.readContract({
           address: address as Address, abi: BVCC_WALLET_ABI, functionName: 'recoveryInProgress',

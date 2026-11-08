@@ -130,7 +130,7 @@ export const press = {
       tryHeading: 'Try it in a terminal',
       tryNote:
         'Read-only mode drops every write tool. It can read balances, quote swaps and simulate transactions, and it cannot move anything. Reasonable way to look around before pointing it at real funds.',
-      tryCmd: 'BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp',
+      tryCmd: 'BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest',
       tryOut1: '27 tools registered · all writes removed',
       tryOut2: 'read balances · quote swaps · simulate — cannot move funds',
       tryAfter:
@@ -349,7 +349,7 @@ export const press = {
       tryHeading: 'Pruébalo en una terminal',
       tryNote:
         'El modo de solo lectura quita todas las herramientas de escritura. Puede leer saldos, cotizar swaps y simular transacciones, y no puede mover nada. Es una forma razonable de echar un vistazo antes de apuntarlo a fondos reales.',
-      tryCmd: 'BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp',
+      tryCmd: 'BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest',
       tryOut1: '27 herramientas registradas · sin ninguna de escritura',
       tryOut2: 'lee saldos · cotiza swaps · simula — no puede mover fondos',
       tryAfter:

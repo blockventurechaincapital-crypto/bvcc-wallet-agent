@@ -12,17 +12,17 @@ import {
 } from 'wagmi'
 import { QRCodeSVG } from 'qrcode.react'
 import {
-  registerWebAuthn, saveCredential, loadCredential, hasCredential, credentialIdToBytes,
+  registerWebAuthn, saveCredential, loadCredential, hasCredential,
   discoverCredentialId, WrongPasskeyError,
 } from '@/lib/webauthn'
 import { getWalletAddress, getAgentWalletAddress } from '@/lib/wallet'
 import { validateGuardians, ZERO_ADDRESS } from '@/lib/guardianValidation'
-import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI } from '@/lib/abis'
+import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_ABI, BVCC_WALLET_FACTORY_V5_ABI } from '@/lib/abis'
+import { encodeSetGuardians, signCredentialForWallet, toBytes32 } from '@/lib/walletGeneration'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { getPrefundNeed, type PrefundNeed } from '@/lib/prefund'
 import { classifyTransferFailure, failureSummary, type TransferFailure } from '@/lib/txFailure'
-import { encodeFunctionData } from 'viem'
 import { useNetwork } from '@/lib/NetworkContext'
 import { NETWORKS } from '@/lib/networks'
 import MarketingLanding from '@/components/MarketingLanding'
@@ -155,6 +155,7 @@ export default function Home() {
   const [fundingAmount, setFundingAmount] = useState<bigint | null>(null)
   const [setupStop, setSetupStop] = useState<SetupStop | null>(null)
   const [confirmingOwner, setConfirmingOwner] = useState(false)
+  const [signingCredential, setSigningCredential] = useState(false)
   // "Enter with address" with no credential stored for that wallet: the owner key to check the
   // passkey against, waiting for the user's click.
   const [entryCheck, setEntryCheck] = useState<{ wallet: Address; pubKeyX: bigint; pubKeyY: bigint } | null>(null)
@@ -230,11 +231,11 @@ export default function Home() {
 
   /// Registers guardians + credential in one passkey-signed self-call.
   async function registerRecovery(walletAddress: Address, credentialId: string) {
-    const callData = encodeFunctionData({
-      abi: BVCC_WALLET_ABI,
-      functionName: 'setGuardians',
-      args: [guardians as [Address, Address, Address], credentialIdToBytes(credentialId)],
-    })
+    const callData = encodeSetGuardians(
+      network.contracts.walletVersion,
+      guardians as [Address, Address, Address],
+      credentialId,
+    )
     await executeWithFaceId({
       network,
       walletAddress,
@@ -485,6 +486,34 @@ export default function Home() {
     // The confirm screen does not offer the deploy before this, but it is the check the whole
     // migration rests on, so it is enforced where the gas is spent.
     if (!regData.ownerConfirmed) { setError(t('appshell.migrateConfirmBody')); return }
+
+    if (network.contracts.walletVersion >= 5) {
+      // V5: the factory needs the passkey's signature over its own credential id, bound to
+      // the address it will deploy. Guardians follow afterwards in a passkey-signed call.
+      const factory = selectedWalletType === 'agent' ? network.contracts.agentFactory : network.contracts.factory
+      if (!factory) return
+      setError(null)
+      setSigningCredential(true)
+      try {
+        const predicted = selectedWalletType === 'agent'
+          ? await getAgentWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+          : await getWalletAddress(regData.pubKeyX, regData.pubKeyY, network)
+        const { credential, credentialSig } = await signCredentialForWallet(predicted, regData.credentialId)
+        writeContract({
+          address: factory,
+          abi: BVCC_WALLET_FACTORY_V5_ABI,
+          functionName: 'createWallet',
+          args: [toBytes32(regData.pubKeyX), toBytes32(regData.pubKeyY), credential, credentialSig],
+          chainId: network.chainId,
+        })
+      } catch (err) {
+        setError(t('appshell.migratePasskeyFailed').replace('{reason}', failureSummary(err)))
+      } finally {
+        setSigningCredential(false)
+      }
+      return
+    }
+
     // V4: the factory only deploys. Guardians and the credential are registered
     // afterwards, in a passkey-signed self-call — a squatter who deploys someone else's
     // address is left with a shell it cannot configure.
@@ -516,7 +545,7 @@ export default function Home() {
   }
 
   const isOnCorrectNetwork = connectedChainId === network.chainId
-  const isProcessing = isDeploying || isTxConfirming
+  const isProcessing = isDeploying || isTxConfirming || signingCredential
   const injectedConnector = connectors.find(c => c.id === 'injected')
   const wcConnector = connectors.find(c => c.id === 'walletConnect')
 

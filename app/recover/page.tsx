@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { isAddress, type Address } from 'viem'
+import { isAddress, createPublicClient, type Address } from 'viem'
 import {
   useConnect,
   useAccount,
@@ -18,6 +18,10 @@ import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import NetworkSelector from '@/components/NetworkSelector'
 import WcQrConnect from '@/components/WcQrConnect'
+import RecoverV5 from '@/components/RecoverV5'
+import { readWalletGeneration } from '@/lib/walletGeneration'
+import { rpcTransport } from '@/lib/rpc'
+import { useChainNow } from '@/lib/useChainNow'
 
 const C = {
   bg: '#06080f',
@@ -66,12 +70,23 @@ export default function RecoverPage() {
   // para que aprobar sea un acto y no un reflejo.
   const [verifiedPending, setVerifiedPending] = useState(false)
 
-  // Countdown ticker
-  const [now, setNow] = useState(Math.floor(Date.now() / 1000))
+  // Which generation the wallet is. V5 recovers by guardian votes (components/RecoverV5);
+  // older wallets use the initiate / approve flow below. Null until known.
+  const genKey = walletAddress ? `${walletAddress}-${network.chainId}` : null
+  const [genState, setGenState] = useState<{ key: string; gen: number | null } | null>(null)
   useEffect(() => {
-    const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 15_000)
-    return () => clearInterval(t)
-  }, [])
+    if (!walletAddress || !genKey) return
+    let cancelled = false
+    const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
+    readWalletGeneration(client, walletAddress).then(gen => { if (!cancelled) setGenState({ key: genKey, gen }) })
+    return () => { cancelled = true }
+  }, [genKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const generation = !walletAddress ? null : genState?.key === genKey ? genState.gen : 'loading'
+  const isV5 = typeof generation === 'number' && generation >= 5
+  const legacyReads = !!walletAddress && generation !== 'loading' && !isV5
+
+  // Countdown ticker, on chain time: the computer's clock can be off by hours.
+  const now = useChainNow(15_000)
 
   // Wagmi
   const { connect, connectors } = useConnect()
@@ -115,7 +130,7 @@ export default function RecoverPage() {
   // the first configured — so a wallet that lives elsewhere read as nothing, and one deployed on both
   // showed the state of the wrong network while the guardian's transaction went to the chosen one.
   const { data: s1, refetch: refetch1 } = useReadContracts({
-    contracts: walletAddress ? [
+    contracts: walletAddress && legacyReads ? [
       { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [0n], chainId: network.chainId },
       { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [1n], chainId: network.chainId },
       { address: walletAddress, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [2n], chainId: network.chainId },
@@ -172,9 +187,9 @@ export default function RecoverPage() {
   const secsLeft = timelockActive ? Number(recoveryReadyAt! - BigInt(now)) : 0
 
   // State machine
-  const stateLoaded    = walletAddress && g0 !== undefined
+  const stateLoaded    = walletAddress && legacyReads && g0 !== undefined
   // The read came back and failed: no BVCC wallet at this address on this network.
-  const notFoundHere   = !!walletAddress && s1?.[0]?.status === 'failure'
+  const notFoundHere   = !!walletAddress && legacyReads && s1?.[0]?.status === 'failure'
   const stateIdle      = stateLoaded && !recoveryInProgress
   const stateInProgress = stateLoaded && recoveryInProgress && !timelockExpired
   const stateReady     = stateLoaded && recoveryInProgress && timelockExpired
@@ -406,6 +421,9 @@ export default function RecoverPage() {
         )}
       </div>
 
+      {isV5 && walletAddress && <RecoverV5 key={`${walletAddress}-${network.chainId}`} walletAddress={walletAddress} />}
+
+      {!isV5 && generation !== 'loading' && (<>
       {/* ── Estado on-chain ── */}
       {stateLoaded && (
         <>
@@ -749,6 +767,7 @@ export default function RecoverPage() {
           )}
         </div>
       )}
+      </>)}
     </main>
   )
 }

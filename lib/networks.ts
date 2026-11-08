@@ -27,6 +27,9 @@ export type NetworkConfig = {
   contracts: {
     factory: `0x${string}` | null      // null = not deployed yet
     agentFactory: `0x${string}` | null // null = not deployed yet
+    /** Wallet generation the factories above create. Each generation signs and is
+     *  created differently, so the app branches on it (see lib/walletGeneration.ts). */
+    walletVersion: 4 | 5
     entryPoint: `0x${string}`
   }
   tokens: {
@@ -63,8 +66,9 @@ export const NETWORKS: NetworkConfig[] = [
     },
     nativeToken: { symbol: 'ETH', decimals: 18 },
     contracts: {
-      factory: '0xfd105197109244483b5f870501326E6faec9F93c',
-      agentFactory: '0xf3A61F9d64d45362E149A111289546523BCd26a6',
+      factory: '0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2',
+      agentFactory: '0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52',
+      walletVersion: 5,
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -98,6 +102,7 @@ export const NETWORKS: NetworkConfig[] = [
     contracts: {
       factory: '0xfd105197109244483b5f870501326E6faec9F93c',
       agentFactory: '0xf3A61F9d64d45362E149A111289546523BCd26a6',
+      walletVersion: 4,
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -131,6 +136,7 @@ export const NETWORKS: NetworkConfig[] = [
       // V3 factories (CREATE2 → misma address en las 6 redes). Factories V2 viejas: 0x230b…BdEf1 / 0x8D9e…054c.
       factory: '0xfd105197109244483b5f870501326E6faec9F93c',
       agentFactory: '0xf3A61F9d64d45362E149A111289546523BCd26a6',
+      walletVersion: 4,
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -163,6 +169,7 @@ export const NETWORKS: NetworkConfig[] = [
     contracts: {
       factory: '0xfd105197109244483b5f870501326E6faec9F93c',
       agentFactory: '0xf3A61F9d64d45362E149A111289546523BCd26a6',
+      walletVersion: 4,
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -195,6 +202,7 @@ export const NETWORKS: NetworkConfig[] = [
     contracts: {
       factory: '0xfd105197109244483b5f870501326E6faec9F93c',
       agentFactory: '0xf3A61F9d64d45362E149A111289546523BCd26a6',
+      walletVersion: 4,
       entryPoint: ENTRYPOINT,
     },
     tokens: {
@@ -228,6 +236,7 @@ export const NETWORKS: NetworkConfig[] = [
     contracts: {
       factory: '0xfd105197109244483b5f870501326E6faec9F93c',
       agentFactory: '0xf3A61F9d64d45362E149A111289546523BCd26a6',
+      walletVersion: 4,
       entryPoint: ENTRYPOINT,
     },
     tokens: {

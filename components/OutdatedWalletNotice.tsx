@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useWalletVersion, CURRENT_WALLET_VERSION } from '@/lib/useWalletVersion'
+import { useWalletVersion } from '@/lib/useWalletVersion'
 import { useI18n } from '@/lib/i18n/I18nContext'
 
 const GOLD = '#D4AF37'
@@ -18,7 +18,7 @@ function shortAddr(a: string) {
  * modal — because the wallet keeps holding funds on bytecode that a later release fixed.
  */
 export default function OutdatedWalletNotice() {
-  const { version, isOutdated, upgradeAddress, isLoading } = useWalletVersion()
+  const { version, current, isOutdated, upgradeAddress, isLoading } = useWalletVersion()
   const { t } = useI18n()
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
@@ -37,7 +37,7 @@ export default function OutdatedWalletNotice() {
   const title = t('wallet.outdatedTitle').replace('{version}', String(version))
   const body = t('wallet.outdatedBody')
     .replace('{version}', String(version))
-    .replace('{current}', String(CURRENT_WALLET_VERSION))
+    .replace('{current}', String(current))
 
   return (
     <>
@@ -58,7 +58,7 @@ export default function OutdatedWalletNotice() {
             whiteSpace: 'nowrap',
           }}
         >
-          {t('wallet.outdatedCta')}
+          {t('wallet.outdatedCta', { current })}
         </button>
       </div>
 
@@ -85,14 +85,14 @@ export default function OutdatedWalletNotice() {
               {body}
             </p>
             <p style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.6, color: '#c3cbd8' }}>
-              {t('wallet.outdatedHow', { current: CURRENT_WALLET_VERSION })}
+              {t('wallet.outdatedHow', { current })}
             </p>
             {upgradeAddress && (
               <div style={{
                 padding: '10px 12px', marginBottom: '16px', borderRadius: '6px',
                 backgroundColor: 'rgba(255,255,255,0.04)', fontSize: '12px', color: '#8892a4',
               }}>
-                {t('wallet.outdatedNewAddress')}{' '}
+                {t('wallet.outdatedNewAddress', { current })}{' '}
                 <span style={{ fontFamily: 'monospace', color: '#f0f4f8' }}>
                   {shortAddr(upgradeAddress)}
                 </span>
@@ -106,7 +106,7 @@ export default function OutdatedWalletNotice() {
                   backgroundColor: GOLD, border: 'none', borderRadius: '6px', cursor: 'pointer',
                 }}
               >
-                {t('wallet.outdatedCta')}
+                {t('wallet.outdatedCta', { current })}
               </button>
               <button
                 onClick={() => setShowModal(false)}

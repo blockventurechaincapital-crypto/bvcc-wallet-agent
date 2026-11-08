@@ -32,21 +32,25 @@ export function CapabilityPicker({
   explorerBase,
   selected,
   onChange,
+  generation = 4,
 }: {
   chainId: number
+  /** Wallet generation: V5 offers fewer capabilities and words them differently. */
+  generation?: number
   explorerBase?: string
   selected: CapabilityId[]
   onChange: (next: CapabilityId[]) => void
 }) {
   const { t } = useI18n()
-  const available = agentCapabilitiesFor(chainId)
+  const available = agentCapabilitiesFor(chainId, generation)
+  const textKey = generation >= 5 ? 'agents.cap5' : 'agents.cap'
   if (available.length === 0) return null
 
   const isOn = (id: CapabilityId) => selected.includes(id)
   const toggle = (id: CapabilityId) =>
     onChange(isOn(id) ? selected.filter((x) => x !== id) : [...selected, id])
 
-  const composed = composeFromCapabilities(chainId, selected)
+  const composed = composeFromCapabilities(chainId, selected, generation)
 
   return (
     <div>
@@ -63,7 +67,7 @@ export function CapabilityPicker({
         {t('agents.cap.title')}
       </label>
       <p style={{ margin: '0 0 6px', fontSize: '12px', color: C.subtle, lineHeight: 1.5 }}>
-        {t('agents.cap.subtitle')}
+        {t(generation >= 5 ? 'agents.cap5.subtitle' : 'agents.cap.subtitle')}
       </p>
       <a
         href="/docs/agent-permissions"
@@ -77,7 +81,7 @@ export function CapabilityPicker({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {CAPABILITY_ORDER.filter((id) => available.includes(id)).map((id) => {
           const on = isOn(id)
-          const bundle = capabilityBundle(chainId, id)
+          const bundle = capabilityBundle(chainId, id, generation)
           const addrs = bundle
             ? Array.from(
                 new Map(
@@ -108,10 +112,10 @@ export function CapabilityPicker({
                 />
                 <span style={{ flex: 1 }}>
                   <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: C.text }}>
-                    {t(`agents.cap.${id}.title`)}
+                    {t(`${textKey}.${id}.title`)}
                   </span>
                   <span style={{ display: 'block', fontSize: '12px', color: C.muted, lineHeight: 1.45, marginTop: '2px' }}>
-                    {t(`agents.cap.${id}.desc`)}
+                    {t(`${textKey}.${id}.desc`)}
                   </span>
                 </span>
               </label>

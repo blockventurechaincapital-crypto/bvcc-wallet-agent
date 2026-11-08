@@ -33,6 +33,7 @@ export const nav = {
       copyAddress: 'Copy address',
       copiedAddress: 'Copied',
       viewOnExplorer: 'View on the block explorer',
+      openOnExplorer: 'Open on {explorer} ({network})',
 
       // Disconnect
       disconnect: 'Disconnect',
@@ -72,6 +73,7 @@ export const nav = {
       copyAddress: 'Copiar dirección',
       copiedAddress: 'Copiada',
       viewOnExplorer: 'Ver en el explorador',
+      openOnExplorer: 'Abrir en {explorer} ({network})',
 
       // Disconnect
       disconnect: 'Desconectar',

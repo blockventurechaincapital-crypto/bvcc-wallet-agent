@@ -4,27 +4,18 @@ import { createPublicClient, getAddress, formatUnits, type Address } from 'viem'
 import { BVCC_AGENT_WALLET_ABI } from './abis'
 import type { NetworkConfig } from './networks'
 import { rpcTransport } from './rpc'
+import { readWalletGeneration } from './walletGeneration'
+import { capState, readAgentPermission } from './agentPermissions'
 
-type Perm = {
-  dailyLimitWei: bigint
-  totalBudgetWei: bigint
-  totalSpentWei: bigint
-  periodBudgetWei: bigint
-  periodSpentWei: bigint
-  periodDuration: bigint
-  active: boolean
-  allowedTokens: readonly Address[]
-  tokenTotalBudgets: readonly bigint[]
-}
-
-export type AgentBudgetKind = 'period' | 'daily' | 'total' | 'unlimited'
+/** 'none': a V5 agent with an ETH cap at 0, so it cannot move ETH at all. */
+export type AgentBudgetKind = 'period' | 'daily' | 'total' | 'unlimited' | 'none'
 
 export type AgentTokenSpend = {
   token: Address
   symbol: string
   decimals: number
   spent: bigint
-  limit: bigint    // 0 = ilimitado
+  limit: bigint    // 0 = ilimitado o, en V5, nada permitido
 }
 
 export type AgentSummary = {
@@ -57,6 +48,7 @@ function clamp(a: bigint, b: bigint): bigint {
 async function fetchAgents(address: string, network: NetworkConfig): Promise<AgentsSummary> {
   const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
   const addr = address as Address
+  const generation = (await readWalletGeneration(client, addr)) ?? network.contracts.walletVersion
 
   const agentAddrs = await client.readContract({
     address: addr, abi: BVCC_AGENT_WALLET_ABI, functionName: 'getAgents', args: [],
@@ -97,19 +89,24 @@ async function fetchAgents(address: string, network: NetworkConfig): Promise<Age
 
   const agents: AgentSummary[] = await Promise.all(agentAddrs.map(async (a) => {
     const [perm, dailySpent] = await Promise.all([
-      client.readContract({ address: addr, abi: BVCC_AGENT_WALLET_ABI, functionName: 'getAgentPermission', args: [a] }) as Promise<Perm>,
+      readAgentPermission(client, addr, a, generation),
       client.readContract({ address: addr, abi: BVCC_AGENT_WALLET_ABI, functionName: 'getDailySpent', args: [a] }).catch(() => 0n) as Promise<bigint>,
     ])
 
     // Presupuesto ETH (prioridad: período > diario > total)
+    const limited = (v: bigint) => capState(v, generation) === 'limited'
+    const periodOn = perm.periodDuration > 0n
     let kind: AgentBudgetKind = 'unlimited'
     let remainingWei = 0n
     let limitWei = 0n
-    if (perm.periodBudgetWei > 0n && perm.periodDuration > 0n) {
+    if (generation >= 5 && [perm.maxPerTxWei, perm.dailyLimitWei, perm.totalBudgetWei, ...(periodOn ? [perm.periodBudgetWei] : [])]
+      .some(v => capState(v, generation) === 'none')) {
+      kind = 'none'
+    } else if (limited(perm.periodBudgetWei) && periodOn) {
       kind = 'period'; limitWei = perm.periodBudgetWei; remainingWei = clamp(perm.periodBudgetWei, perm.periodSpentWei)
-    } else if (perm.dailyLimitWei > 0n) {
+    } else if (limited(perm.dailyLimitWei)) {
       kind = 'daily'; limitWei = perm.dailyLimitWei; remainingWei = clamp(perm.dailyLimitWei, dailySpent)
-    } else if (perm.totalBudgetWei > 0n) {
+    } else if (limited(perm.totalBudgetWei)) {
       kind = 'total'; limitWei = perm.totalBudgetWei; remainingWei = clamp(perm.totalBudgetWei, perm.totalSpentWei)
     }
     const remainingUsd = nativeUsd > 0 ? Number(formatUnits(remainingWei, 18)) * nativeUsd : undefined
@@ -122,7 +119,8 @@ async function fetchAgents(address: string, network: NetworkConfig): Promise<Age
         client.readContract({ address: addr, abi: BVCC_AGENT_WALLET_ABI, functionName: 'getTokenSpent', args: [a, token] }).catch(() => [0n, 0n] as const) as Promise<readonly [bigint, bigint]>,
         resolve(token),
       ])
-      return { token, symbol: m.symbol, decimals: m.decimals, spent: spentPair[1], limit: budgets[i] ?? 0n }
+      const budget = budgets[i] ?? 0n
+      return { token, symbol: m.symbol, decimals: m.decimals, spent: spentPair[1], limit: limited(budget) ? budget : 0n }
     }))
 
     // Última actividad: último tx del agente (EOA) vía el indexer del explorer

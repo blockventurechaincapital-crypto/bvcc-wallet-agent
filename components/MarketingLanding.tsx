@@ -339,7 +339,7 @@ export default function MarketingLanding({
               <span className="term-title mono">{t('marketing.connectTermTitle')}</span>
             </div>
             <div className="term-body mono">
-              <p className="t-line"><span className="t-prompt">$</span> npx -y @bvcc/agent-mcp</p>
+              <p className="t-line"><span className="t-prompt">$</span> npx -y @bvcc/agent-mcp@latest</p>
               <p className="t-line t-ok">{t('marketing.connectTerm1')}</p>
               <p className="t-line t-ok">{t('marketing.connectTerm2')}</p>
               <p className="t-line"><span className="t-prompt">$</span> npm i @bvcc/agent-sdk</p>

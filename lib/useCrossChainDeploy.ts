@@ -1,6 +1,7 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
 import { createPublicClient, type Address } from 'viem'
+import { readGuardians } from './walletGeneration'
 import { BVCC_WALLET_ABI, WALLET_TYPE_ABI } from './abis'
 import { NETWORKS, type NetworkConfig } from './networks'
 import { getCredentialFromChain, getWalletAddress, getAgentWalletAddress } from './wallet'
@@ -76,13 +77,13 @@ async function fetchSeed(address: Address, target: NetworkConfig): Promise<Deplo
       const code = await client.getCode({ address })
       if (!code || code === '0x') continue
 
-      const [signer, wType, g0, g1, g2] = await Promise.all([
+      const [signer, wType, slots] = await Promise.all([
         client.readContract({ address, abi: BVCC_WALLET_ABI, functionName: 'signer' }),
         client.readContract({ address, abi: WALLET_TYPE_ABI, functionName: 'walletType' }).catch(() => 0),
-        client.readContract({ address, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [0n] }),
-        client.readContract({ address, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [1n] }),
-        client.readContract({ address, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [2n] }),
+        readGuardians(client, address),
       ])
+      if (!slots) throw new Error('Guardians could not be read')
+      const [g0, g1, g2] = slots
 
       // Found the wallet: from here on nothing may send the loop to the next network. The
       // stored credential needs no RPC; the chain lookup is a best effort, and only its

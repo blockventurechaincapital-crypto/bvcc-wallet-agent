@@ -1,6 +1,6 @@
 'use client'
 import { createPublicClient, encodeAbiParameters, encodeFunctionData, type Address, type Hex } from 'viem'
-import { authenticateWebAuthn } from './webauthn'
+import { signUserOpHash } from './walletGeneration'
 import { BVCC_WALLET_ABI } from './abis'
 import { ENTRYPOINT_ADDRESS, ENTRYPOINT_ABI, BATCH_MODE } from './entrypoint'
 import type { NetworkConfig } from './networks'
@@ -23,12 +23,6 @@ export const USEROP_TOTAL_GAS =
 
 function packBytes32(hi: bigint, lo: bigint): Hex {
   return `0x${((hi << 128n) | lo).toString(16).padStart(64, '0')}` as Hex
-}
-function hexToBytes(hex: Hex): Uint8Array {
-  const h = hex.slice(2)
-  const arr = new Uint8Array(h.length / 2)
-  for (let i = 0; i < arr.length; i++) arr[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
-  return arr
 }
 
 // Construye un userOp ERC-4337 con N llamadas (ERC-7821 batch), lo firma con
@@ -82,27 +76,9 @@ export async function executeWithFaceId(opts: {
     address: ENTRYPOINT_ADDRESS, abi: ENTRYPOINT_ABI, functionName: 'getUserOpHash', args: [userOp],
   }) as Hex
 
-  const { r, s, authenticatorData, clientDataJSON: clientDataHex } =
-    await authenticateWebAuthn(credentialId, hexToBytes(userOpHash))
-  const clientDataStr = new TextDecoder().decode(hexToBytes(clientDataHex))
-  const challengeIndex = BigInt(clientDataStr.indexOf('"challenge":'))
-  const typeIndex = BigInt(clientDataStr.indexOf('"type":'))
-
-  const signature = encodeAbiParameters(
-    [
-      { name: 'r', type: 'bytes32' },
-      { name: 's', type: 'bytes32' },
-      { name: 'challengeIndex', type: 'uint256' },
-      { name: 'typeIndex', type: 'uint256' },
-      { name: 'authenticatorData', type: 'bytes' },
-      { name: 'clientDataJSON', type: 'string' },
-    ],
-    [
-      `0x${r.toString(16).padStart(64, '0')}` as Hex,
-      `0x${s.toString(16).padStart(64, '0')}` as Hex,
-      challengeIndex, typeIndex, authenticatorData, clientDataStr,
-    ],
-  )
+  const signature = await signUserOpHash({
+    client: publicClient, network, walletAddress, credentialId, userOpHash,
+  })
 
   const { txHash } = await submitUserOp({
     chainId: network.chainId,

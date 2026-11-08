@@ -2,7 +2,7 @@
 
 # Contract Reference
 
-Solidity sources live in [`contracts/`](../contracts). Built with Foundry + OpenZeppelin. The V4 line uses a frozen toolchain — solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true` — so the CREATE2 addresses stay deterministic.
+Solidity sources live in [`contracts/`](../contracts) (V4) and [`contracts-v5/`](../contracts-v5) (V5). Built with Foundry + OpenZeppelin. The V4 line uses a frozen toolchain — solc 0.8.36, `optimizer_runs = 50`, `evm_version = cancun`, `via_ir = true` — so the CREATE2 addresses stay deterministic.
 
 ## Deployed addresses
 
@@ -17,6 +17,24 @@ Deterministic CREATE2 — the factories and both registries have the **same addr
 | EntryPoint (OpenZeppelin v0.9) | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
 
 Live on **Arbitrum One**, **Base**, **BNB Chain**, **Ethereum**, **Polygon** and **Arbitrum Sepolia** (testnet). The per-chain validators — `BVCCUniversalRouterValidator` and `BVCCPositionManagerValidator` — are each bound to that chain's router / position manager, so their addresses differ per network; they are recorded in [`contracts/deployments/`](../contracts/deployments). Previous V3 factories (`0xD42F61AA…` / `0xd866a756…`) and V2 factories (`0x230b…BdEf1` / `0x8D9e…054c`) are deprecated.
+
+## V5 — new generation
+
+Same CREATE2 addresses on Ethereum, Arbitrum One, Base, BNB Chain, Polygon and Arbitrum Sepolia:
+
+| Contract | Address |
+|---|---|
+| BVCCWalletFactoryV5 (personal) | `0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2` |
+| BVCCWalletFactoryV5 (agent) | `0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52` |
+| BVCCSmartWalletV5 (logic) | `0xc9dE89d54BeB786Bc916131CA6C8c5374507Bd15` |
+| BVCCAgentWalletV5 (logic) | `0x360f991B23a3D5202Dc422292697aB07dA279cFA` |
+| BVCCAgentLogicV5 (library) | `0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E` |
+| BVCCValidatorRegistryV5 | `0x7269334AE74DCE4e607eec36268383DD35f28350` |
+| BVCCHookRegistryV5 | `0xEaEaC7F6071f7F576Be2aD97898Dd0c0F51BE78A` |
+
+- Every DeFi call an agent makes goes through a per-chain validator in the registry: Universal Router (swaps), Uniswap v4 and v3 position managers (liquidity), Aave v3 Pool, and the wrapped native token (wrap and unwrap). A validator becomes active 48 hours after it is proposed.
+- Guardian recovery works by votes for a concrete key, with a 48-hour wait once two guardians agree; the owner can cancel during the wait.
+- Agents can be paused, renewed and blocked from specific contracts one by one.
 
 ## BVCCSmartWalletV4 — personal wallet (`walletType() = 0`)
 

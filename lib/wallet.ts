@@ -1,5 +1,6 @@
 import { createPublicClient, decodeEventLog, pad, parseAbiItem, toEventSelector, type Address, type AbiEvent, type Hex } from 'viem'
-import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI } from './abis'
+import { BVCC_WALLET_FACTORY_ABI, BVCC_AGENT_WALLET_FACTORY_ABI, BVCC_WALLET_FACTORY_V5_ABI } from './abis'
+import { toBytes32 } from './walletGeneration'
 import type { NetworkConfig } from './networks'
 import { rpcTransport } from './rpc'
 
@@ -25,12 +26,7 @@ export async function getWalletAddress(
   network: NetworkConfig,
 ): Promise<`0x${string}`> {
   if (!network.contracts.factory) throw new Error('Factory not deployed on this network')
-  return mkClient(network).readContract({
-    address: network.contracts.factory,
-    abi: BVCC_WALLET_FACTORY_ABI,
-    functionName: 'getWalletAddress',
-    args: [pubKeyX, pubKeyY],
-  })
+  return predictAddress(network, network.contracts.factory, BVCC_WALLET_FACTORY_ABI, pubKeyX, pubKeyY)
 }
 
 // Calcula la address de la agent wallet SIN desplegarla
@@ -40,12 +36,27 @@ export async function getAgentWalletAddress(
   network: NetworkConfig,
 ): Promise<`0x${string}`> {
   if (!network.contracts.agentFactory) throw new Error('AgentFactory not deployed on this network')
-  return mkClient(network).readContract({
-    address: network.contracts.agentFactory,
-    abi: BVCC_AGENT_WALLET_FACTORY_ABI,
-    functionName: 'getWalletAddress',
-    args: [pubKeyX, pubKeyY],
-  })
+  return predictAddress(network, network.contracts.agentFactory, BVCC_AGENT_WALLET_FACTORY_ABI, pubKeyX, pubKeyY)
+}
+
+/** V4 factories take the key as uint256; V5 ones as bytes32. */
+async function predictAddress(
+  network: NetworkConfig,
+  factory: Address,
+  v4Abi: typeof BVCC_WALLET_FACTORY_ABI | typeof BVCC_AGENT_WALLET_FACTORY_ABI,
+  pubKeyX: bigint,
+  pubKeyY: bigint,
+): Promise<`0x${string}`> {
+  const client = mkClient(network)
+  if (network.contracts.walletVersion >= 5) {
+    return client.readContract({
+      address: factory,
+      abi: BVCC_WALLET_FACTORY_V5_ABI,
+      functionName: 'getWalletAddress',
+      args: [toBytes32(pubKeyX), toBytes32(pubKeyY)],
+    })
+  }
+  return client.readContract({ address: factory, abi: v4Abi, functionName: 'getWalletAddress', args: [pubKeyX, pubKeyY] })
 }
 
 // Comprueba si la wallet ya esta desplegada

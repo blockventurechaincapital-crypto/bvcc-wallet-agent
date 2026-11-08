@@ -17,7 +17,8 @@
  * bits 223..192 = PIN_WALLET bitmap (calldata word i must equal the wallet).
  */
 import { encodeFunctionData, getAddress, toFunctionSelector, type Address, type Hex } from 'viem'
-import { BVCC_AGENT_WALLET_ABI } from './abis'
+import { BVCC_AGENT_WALLET_ABI, BVCC_AGENT_WALLET_V5_ABI } from './abis'
+import { protocolAddresses } from './agentCapabilities'
 
 const POLICY_ALLOWED = 1n << 255n
 const POLICY_DEEP = 1n << 254n
@@ -485,4 +486,83 @@ export function policyCallsFor(chainId: number, allowedProtocols: Address[]): He
       args: [target, def.selector, def.policy],
     })
   )
+}
+
+// ── V5 ───────────────────────────────────────────────────────────────────────
+// Policies are per agent, and every protocol call needs DEEP: the validator registry
+// checks recipients, hooks and health itself, so no calldata word is pinned here.
+// Only the contracts with a V5 validator get presets. The selectors are the ones each
+// validator accepts; anything else it denies. The v3 NFPM and the wrapped native token
+// work once their validators are active on the network; until then their calls fail.
+
+function presetsV5(chainId: number): Record<string, ProtocolPreset> {
+  const a = protocolAddresses(chainId)
+  if (!a) return {}
+  const out: Record<string, ProtocolPreset> = {
+    [a.universalRouter.toLowerCase()]: {
+      label: 'Uniswap Universal Router',
+      defs: [deepDef('execute', 'execute(bytes,bytes[],uint256)')],
+    },
+    [a.aavePool.toLowerCase()]: {
+      label: 'Aave v3 Pool',
+      defs: [
+        deepDef('supply',   'supply(address,uint256,address,uint16)'),
+        deepDef('withdraw', 'withdraw(address,uint256,address)'),
+        deepDef('borrow',   'borrow(address,uint256,uint256,uint16,address)'),
+        deepDef('repay',    'repay(address,uint256,uint256,address)'),
+        deepDef('setUserUseReserveAsCollateral', 'setUserUseReserveAsCollateral(address,bool)'),
+        deepDef('setUserEMode', 'setUserEMode(uint8)'),
+      ],
+    },
+    [a.nfpm.toLowerCase()]: {
+      label: 'Uniswap v3 Positions (NFPM)',
+      defs: [
+        deepDef('mint', 'mint((address,address,uint24,int24,int24,uint256,uint256,uint256,uint256,address,uint256))'),
+        deepDef('increaseLiquidity', 'increaseLiquidity((uint256,uint256,uint256,uint256,uint256,uint256))'),
+        deepDef('decreaseLiquidity', 'decreaseLiquidity((uint256,uint128,uint256,uint256,uint256))'),
+        deepDef('collect', 'collect((uint256,address,uint128,uint128))'),
+        deepDef('burn', 'burn(uint256)'),
+      ],
+    },
+    [a.weth.toLowerCase()]: {
+      label: 'Wrapped native token (wrap / unwrap)',
+      defs: [
+        deepDef('deposit', 'deposit()'),
+        deepDef('withdraw', 'withdraw(uint256)'),
+      ],
+    },
+  }
+  if (a.positionManagerV4) {
+    out[a.positionManagerV4.toLowerCase()] = {
+      label: 'Uniswap v4 Positions (PositionManager)',
+      defs: [deepDef('modifyLiquidities', 'modifyLiquidities(bytes,uint256)')],
+    }
+  }
+  return out
+}
+
+/** Labeled V5 preset protocols for the agent-form suggestions. */
+export function presetProtocolSuggestionsV5(chainId: number): { label: string; address: Address }[] {
+  return Object.entries(presetsV5(chainId)).map(([address, preset]) => ({
+    label: preset.label,
+    address: getAddress(address),
+  }))
+}
+
+/** `setAgentCallPolicy` inner-calldata for one agent and its whitelisted protocols. */
+export function policyCallsForAgentV5(chainId: number, agent: Address, allowedProtocols: Address[]): Hex[] {
+  const chain = presetsV5(chainId)
+  const out: Hex[] = []
+  for (const proto of allowedProtocols) {
+    const preset = chain[proto.toLowerCase()]
+    if (!preset) continue
+    for (const d of preset.defs) {
+      out.push(encodeFunctionData({
+        abi: BVCC_AGENT_WALLET_V5_ABI,
+        functionName: 'setAgentCallPolicy',
+        args: [agent, proto, d.selector, d.policy],
+      }))
+    }
+  }
+  return out
 }

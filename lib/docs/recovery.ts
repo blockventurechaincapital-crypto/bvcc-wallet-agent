@@ -120,6 +120,11 @@ export const recovery: LocalizedDoc = {
           'The wallet cannot be deployed at the same address on a new network: the address comes from the key it was created with, and deploying it with that key would hand the new copy to the old passkey. The app warns about this instead of offering the deployment.',
         ],
       },
+
+      {"type": "h2", "text": "V5 wallets: recovery by votes"},
+      {"type": "p", "text": "In a V5 wallet the steps change: instead of one guardian starting and another approving, each guardian votes for a concrete new key. The recovery page detects the wallet's generation and shows the right steps."},
+      {"type": "list", "items": ["Owner: create the new passkey on the recovery page. You get one recovery code, which carries the new key and the passkey's id together. Send it to two guardians through a channel you trust.", "Each guardian connects their wallet, pastes the code, confirms they checked it with you through another channel, and votes. A guardian can move their vote to another key or withdraw it.", "When two guardians vote for the same key, a 48-hour wait starts. Meanwhile the dashboard shows a red banner with the countdown, and you can cancel with your current passkey.", "After 48 hours any guardian executes it. Open the recovery page again on the same device: it remembers the new passkey and offers to save it and enter.", "In an agent wallet, executing the recovery pauses the agents. Resume them with the new passkey once you have checked them."]},
+      {"type": "callout", "tone": "warn", "text": "The contract checks the key when a guardian votes, so an invalid key is rejected at once. Check the code with the owner anyway: a valid key that is not theirs would hand the wallet to someone else."},
     ],
   },
   es: {
@@ -239,6 +244,11 @@ export const recovery: LocalizedDoc = {
           'La wallet no se puede desplegar en la misma dirección en una red nueva: la dirección sale de la clave con la que se creó, y desplegarla con esa clave daría la copia nueva a la passkey antigua. La app avisa de ello en vez de ofrecer el despliegue.',
         ],
       },
+
+      {"type": "h2", "text": "Wallets V5: recuperación por votos"},
+      {"type": "p", "text": "En una wallet V5 los pasos cambian: en lugar de que un guardián inicie y otro apruebe, cada guardián vota una clave nueva concreta. La página de recuperación detecta la generación de la wallet y muestra los pasos que corresponden."},
+      {"type": "list", "items": ["Dueño: crea la passkey nueva en la página de recuperación. Obtendrás un código de recuperación, que lleva juntos la clave nueva y el identificador de la passkey. Envíalo a dos guardianes por un canal de confianza.", "Cada guardián conecta su wallet, pega el código, confirma que lo ha comprobado contigo por otro medio y vota. Un guardián puede cambiar su voto a otra clave o retirarlo.", "Cuando dos guardianes votan la misma clave, empieza una espera de 48 horas. Mientras tanto el dashboard muestra un banner rojo con la cuenta atrás, y puedes cancelar con tu passkey actual.", "Pasadas las 48 horas, cualquier guardián la ejecuta. Vuelve a abrir la página de recuperación en el mismo dispositivo: recuerda la passkey nueva y te ofrece guardarla y entrar.", "En una wallet de agente, al ejecutar la recuperación los agentes quedan pausados. Reanúdalos con la passkey nueva cuando los hayas revisado."]},
+      {"type": "callout", "tone": "warn", "text": "El contrato comprueba la clave cuando un guardián vota, así que una clave no válida se rechaza al momento. Aun así, comprueba el código con el dueño: una clave válida que no sea la suya entregaría la wallet a otra persona."},
     ],
   },
 }

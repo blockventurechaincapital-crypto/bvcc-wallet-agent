@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { useChainNow } from '@/lib/useChainNow'
 
 interface RecoveryBannerProps {
   approvals: number
@@ -18,12 +18,8 @@ function formatCountdown(secondsLeft: number): string {
 
 export default function RecoveryBanner({ approvals, readyAt, onCancel, cancelling }: RecoveryBannerProps) {
   const { t } = useI18n()
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000)
-    return () => clearInterval(id)
-  }, [])
+  // Chain time, not the computer's clock: this countdown is how long the owner has to cancel.
+  const now = useChainNow()
 
   const readyAtNum = readyAt !== null ? Number(readyAt) : 0
   const hasTimer = readyAtNum > 0
@@ -34,7 +30,7 @@ export default function RecoveryBanner({ approvals, readyAt, onCancel, cancellin
     <div
       className="fade-in"
       style={{
-        padding: '16px 20px',
+        padding: '12px 16px',
         marginBottom: '16px',
         backgroundColor: '#1a0a0a',
         border: '1px solid #ff4444',
@@ -42,40 +38,39 @@ export default function RecoveryBanner({ approvals, readyAt, onCancel, cancellin
         color: '#fff',
       }}
     >
-      {/* Title */}
-      <p style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: '700', color: '#ff6666', letterSpacing: '-0.01em' }}>
+      {/* Row 1: title */}
+      <p style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '700', color: '#ff6666', letterSpacing: '-0.01em' }}>
         {t('components.recoveryTitle')}
       </p>
 
-      {/* Approvals */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                backgroundColor: i < approvals ? '#ff4444' : 'transparent',
-                border: `2px solid ${i < approvals ? '#ff4444' : 'rgba(255,68,68,0.35)'}`,
-                transition: 'background 0.2s',
-              }}
-            />
-          ))}
-        </div>
-        <span style={{ fontSize: '12px', color: '#ffaaaa' }}>
-          {t('components.recoverySignatures').replace('{count}', String(approvals))}
-        </span>
-      </div>
+      {/* Row 2: votes and countdown on the left, cancel on the right */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '5px' }}>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: i < approvals ? '#ff4444' : 'transparent',
+                    border: `2px solid ${i < approvals ? '#ff4444' : 'rgba(255,68,68,0.35)'}`,
+                    transition: 'background 0.2s',
+                  }}
+                />
+              ))}
+            </div>
+            <span style={{ fontSize: '12px', color: '#ffaaaa' }}>
+              {t('components.recoverySignatures').replace('{count}', String(approvals))}
+            </span>
+          </div>
 
-      {/* Countdown / Executable badge */}
-      {hasTimer && (
-        <div style={{ marginBottom: '14px' }}>
-          {isExecutable ? (
+          {hasTimer && (isExecutable ? (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '4px 10px',
+              padding: '3px 9px',
               backgroundColor: '#ff2222',
               borderRadius: '5px',
               fontSize: '11px', fontWeight: '700',
@@ -93,31 +88,31 @@ export default function RecoveryBanner({ approvals, readyAt, onCancel, cancellin
                 {formatCountdown(secondsLeft)}
               </span>
             </span>
-          )}
+          ))}
         </div>
-      )}
 
-      {/* Cancel button */}
-      <button
-        onClick={onCancel}
-        disabled={cancelling}
-        style={{
-          width: '100%',
-          padding: '10px 0',
-          backgroundColor: cancelling ? 'rgba(255,68,68,0.3)' : '#ff4444',
-          border: 'none',
-          borderRadius: '7px',
-          color: '#fff',
-          fontSize: '13px',
-          fontWeight: '700',
-          cursor: cancelling ? 'not-allowed' : 'pointer',
-          letterSpacing: '0.01em',
-          transition: 'background 0.15s, opacity 0.15s',
-          opacity: cancelling ? 0.7 : 1,
-        }}
-      >
-        {cancelling ? t('components.recoveryCancelling') : t('components.recoveryCancelBtn')}
-      </button>
+        <button
+          onClick={onCancel}
+          disabled={cancelling}
+          style={{
+            marginLeft: 'auto',
+            padding: '7px 16px',
+            backgroundColor: cancelling ? 'rgba(255,68,68,0.3)' : '#ff4444',
+            border: 'none',
+            borderRadius: '7px',
+            color: '#fff',
+            fontSize: '13px',
+            fontWeight: '700',
+            cursor: cancelling ? 'not-allowed' : 'pointer',
+            letterSpacing: '0.01em',
+            transition: 'background 0.15s, opacity 0.15s',
+            opacity: cancelling ? 0.7 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {cancelling ? t('components.recoveryCancelling') : t('components.recoveryCancelBtn')}
+        </button>
+      </div>
 
       <style>{`
         @keyframes pulse {

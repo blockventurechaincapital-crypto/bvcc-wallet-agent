@@ -30,11 +30,11 @@ export const components = {
       txStatusFailed: 'Fallida',
 
       // RecoveryBanner
-      recoveryTitle: '⚠ Recuperacion en progreso',
+      recoveryTitle: '⚠ Recuperación en progreso',
       recoverySignatures: '{count} de 2 firmas requeridas',
-      recoveryExecutableNow: 'EJECUTABLE AHORA — actua inmediatamente',
+      recoveryExecutableNow: 'EJECUTABLE AHORA — actúa inmediatamente',
       recoveryExecutableIn: 'Ejecutable en',
-      recoveryCancelBtn: 'Cancelar recuperacion',
+      recoveryCancelBtn: 'Cancelar recuperación',
       recoveryCancelling: 'Cancelando...',
 
       // NetworkSelector

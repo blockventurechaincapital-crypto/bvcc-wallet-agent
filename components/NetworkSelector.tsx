@@ -4,7 +4,8 @@ import { useNetwork } from '@/lib/NetworkContext'
 import { useI18n } from '@/lib/i18n/I18nContext'
 import type { NetworkConfig } from '@/lib/networks'
 
-export default function NetworkSelector() {
+// align: which edge the dropdown hangs from ('right' in the topbar, 'left' in the sidebar)
+export default function NetworkSelector({ align = 'right', className }: { align?: 'left' | 'right'; className?: string } = {}) {
   const { network, networks, setNetworkByChainId } = useNetwork()
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -22,7 +23,7 @@ export default function NetworkSelector() {
   const mainnets = networks.filter(n => !n.isTestnet)
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className={className} style={{ position: 'relative' }}>
       {/* Trigger */}
       <button
         onClick={() => setOpen(o => !o)}
@@ -78,7 +79,7 @@ export default function NetworkSelector() {
         <div style={{
           position: 'absolute',
           top: 'calc(100% + 8px)',
-          right: 0,
+          ...(align === 'left' ? { left: 0 } : { right: 0 }),
           width: '228px',
           background: '#0d1117',
           border: '1px solid rgba(255,255,255,0.08)',

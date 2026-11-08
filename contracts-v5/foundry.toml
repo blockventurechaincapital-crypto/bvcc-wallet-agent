@@ -1,0 +1,34 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+# Dependencies pinned by git tag and commit:
+#   lib/openzeppelin-contracts  v5.6.1   5fd1781b1454fd1ef8e722282f86f9293cacf256 (same as npm @openzeppelin/contracts@5.6.1)
+#   lib/forge-std               v1.16.1  620536fa5277db4e3fd46772d5cbc1ea0696fb43 (tests and scripts only)
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+# V5. solc 0.8.36 skips the via-IR pipeline bug range 0.8.28-0.8.33.
+# Wallet logic, agent library and factories are deployed with CREATE2, so any change
+# here changes their addresses. Check `forge build --sizes` after any change: the
+# agent wallet logic must stay under the EIP-170 limit (24,576 bytes).
+solc = "0.8.36"
+via_ir = true
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 50
+# No metadata hash in the bytecode: the bytecode depends only on the source and the
+# settings above, which keeps CREATE2 addresses stable and the build reproducible.
+bytecode_hash = "none"
+cbor_metadata = false
+# Agent library, deployed with CREATE2 (script/PredictLibrary.s.sol). The agent wallet
+# logic links this address, so it must match the library's CREATE2 address.
+libraries = ["src/BVCCAgentLogicV5.sol:BVCCAgentLogicV5:0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E"]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[invariant]
+runs = 256
+depth = 500
+fail_on_revert = false

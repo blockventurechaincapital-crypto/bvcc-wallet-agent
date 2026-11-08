@@ -1,6 +1,7 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
 import { createPublicClient, type Address } from 'viem'
+import { readGuardians } from './walletGeneration'
 import { BVCC_WALLET_ABI, WALLET_TYPE_ABI } from './abis'
 import type { NetworkConfig } from './networks'
 import { rpcTransport } from './rpc'
@@ -23,16 +24,14 @@ async function fetchStatus(address: string, network: NetworkConfig): Promise<Acc
     return { deployed: false, walletType: 0, nonce: 0, guardianCount: 0 }
   }
 
-  const [wType, nonce, g0, g1, g2] = await Promise.all([
+  const [wType, nonce, slots] = await Promise.all([
     client.readContract({ address: addr, abi: WALLET_TYPE_ABI, functionName: 'walletType' }).catch(() => 0),
     client.readContract({ address: addr, abi: BVCC_WALLET_ABI, functionName: 'getNonce', args: [] }).catch(() => 0n),
-    client.readContract({ address: addr, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [0n] }).catch(() => '0x0000000000000000000000000000000000000000'),
-    client.readContract({ address: addr, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [1n] }).catch(() => '0x0000000000000000000000000000000000000000'),
-    client.readContract({ address: addr, abi: BVCC_WALLET_ABI, functionName: 'guardians', args: [2n] }).catch(() => '0x0000000000000000000000000000000000000000'),
+    readGuardians(client, addr),
   ])
 
   const ZERO = '0x0000000000000000000000000000000000000000'
-  const guardianCount = [g0, g1, g2].filter(g => (g as string).toLowerCase() !== ZERO).length
+  const guardianCount = (slots ?? []).filter(g => g.toLowerCase() !== ZERO).length
 
   return {
     deployed: true,

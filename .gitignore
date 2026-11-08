@@ -45,6 +45,9 @@ next-env.d.ts
 /contracts/out/
 /contracts/cache/
 /contracts/broadcast/
+/contracts-v5/out/
+/contracts-v5/cache/
+/contracts-v5/broadcast/
 
 # extra secrets / local sensitive files
 *.key
@@ -78,3 +81,4 @@ screenshots/
 
 # foundry dependencies (restore with: cd contracts && forge install)
 /contracts/lib/
+/contracts-v5/lib/

@@ -64,6 +64,13 @@ export const agentPermissions: LocalizedDoc = {
         type: 'p',
         text: 'Click any address in the form or on an agent’s card. It opens the block explorer on the Contract tab, where you can confirm the address is the canonical, verified contract for that protocol before you authorize anything.',
       },
+
+      {"type": "h2", "text": "V5 wallets: what changes"},
+      {"type": "p", "text": "V5 is the new generation of the agent wallet. The form adapts on its own when your wallet is V5. These are the differences from V4:"},
+      {"type": "list", "items": ["Empty means nothing. A limit left empty allows nothing — the opposite of V4. To let the agent move ETH, fill in its three ETH limits; for each token, its three token limits. There is no \"unlimited\": set a number.", "Limits include the 0.15% agent fee. With a max per operation of 0.02 ETH, the agent can send up to about 0.01997 ETH. In a batch, the max per operation applies to the whole batch added up.", "Destinations: an empty list means the agent cannot send to anyone. There is no \"any destination\" option.", "Every capability is checked by an on-chain validator: swaps between tokens on Uniswap (Universal Router), Uniswap v4 liquidity, Aave, Uniswap v3 liquidity and wrapping ETH (ETH ↔ WETH). The last two work once their validators are active on the network. To swap to or from native ETH, combine swaps with wrapping. SwapRouter02 is not offered.", "The Uniswap permissions (Permit2) are granted by you, in the same passkey signature that authorizes the agent, and last until the agent expires. The agent cannot grant them itself. Renewing the agent renews them.", "An approve the agent makes inside an operation is reset to zero when the operation ends.", "The expiry is required and can be at most one year away."]},
+      {"type": "h3", "text": "Controls on each agent"},
+      {"type": "list", "items": ["Pause / Resume — stops that agent only. Its limits and history stay as they are.", "Renew — moves the expiry, and the Uniswap permissions with it.", "Block a contract — no agent can call it, whatever its permissions say. Your own operations are not affected.", "Pause all agents — the general switch, as in V4."]},
+      {"type": "callout", "tone": "info", "text": "During a guardian recovery the agents keep working; they are paused when the recovery is executed. Their limits bound what they can do in the meantime."},
     ],
   },
   es: {
@@ -127,6 +134,13 @@ export const agentPermissions: LocalizedDoc = {
         type: 'p',
         text: 'Clica cualquier dirección del formulario o de la tarjeta de un agente. Abre el explorador en la pestaña Contract, donde puedes confirmar que la dirección es el contrato canónico y verificado de ese protocolo antes de autorizar nada.',
       },
+
+      {"type": "h2", "text": "Wallets V5: qué cambia"},
+      {"type": "p", "text": "V5 es la nueva generación de la wallet de agente. El formulario se adapta solo cuando tu wallet es V5. Estas son las diferencias con V4:"},
+      {"type": "list", "items": ["Vacío significa nada. Un límite vacío no permite nada — lo contrario que en V4. Para que el agente mueva ETH, rellena sus tres límites de ETH; para cada token, sus tres límites. No hay «sin límite»: pon un número.", "Los límites incluyen la comisión del 0,15 % del agente. Con un máximo por operación de 0,02 ETH, el agente puede enviar como mucho unos 0,01997 ETH. En un lote, el máximo por operación cuenta la suma de todo el lote.", "Destinos: una lista vacía significa que el agente no puede enviar a nadie. No existe la opción «cualquier destino».", "Cada capacidad la comprueba un validador en la cadena: intercambios entre tokens en Uniswap (Universal Router), liquidez en Uniswap v4, Aave, liquidez en Uniswap v3 y envolver ETH (ETH ↔ WETH). Las dos últimas funcionan cuando sus validadores están activos en la red. Para intercambiar desde o hacia ETH nativo, combina los intercambios con envolver. No se ofrece SwapRouter02.", "Los permisos de Uniswap (Permit2) los das tú, en la misma firma con passkey que autoriza al agente, y duran hasta que el agente caduca. El agente no puede dárselos él solo. Al renovar el agente se renuevan.", "Un approve que el agente haga dentro de una operación vuelve a cero al terminar la operación.", "La caducidad es obligatoria y como mucho a un año vista."]},
+      {"type": "h3", "text": "Controles de cada agente"},
+      {"type": "list", "items": ["Pausar / Reanudar — para solo ese agente. Sus límites y su historial se mantienen.", "Renovar — cambia la caducidad, y con ella los permisos de Uniswap.", "Bloquear un contrato — ningún agente podrá llamarlo, digan lo que digan sus permisos. Tus propias operaciones no se ven afectadas.", "Pausar todos los agentes — el interruptor general, como en V4."]},
+      {"type": "callout", "tone": "info", "text": "Durante una recuperación con guardianes los agentes siguen funcionando; se pausan cuando la recuperación se ejecuta. Mientras tanto, sus límites acotan lo que pueden hacer."},
     ],
   },
 }

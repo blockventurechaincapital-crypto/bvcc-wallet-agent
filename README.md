@@ -44,17 +44,17 @@ The wallet ships with an MCP server, so any MCP client — Claude, Cursor, LM St
 Hermes — can drive it with one command. No plugin, no adapter to write.
 
 ```bash
-npx -y @bvcc/agent-mcp
+npx -y @bvcc/agent-mcp@latest
 ```
 
-That registers **53 tools**: transfers, Uniswap v3/v4 swaps, Aave v3 lending, and
-Uniswap liquidity positions. Twelve read, fifteen simulate, twenty-six write, plus four
+That registers **57 tools**: transfers, Uniswap v3/v4 swaps, Aave v3 lending, and
+Uniswap liquidity positions. Twelve read, seventeen simulate, twenty-eight write, plus four
 operating guides the model can read before it acts. Most writes have a matching dry-run.
 
 Want to look around first without any risk?
 
 ```bash
-BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp
+BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest
 ```
 
 That drops every write tool and leaves the 27 read/simulate ones. It can check balances,
@@ -130,7 +130,8 @@ This monorepo contains both halves of the project so judges can review them toge
 - **Frontend** — Next.js app (this repo root: `app/`, `components/`, `lib/`, `public/`).
 - **Contracts** — Foundry Solidity smart wallet + AI agent wallet contracts (`contracts/`, V4):
   `BVCCWallet` / `BVCCWalletFactory` (personal) and `BVCCAgentWallet` / `BVCCAgentWalletFactory` (AI-agent, on-chain spending limits + per-selector call policies), plus the security layer — `BVCCValidatorRegistry`, `BVCCUniversalRouterValidator`, `BVCCPositionManagerValidator`, `BVCCHookRegistry`, `IBVCCValidator`.
-- **Tests** — 312 Foundry tests (unit, fork & fuzz) in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`).
+- **Contracts V5** — the new generation (`contracts-v5/`): `BVCCSmartWalletV5` / `BVCCAgentWalletV5` with the `BVCCAgentLogicV5` library and `BVCCWalletFactoryV5`, the `BVCCValidatorRegistryV5` / `BVCCHookRegistryV5` registries, and one validator per protocol in `src/validators/` (Universal Router, Uniswap v4 and v3 position managers, Aave v3, wrapped native token).
+- **Tests** — 312 Foundry tests (unit, fork & fuzz) for V4 in `contracts/test/`. Run with `cd contracts && forge install && forge test` (`forge install` restores the libraries, which are git-ignored like `node_modules`). V5 has 191 more (145 unit and invariant, 46 fork) in `contracts-v5/test/`; see [Contracts V5](#contracts-v5-contracts-v5) for how to run them.
 - **Agent tooling** — the SDK and MCP server live in their own repos, published to npm as
   [`@bvcc/agent-sdk`](https://github.com/blockventurechaincapital-crypto/bvcc-agent-sdk) and
   [`@bvcc/agent-mcp`](https://github.com/blockventurechaincapital-crypto/bvcc-agent-mcp) (MIT).
@@ -228,7 +229,33 @@ rm -rf .next && npm run dev
 
 ## Architecture
 
-### Contracts (`contracts/`)
+### Contracts V5 (`contracts-v5/`)
+
+The current generation. Same address on every supported network (Ethereum, Arbitrum One, Base, BNB Chain, Polygon, Arbitrum Sepolia):
+
+| Contract | Address |
+|---|---|
+| BVCCWalletFactoryV5 (personal) | `0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2` |
+| BVCCWalletFactoryV5 (agent) | `0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52` |
+| BVCCSmartWalletV5 (logic) | `0xc9dE89d54BeB786Bc916131CA6C8c5374507Bd15` |
+| BVCCAgentWalletV5 (logic) | `0x360f991B23a3D5202Dc422292697aB07dA279cFA` |
+| BVCCAgentLogicV5 (library) | `0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E` |
+| BVCCValidatorRegistryV5 | `0x7269334AE74DCE4e607eec36268383DD35f28350` |
+| BVCCHookRegistryV5 | `0xEaEaC7F6071f7F576Be2aD97898Dd0c0F51BE78A` |
+
+Each protocol call an agent makes is checked by that protocol's validator, active in the registry after a 48-hour delay. Validators are bound to one chain's contract, so their addresses differ per network; the registry reports the active one for each target.
+
+Build and test (the libraries are git-ignored, so install them first, at the versions pinned in `foundry.toml`):
+
+```bash
+cd contracts-v5
+forge install --no-git foundry-rs/forge-std@v1.16.1 OpenZeppelin/openzeppelin-contracts@v5.6.1
+forge test --no-match-path 'test/fork/*'
+```
+
+The fork tests in `test/fork/` need an RPC URL for the chain they fork.
+
+### Contracts V4 (`contracts/`)
 
 | Contract | Networks | Address |
 |---|---|---|

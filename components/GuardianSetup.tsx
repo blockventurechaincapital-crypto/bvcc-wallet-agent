@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createPublicClient, encodeFunctionData, type Address } from 'viem'
-import { BVCC_WALLET_ABI } from '@/lib/abis'
+import { createPublicClient, type Address } from 'viem'
+import { encodeSetGuardians, readWalletGeneration } from '@/lib/walletGeneration'
 import { validateGuardians } from '@/lib/guardianValidation'
-import { credentialIdToBytes, discoverCredentialId, saveCredential, WrongPasskeyError } from '@/lib/webauthn'
+import { discoverCredentialId, saveCredential, WrongPasskeyError } from '@/lib/webauthn'
 import { executeWithFaceId } from '@/lib/executeUserOp'
 import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { getPrefundNeed } from '@/lib/prefund'
@@ -139,11 +139,16 @@ export default function GuardianSetup({
     setError(null)
     setBusy(true)
     try {
-      const callData = encodeFunctionData({
-        abi: BVCC_WALLET_ABI,
-        functionName: 'setGuardians',
-        args: [guardians as [Address, Address, Address], credentialIdToBytes(activeCredentialId)],
-      })
+      // The wallet's own generation, not the network's: an older wallet can still live here.
+      const generation = (await readWalletGeneration(
+        createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) }),
+        walletAddress as Address,
+      )) ?? network.contracts.walletVersion
+      const callData = encodeSetGuardians(
+        generation,
+        guardians as [Address, Address, Address],
+        activeCredentialId,
+      )
       const hash = await executeWithFaceId({
         network,
         walletAddress,
