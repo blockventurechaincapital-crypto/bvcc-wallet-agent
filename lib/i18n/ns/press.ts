@@ -17,7 +17,7 @@ export const press = {
       title: 'Everything you need to write about this',
       lede:
         'Ready-to-paste copy, brand assets and numbers you can check yourself. Nothing here is a claim we cannot back with a file, an address, or a command you can run.',
-      updated: 'Last updated 4 August 2026',
+      updated: 'Last updated 11 November 2026',
 
       dlMediaKit: 'Media kit (PDF)',
       dlMediaKitEs: 'Kit de prensa (PDF, ES)',
@@ -47,7 +47,7 @@ export const press = {
       diffHeading: 'What is actually different',
       diffBody: [
         'Most work on agent wallets stops at a spending cap. The harder problem is that a cap says nothing about intent. An agent authorized to swap on Uniswap with a $500 budget can route that swap so the output lands in an attacker’s address, and it never goes over $500.',
-        'So the wallet inspects the call. For a swap through Uniswap’s Universal Router it pins the recipient argument to your own wallet and matches the command bytes exactly. Anything else reverts with PinnedArgMismatch(). The agent can trade. It cannot trade on someone else’s behalf. There are 34 adversarial tests and 42 validator tests behind that check.',
+        'So the wallet measures what actually leaves. Before and after every agent operation it reads the balance of each token involved, and whatever left is charged against the agent’s budget, fee included, whatever route the agent picked. On top of that, every DeFi call goes through an on-chain validator for that protocol: for a swap through Uniswap’s Universal Router it matches the command bytes exactly and requires every recipient to be your own wallet. The agent can trade. It cannot trade on someone else’s behalf, and it cannot spend past its budget through an approval you gave long ago. Behind that are 191 tests, including invariants checked over 128,000 random sequences of actions.',
         'Adding a new protocol to that allowlist goes through a registry with a 48-hour timelock, so the change sits visible on-chain for two days before it can take effect.',
       ],
 
@@ -84,12 +84,12 @@ export const press = {
       statsHeading: 'By the numbers',
       statsNote: 'Each of these is checkable without asking us. The how is in the fact sheet.',
       stats: [
-        { n: '312', l: 'Foundry tests on the contracts', s: 'unit, fork and fuzz' },
+        { n: '191', l: 'Foundry tests on the V5 contracts', s: 'unit, fork and invariant · 503 counting the V4 suite' },
         { n: '53', l: 'tools exposed over MCP', s: '12 read · 15 simulate · 26 write' },
         { n: '27', l: 'tools in read-only mode', s: 'every write removed' },
         { n: '6', l: 'networks, one address', s: 'deterministic via CREATE2' },
-        { n: '189', l: 'test cases in the SDK', s: 'vitest' },
-        { n: '35', l: 'bytes of EIP-170 headroom', s: '24,541 of 24,576' },
+        { n: '256', l: 'test cases in the SDK', s: 'vitest' },
+        { n: '1,972', l: 'bytes of EIP-170 headroom', s: 'V5 agent wallet: 22,604 of 24,576' },
         { n: '48h', l: 'timelock on recovery', s: 'and on adding protocols' },
         { n: '0', l: 'databases, emails, KYC forms', s: 'the passkey derives the address' },
       ],
@@ -186,7 +186,7 @@ export const press = {
         ['"audited"', 'The review is internal. "Internally reviewed" or "self-audited" is accurate.'],
         ['"company", "startup", "firm"', 'BVCC is a brand and project, not incorporated.'],
         ['"institutional-grade", "production-ready"', 'Public beta.'],
-        ['"0.15% on everything"', 'The native side of a Uniswap v4 swap pays nothing.'],
+        ['"0.15% on everything"', '0.15% is the agent fee, on what an agent operation takes out of the wallet. On a personal wallet, the owner’s own operations pay 0.05%.'],
         ['"your keys never leave the device"', 'Say passkeys/WebAuthn, and that BVCC never receives keys.'],
         ['"the AI can’t steal your money"', 'It can spend up to its budget. That is what the budget is for.'],
       ],
@@ -243,7 +243,7 @@ export const press = {
       title: 'Todo lo que necesitas para escribir sobre esto',
       lede:
         'Textos listos para pegar, material de marca y cifras que puedes comprobar por tu cuenta. Aquí no hay nada que no podamos respaldar con un archivo, una dirección o un comando que puedas ejecutar.',
-      updated: 'Actualizado el 4 de agosto de 2026',
+      updated: 'Actualizado el 11 de noviembre de 2026',
 
       dlMediaKit: 'Dosier (PDF, ES)',
       dlMediaKitEs: 'Media kit (PDF, EN)',
@@ -271,7 +271,7 @@ export const press = {
       diffHeading: 'Qué es realmente distinto',
       diffBody: [
         'Casi todo el trabajo sobre wallets para agentes se queda en el tope de gasto. El problema difícil es que un tope no dice nada sobre la intención. Un agente autorizado a hacer swaps en Uniswap con 500 $ de presupuesto puede enrutar ese swap para que la salida acabe en la dirección de un atacante, y en ningún momento se pasa de 500 $.',
-        'Así que la wallet inspecciona la llamada. En un swap por el Universal Router de Uniswap, fija el argumento del destinatario a tu propia wallet y exige que los bytes de comando coincidan exactamente. Cualquier otra cosa revierte con PinnedArgMismatch(). El agente puede operar. No puede operar en beneficio de otro. Detrás de esa comprobación hay 34 tests adversariales y 42 tests del validador.',
+        'Así que la wallet mide lo que de verdad sale. Antes y después de cada operación del agente lee el saldo de cada token implicado, y lo que haya salido se carga al presupuesto del agente, comisión incluida, sea cual sea la ruta que haya elegido. Además, cada llamada DeFi pasa por un validador en cadena de ese protocolo: en un swap por el Universal Router de Uniswap exige que los bytes de comando coincidan exactamente y que todo destinatario sea tu propia wallet. El agente puede operar. No puede operar en beneficio de otro, ni gastar por encima de su presupuesto con una aprobación que diste hace tiempo. Detrás hay 191 tests, con invariantes comprobados sobre 128.000 secuencias aleatorias de acciones.',
         'Añadir un protocolo nuevo a esa lista pasa por un registro con timelock de 48 horas, así que el cambio queda visible on-chain durante dos días antes de poder aplicarse.',
       ],
 
@@ -306,12 +306,12 @@ export const press = {
       statsHeading: 'En cifras',
       statsNote: 'Todas se pueden comprobar sin preguntarnos. El cómo está en la ficha de datos.',
       stats: [
-        { n: '312', l: 'tests de Foundry en los contratos', s: 'unit, fork y fuzz' },
+        { n: '191', l: 'tests de Foundry en los contratos V5', s: 'unit, fork e invariantes · 503 contando la suite V4' },
         { n: '53', l: 'herramientas expuestas por MCP', s: '12 lectura · 15 simulación · 26 escritura' },
         { n: '27', l: 'herramientas en modo lectura', s: 'sin ninguna de escritura' },
         { n: '6', l: 'redes, una sola dirección', s: 'determinista con CREATE2' },
-        { n: '189', l: 'casos de test en el SDK', s: 'vitest' },
-        { n: '35', l: 'bytes de margen frente al EIP-170', s: '24.541 de 24.576' },
+        { n: '256', l: 'casos de test en el SDK', s: 'vitest' },
+        { n: '1.972', l: 'bytes de margen frente al EIP-170', s: 'wallet de agentes V5: 22.604 de 24.576' },
         { n: '48h', l: 'de timelock en la recuperación', s: 'y al añadir protocolos' },
         { n: '0', l: 'bases de datos, emails o KYC', s: 'la passkey deriva la dirección' },
       ],
@@ -401,7 +401,7 @@ export const press = {
         ['«auditado»', 'La revisión es interna. «Revisado internamente» o «autoauditado» sí es exacto.'],
         ['«empresa», «startup», «compañía»', 'BVCC es una marca y proyecto, no está constituida.'],
         ['«grado institucional», «listo para producción»', 'Beta pública.'],
-        ['«0,15 % en todo»', 'El lado nativo de un swap en Uniswap v4 no paga comisión.'],
+        ['«0,15 % en todo»', 'El 0,15 % es la comisión de agente, sobre lo que una operación de agente saca de la wallet. En una wallet personal, las operaciones del propio dueño pagan el 0,05 %.'],
         ['«tus claves nunca salen del dispositivo»', 'Di passkeys/WebAuthn, y que BVCC nunca recibe claves.'],
         ['«la IA no puede robarte»', 'Puede gastar hasta su presupuesto. Para eso está el presupuesto.'],
       ],
