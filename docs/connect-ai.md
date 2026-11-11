@@ -33,7 +33,7 @@ The agent must be authorized **on the chain you target**, or the call reverts.
 | `AGENT_PRIVATE_KEY` | yes | The agent EOA private key (`0x` + 64 hex) |
 | `WALLET_ADDRESS` | yes | Your Agent Wallet |
 | `CHAIN_ID` | yes | `1` Ethereum · `56` BNB · `137` Polygon · `8453` Base · `42161` Arbitrum One · `421614` Arbitrum Sepolia |
-| `BVCC_MCP_READONLY` | no | `true` exposes only the 27 read/simulate tools |
+| `BVCC_MCP_READONLY` | no | `true` exposes only the 29 read/simulate tools |
 | `BVCC_MCP_MODULES` | no | Comma-separated groups: `core`, `aave`, `lp`. Unset = all |
 
 ## Client config
@@ -70,7 +70,7 @@ before acting. Most writes have a matching dry-run.
 
 | Group | Tools | Covers |
 |---|---:|---|
-| `core` | 18 | Status, balances, headroom, transfers, approvals, Uniswap v3/v4 swaps |
+| `core` | 22 | Status, balances, headroom, transfers, approvals, Uniswap v3/v4 swaps, wrapping ETH |
 | `aave` | 19 | Aave v3 supply, borrow, repay, withdraw, plus deleverage / close / collateral swap / debt swap planners |
 | `lp` | 14 | Uniswap v3 and v4 liquidity — open, collect, reduce, close |
 | guides | 2 | `getGuide` / `listGuides` — always exposed, even with modules filtered |
@@ -81,12 +81,12 @@ before acting. Most writes have a matching dry-run.
 BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest
 ```
 
-Drops every write tool and leaves 27. It can read balances, quote swaps and simulate
+Drops every write tool and leaves 29. It can read balances, quote swaps and simulate
 transactions, and it cannot move funds. Reasonable first connection, and a good fit for
 dashboards or a model you do not fully trust yet.
 
-`BVCC_MCP_MODULES` combines with it: `core` alone is 20 tools, `aave` 21, `lp` 16, and
-`core` plus read-only leaves 13. If an agent will never touch lending, leaving those tools
+`BVCC_MCP_MODULES` combines with it: `core` alone is 24 tools, `aave` 21, `lp` 16, and
+`core` plus read-only leaves 15. If an agent will never touch lending, leaving those tools
 out is one less thing it can get wrong.
 
 ## Recommended order of operations

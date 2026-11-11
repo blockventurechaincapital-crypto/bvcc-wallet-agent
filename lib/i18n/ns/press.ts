@@ -33,7 +33,7 @@ export const press = {
       whatHeading: 'What it is',
       whatBody: [
         'BVCC Agent Wallet is an open-source, non-custodial smart wallet built on ERC-4337 and passkeys. It lets you hand an AI agent its own wallet with limits written into the contract: a budget, which tokens it may touch, which protocols it may call, and where it may send funds.',
-        'Any MCP client connects in one command and receives 53 tools for transfers, Uniswap swaps, Aave lending and liquidity positions. It runs on five mainnets plus a testnet, and the same wallet address exists on all of them.',
+        'Any MCP client connects in one command and receives 57 tools for transfers, Uniswap swaps, Aave lending and liquidity positions. It runs on five mainnets plus a testnet, and the same wallet address exists on all of them.',
       ],
 
       // ── The pitch, in three beats ─────────────────────────
@@ -54,7 +54,7 @@ export const press = {
       // ── What an agent can do ──────────────────────────────
       capsHeading: 'What an agent can actually do',
       capsNote:
-        'Not just swaps. The catalog is 53 tools, and the lending and liquidity halves are the larger part of it.',
+        'Not just swaps. The catalog is 57 tools, and the lending and liquidity halves are the larger part of it.',
       caps: [
         {
           h: 'Lending — Aave v3',
@@ -69,12 +69,12 @@ export const press = {
         {
           h: 'Swaps and transfers',
           b: 'Uniswap v3 and v4, native ETH in and out, ERC-20 and native sends, approvals.',
-          n: '18 tools',
+          n: '22 tools',
         },
         {
           h: 'Before it acts',
           b: 'Most writes have a matching dry-run that returns gas and the revert reason, so a model can check whether something will work before spending anything. Four operating guides it can read first.',
-          n: '15 simulate tools',
+          n: '17 simulate tools',
         },
       ],
       capsProof:
@@ -85,8 +85,8 @@ export const press = {
       statsNote: 'Each of these is checkable without asking us. The how is in the fact sheet.',
       stats: [
         { n: '191', l: 'Foundry tests on the V5 contracts', s: 'unit, fork and invariant · 503 counting the V4 suite' },
-        { n: '53', l: 'tools exposed over MCP', s: '12 read · 15 simulate · 26 write' },
-        { n: '27', l: 'tools in read-only mode', s: 'every write removed' },
+        { n: '57', l: 'tools exposed over MCP', s: '12 read · 17 simulate · 28 write' },
+        { n: '29', l: 'tools in read-only mode', s: 'every write removed' },
         { n: '6', l: 'networks, one address', s: 'deterministic via CREATE2' },
         { n: '256', l: 'test cases in the SDK', s: 'vitest' },
         { n: '1,972', l: 'bytes of EIP-170 headroom', s: 'V5 agent wallet: 22,604 of 24,576' },
@@ -112,7 +112,7 @@ export const press = {
         {
           label: 'Medium',
           meta: '98 words',
-          text: 'BVCC Agent Wallet is an open-source, non-custodial smart wallet that lets you delegate transactions to an AI agent without handing it a private key that can drain you. You sign in with a passkey. The agent gets its own keypair and a permission envelope enforced by the smart contract: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, and a pause switch. Any MCP client (Claude, Cursor, LM Studio, Hermes) connects in one command and receives 53 tools for transfers, Uniswap swaps, Aave lending and liquidity positions. It runs on five mainnets. It is in public beta.',
+          text: 'BVCC Agent Wallet is an open-source, non-custodial smart wallet that lets you delegate transactions to an AI agent without handing it a private key that can drain you. You sign in with a passkey. The agent gets its own keypair and a permission envelope enforced by the smart contract: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, and a pause switch. Any MCP client (Claude, Cursor, LM Studio, Hermes) connects in one command and receives 57 tools for transfers, Uniswap swaps, Aave lending and liquidity positions. It runs on five mainnets. It is in public beta.',
         },
         {
           label: 'Attribution',
@@ -131,10 +131,10 @@ export const press = {
       tryNote:
         'Read-only mode drops every write tool. It can read balances, quote swaps and simulate transactions, and it cannot move anything. Reasonable way to look around before pointing it at real funds.',
       tryCmd: 'BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest',
-      tryOut1: '27 tools registered · all writes removed',
+      tryOut1: '29 tools registered · all writes removed',
       tryOut2: 'read balances · quote swaps · simulate — cannot move funds',
       tryAfter:
-        'Drop the flag and the same server exposes all 53 tools. Every one of them still has to pass the contract.',
+        'Drop the flag and the same server exposes all 57 tools. Every one of them still has to pass the contract.',
 
       // ── Security ──────────────────────────────────────────
       secHeading: 'Security, in full',
@@ -258,7 +258,7 @@ export const press = {
       whatHeading: 'Qué es',
       whatBody: [
         'BVCC Agent Wallet es una smart wallet no custodial y de código abierto, construida sobre ERC-4337 y passkeys. Permite darle a un agente de IA su propia wallet con límites escritos en el contrato: un presupuesto, qué tokens puede tocar, a qué protocolos puede llamar y a dónde puede enviar fondos.',
-        'Cualquier cliente MCP se conecta con un comando y recibe 53 herramientas para transferencias, swaps en Uniswap, préstamos en Aave y posiciones de liquidez. Funciona en cinco mainnets más una testnet, y la misma dirección de wallet existe en todas ellas.',
+        'Cualquier cliente MCP se conecta con un comando y recibe 57 herramientas para transferencias, swaps en Uniswap, préstamos en Aave y posiciones de liquidez. Funciona en cinco mainnets más una testnet, y la misma dirección de wallet existe en todas ellas.',
       ],
 
       problemHeading: 'El problema',
@@ -277,7 +277,7 @@ export const press = {
 
       capsHeading: 'Qué puede hacer de verdad un agente',
       capsNote:
-        'No solo swaps. El catálogo son 53 herramientas, y la parte de préstamos y liquidez es la mayor.',
+        'No solo swaps. El catálogo son 57 herramientas, y la parte de préstamos y liquidez es la mayor.',
       caps: [
         {
           h: 'Préstamos — Aave v3',
@@ -292,12 +292,12 @@ export const press = {
         {
           h: 'Swaps y transferencias',
           b: 'Uniswap v3 y v4, ETH nativo a la entrada y a la salida, envíos de ERC-20 y nativos, aprobaciones.',
-          n: '18 herramientas',
+          n: '22 herramientas',
         },
         {
           h: 'Antes de actuar',
           b: 'Casi toda escritura tiene su dry-run, que devuelve el gas y el motivo del revert, así que un modelo puede comprobar si algo va a funcionar antes de gastar nada. Y cuatro guías que puede leer primero.',
-          n: '15 de simulación',
+          n: '17 de simulación',
         },
       ],
       capsProof:
@@ -307,8 +307,8 @@ export const press = {
       statsNote: 'Todas se pueden comprobar sin preguntarnos. El cómo está en la ficha de datos.',
       stats: [
         { n: '191', l: 'tests de Foundry en los contratos V5', s: 'unit, fork e invariantes · 503 contando la suite V4' },
-        { n: '53', l: 'herramientas expuestas por MCP', s: '12 lectura · 15 simulación · 26 escritura' },
-        { n: '27', l: 'herramientas en modo lectura', s: 'sin ninguna de escritura' },
+        { n: '57', l: 'herramientas expuestas por MCP', s: '12 lectura · 17 simulación · 28 escritura' },
+        { n: '29', l: 'herramientas en modo lectura', s: 'sin ninguna de escritura' },
         { n: '6', l: 'redes, una sola dirección', s: 'determinista con CREATE2' },
         { n: '256', l: 'casos de test en el SDK', s: 'vitest' },
         { n: '1.972', l: 'bytes de margen frente al EIP-170', s: 'wallet de agentes V5: 22.604 de 24.576' },
@@ -332,7 +332,7 @@ export const press = {
         {
           label: 'Medio',
           meta: '101 palabras',
-          text: 'BVCC Agent Wallet es una smart wallet no custodial y de código abierto que permite delegar transacciones en un agente de IA sin entregarle una clave privada capaz de vaciarte. Tú entras con una passkey. El agente recibe su propio par de claves y un margen de permisos que hace cumplir el contrato: presupuesto por periodo, tokens permitidos, protocolos permitidos, lista de destinatarios, caducidad y un botón de pausa. Cualquier cliente MCP (Claude, Cursor, LM Studio, Hermes) se conecta con un comando y recibe 53 herramientas para transferencias, swaps en Uniswap, préstamos en Aave y posiciones de liquidez. Funciona en cinco mainnets. Está en beta pública.',
+          text: 'BVCC Agent Wallet es una smart wallet no custodial y de código abierto que permite delegar transacciones en un agente de IA sin entregarle una clave privada capaz de vaciarte. Tú entras con una passkey. El agente recibe su propio par de claves y un margen de permisos que hace cumplir el contrato: presupuesto por periodo, tokens permitidos, protocolos permitidos, lista de destinatarios, caducidad y un botón de pausa. Cualquier cliente MCP (Claude, Cursor, LM Studio, Hermes) se conecta con un comando y recibe 57 herramientas para transferencias, swaps en Uniswap, préstamos en Aave y posiciones de liquidez. Funciona en cinco mainnets. Está en beta pública.',
         },
         {
           label: 'Atribución',
@@ -350,10 +350,10 @@ export const press = {
       tryNote:
         'El modo de solo lectura quita todas las herramientas de escritura. Puede leer saldos, cotizar swaps y simular transacciones, y no puede mover nada. Es una forma razonable de echar un vistazo antes de apuntarlo a fondos reales.',
       tryCmd: 'BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest',
-      tryOut1: '27 herramientas registradas · sin ninguna de escritura',
+      tryOut1: '29 herramientas registradas · sin ninguna de escritura',
       tryOut2: 'lee saldos · cotiza swaps · simula — no puede mover fondos',
       tryAfter:
-        'Quita la variable y el mismo servidor expone las 53 herramientas. Todas ellas siguen teniendo que pasar por el contrato.',
+        'Quita la variable y el mismo servidor expone las 57 herramientas. Todas ellas siguen teniendo que pasar por el contrato.',
 
       secHeading: 'Seguridad, entera',
       secIntro:

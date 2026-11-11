@@ -57,7 +57,7 @@ Want to look around first without any risk?
 BVCC_MCP_READONLY=true npx -y @bvcc/agent-mcp@latest
 ```
 
-That drops every write tool and leaves the 27 read/simulate ones. It can check balances,
+That drops every write tool and leaves the 29 read/simulate ones. It can check balances,
 quote a swap and simulate a transaction, and it cannot move anything. `BVCC_MCP_MODULES`
 narrows further by feature group (`core`, `aave`, `lp`).
 

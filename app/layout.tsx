@@ -111,7 +111,7 @@ const jsonLd = {
         'AI-agent permissions enforced on-chain: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, instant pause',
         'Wallet V5: the wallet measures what each agent operation takes out and charges it against the agent\'s limits, whatever approvals exist',
         'Public internal security report covering every contract generation, in English and Spanish',
-        'MCP integration with Hermes, Claude, Cursor, and LM Studio — 53 tools registered in one command',
+        'MCP integration with Hermes, Claude, Cursor, and LM Studio — 57 tools registered in one command',
         'Agent DeFi actions within those limits: token transfers, Uniswap v3/v4 swaps, Aave v3 lending, Uniswap v3/v4 liquidity positions',
         'ERC-4337 account abstraction and ERC-7821 batch execution',
         'No KYC, no email',
@@ -146,7 +146,7 @@ const jsonLd = {
           name: 'Which AI agents and MCP clients can connect?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'Any MCP (Model Context Protocol) client connects in one command, including Hermes, Claude, Cursor and LM Studio. The server registers 53 tools the agent calls to transact within its limits: transfers, Uniswap v3 and v4 swaps, Aave v3 lending, and Uniswap liquidity positions. Read-only mode and per-feature module filters let you expose fewer.',
+            text: 'Any MCP (Model Context Protocol) client connects in one command, including Hermes, Claude, Cursor and LM Studio. The server registers 57 tools the agent calls to transact within its limits: transfers, Uniswap v3 and v4 swaps, Aave v3 lending, and Uniswap liquidity positions. Read-only mode and per-feature module filters let you expose fewer.',
           },
         },
         {

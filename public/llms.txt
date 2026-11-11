@@ -1,6 +1,6 @@
 # BVCC Agent Wallet
 
-> BVCC Agent Wallet is an experimental, non-custodial smart wallet (ERC-4337 account abstraction with WebAuthn / passkeys) that lets you give an AI agent a wallet with on-chain limits it cannot cross: period budget, allowed tokens, allowed protocols, recipient whitelist, and instant pause. Connect any MCP client (Hermes, Claude, Cursor, LM Studio) in one command and the assistant gets 53 tools — transfers, Uniswap v3/v4 swaps, Aave v3 lending and Uniswap liquidity positions — every one of them bounded by the contract, not by the server. Self-custody, no KYC, open source.
+> BVCC Agent Wallet is an experimental, non-custodial smart wallet (ERC-4337 account abstraction with WebAuthn / passkeys) that lets you give an AI agent a wallet with on-chain limits it cannot cross: period budget, allowed tokens, allowed protocols, recipient whitelist, and instant pause. Connect any MCP client (Hermes, Claude, Cursor, LM Studio) in one command and the assistant gets 57 tools — transfers, Uniswap v3/v4 swaps, Aave v3 lending and Uniswap liquidity positions — every one of them bounded by the contract, not by the server. Self-custody, no KYC, open source.
 
 ## Main pages
 - [Home](https://bvccwallet.blockventurechaincapital.com/): What the wallet is, how AI-agent permissions work, and how to connect.
@@ -45,7 +45,7 @@
 - AI-agent limits enforced on-chain: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, instant pause. The agent holds its own keypair; BVCC never sees it.
 - MCP clients: Hermes, Claude, Cursor, LM Studio.
 - What an agent can do: send native and ERC-20 tokens, swap on Uniswap v3 and v4, supply/borrow/repay on Aave v3 (including closing, deleveraging and swapping collateral or debt), and open, collect, reduce and close Uniswap v3 and v4 liquidity positions.
-- MCP surface: 53 tools — 12 read, 15 simulate, 26 write — plus 4 operating guides. Most writes have a matching dry-run. `BVCC_MCP_READONLY=true` exposes only the 27 read/simulate tools; `BVCC_MCP_MODULES` narrows by feature group (`core`, `aave`, `lp`).
+- MCP surface: 57 tools — 12 read, 17 simulate, 28 write — plus 4 operating guides. Most writes have a matching dry-run. `BVCC_MCP_READONLY=true` exposes only the 29 read/simulate tools; `BVCC_MCP_MODULES` narrows by feature group (`core`, `aave`, `lp`).
 - Fees: a 0.15% BVCC agent fee is charged on-chain on what agent actions take out of the wallet, separate from gas. On wallet V5 it is added on top and counts inside the agent's limits.
 - Wallet generation: new wallets are V5 (non-upgradeable clones, same address on every network). V5 measures what each agent operation takes out of the wallet and charges it against the agent's limits, whatever approvals exist. Older V4 wallets keep working and can move to V5 with the same passkey.
 - Networks: Ethereum, Arbitrum, Base, BNB Chain, Polygon. Active testnet: Arbitrum Sepolia.

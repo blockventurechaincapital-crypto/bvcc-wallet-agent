@@ -66,7 +66,7 @@ export const connectAi: LocalizedDoc = {
         type: 'table',
         headers: ['Group', 'Tools', 'What it does'],
         rows: [
-          ['`core`', '18', 'Agent status and remaining limits, balances, native and token transfers, approvals, Uniswap v3/v4 swaps.'],
+          ['`core`', '22', 'Agent status and remaining limits, balances, native and token transfers, approvals, Uniswap v3/v4 swaps, wrapping ETH.'],
           ['`aave`', '19', 'Aave v3: supply, borrow, repay, collateral and e-mode — plus close, deleverage, collateral swap and debt swap.'],
           ['`lp`', '14', 'Uniswap v3 & v4 liquidity: open a position, collect fees, reduce and burn.'],
           ['`meta`', '2', '`listGuides` / `getGuide` — operating playbooks per area. Always exposed.'],
@@ -74,7 +74,7 @@ export const connectAi: LocalizedDoc = {
       },
       {
         type: 'p',
-        text: 'Each tool is tagged by class: 🟢 read (12), 🟡 simulate (15), 🔴 write (26). Most writes have a matching `dryRun*` / `*Plan*` tool that reports what would happen without sending anything — ask for that first. Writes carry the MCP `destructiveHint` annotation, so clients that support it can ask you to confirm.',
+        text: 'Each tool is tagged by class: 🟢 read (12), 🟡 simulate (17), 🔴 write (28). Most writes have a matching `dryRun*` / `*Plan*` tool that reports what would happen without sending anything — ask for that first. Writes carry the MCP `destructiveHint` annotation, so clients that support it can ask you to confirm.',
       },
 
       { type: 'h2', text: 'What you need first' },
@@ -139,7 +139,7 @@ export const connectAi: LocalizedDoc = {
           ['`WALLET_ADDRESS`', '✅', 'The Agent Wallet from step 1.'],
           ['`CHAIN_ID`', '✅', 'Default chain: `1` Ethereum · `56` BNB · `42161` Arbitrum One · `8453` Base · `137` Polygon · `421614` Arbitrum Sepolia.'],
           ['`RPC_URL` / `RPC_URL_<id>`', '—', 'Your own RPC(s). Comma-separate several for failover. Else public defaults are used.'],
-          ['`BVCC_MCP_READONLY`', '—', '`true` exposes only the 27 read/simulate tools (never moves funds).'],
+          ['`BVCC_MCP_READONLY`', '—', '`true` exposes only the 29 read/simulate tools (never moves funds).'],
           ['`BVCC_MCP_MODULES`', '—', 'Comma-separated groups to expose: `core`, `aave`, `lp`. Unset = all.'],
         ],
       },
@@ -190,11 +190,11 @@ export const connectAi: LocalizedDoc = {
       { type: 'h2', text: 'Narrowing the surface' },
       {
         type: 'p',
-        text: 'Set `BVCC_MCP_READONLY=true` to expose only the 27 read/simulate tools (status, balances, quotes, dry-runs) and hide the 26 that move funds. Good for a first connection, dashboards, or untrusted models. To let the model actually swap or send, use the full entry **without** that variable.',
+        text: 'Set `BVCC_MCP_READONLY=true` to expose only the 29 read/simulate tools (status, balances, quotes, dry-runs) and hide the 28 that move funds. Good for a first connection, dashboards, or untrusted models. To let the model actually swap or send, use the full entry **without** that variable.',
       },
       {
         type: 'p',
-        text: '`BVCC_MCP_MODULES` narrows it by feature and combines with the above: `core` alone is 20 tools, `aave` 21, `lp` 16, and `core` + read-only leaves 13. If an agent will never touch lending, leaving those tools out is one less thing it can get wrong. The two guide tools are always exposed on top, so a restricted agent can still read how to use what it has.',
+        text: '`BVCC_MCP_MODULES` narrows it by feature and combines with the above: `core` alone is 24 tools, `aave` 21, `lp` 16, and `core` + read-only leaves 15. If an agent will never touch lending, leaving those tools out is one less thing it can get wrong. The two guide tools are always exposed on top, so a restricted agent can still read how to use what it has.',
       },
       {
         type: 'callout',
@@ -268,7 +268,7 @@ export const connectAi: LocalizedDoc = {
         type: 'table',
         headers: ['Grupo', 'Tools', 'Qué hace'],
         rows: [
-          ['`core`', '18', 'Estado del agente y límites restantes, saldos, envíos de nativo y tokens, approvals, swaps en Uniswap v3/v4.'],
+          ['`core`', '22', 'Estado del agente y límites restantes, saldos, envíos de nativo y tokens, approvals, swaps en Uniswap v3/v4, envolver ETH.'],
           ['`aave`', '19', 'Aave v3: depositar, pedir prestado, repagar, colateral y e-mode — más cerrar posición, desapalancar y cambiar colateral o deuda.'],
           ['`lp`', '14', 'Liquidez en Uniswap v3 y v4: abrir posición, cobrar comisiones, reducir y quemar.'],
           ['`meta`', '2', '`listGuides` / `getGuide` — guías de uso por área. Siempre expuestas.'],
@@ -276,7 +276,7 @@ export const connectAi: LocalizedDoc = {
       },
       {
         type: 'p',
-        text: 'Cada tool va etiquetada por clase: 🟢 lectura (12), 🟡 simulación (15), 🔴 escritura (26). Casi todas las escrituras tienen su `dryRun*` / `*Plan*` que cuenta lo que pasaría sin enviar nada — pídelo primero. Las escrituras llevan la anotación MCP `destructiveHint`, así que los clientes que la soportan pueden pedirte confirmación.',
+        text: 'Cada tool va etiquetada por clase: 🟢 lectura (12), 🟡 simulación (17), 🔴 escritura (28). Casi todas las escrituras tienen su `dryRun*` / `*Plan*` que cuenta lo que pasaría sin enviar nada — pídelo primero. Las escrituras llevan la anotación MCP `destructiveHint`, así que los clientes que la soportan pueden pedirte confirmación.',
       },
 
       { type: 'h2', text: 'Qué necesitas antes' },
@@ -341,7 +341,7 @@ export const connectAi: LocalizedDoc = {
           ['`WALLET_ADDRESS`', '✅', 'La Agent Wallet del paso 1.'],
           ['`CHAIN_ID`', '✅', 'Red por defecto: `1` Ethereum · `56` BNB · `42161` Arbitrum One · `8453` Base · `137` Polygon · `421614` Arbitrum Sepolia.'],
           ['`RPC_URL` / `RPC_URL_<id>`', '—', 'Tus propios RPC. Separa varios por comas para failover. Si no, se usan los públicos por defecto.'],
-          ['`BVCC_MCP_READONLY`', '—', '`true` expone solo las 27 tools de lectura/simulación (nunca mueve fondos).'],
+          ['`BVCC_MCP_READONLY`', '—', '`true` expone solo las 29 tools de lectura/simulación (nunca mueve fondos).'],
           ['`BVCC_MCP_MODULES`', '—', 'Grupos a exponer, separados por comas: `core`, `aave`, `lp`. Sin definir = todos.'],
         ],
       },
@@ -392,11 +392,11 @@ export const connectAi: LocalizedDoc = {
       { type: 'h2', text: 'Reducir la superficie' },
       {
         type: 'p',
-        text: 'Pon `BVCC_MCP_READONLY=true` para exponer solo las 27 tools de lectura/simulación (estado, saldos, cotizaciones, dry-runs) y ocultar las 26 que mueven fondos. Útil para una primera conexión, dashboards o modelos no confiables. Para que el modelo pueda hacer swaps o enviar de verdad, usa la entrada completa **sin** esa variable.',
+        text: 'Pon `BVCC_MCP_READONLY=true` para exponer solo las 29 tools de lectura/simulación (estado, saldos, cotizaciones, dry-runs) y ocultar las 28 que mueven fondos. Útil para una primera conexión, dashboards o modelos no confiables. Para que el modelo pueda hacer swaps o enviar de verdad, usa la entrada completa **sin** esa variable.',
       },
       {
         type: 'p',
-        text: '`BVCC_MCP_MODULES` recorta por funcionalidad y se combina con lo anterior: `core` solo son 20 tools, `aave` 21, `lp` 16, y `core` + solo-lectura deja 13. Si un agente no va a tocar préstamos, dejar esas tools fuera es una cosa menos que puede hacer mal. Las dos tools de guías se exponen siempre por encima, así que un agente restringido sigue pudiendo leer cómo usar lo que tiene.',
+        text: '`BVCC_MCP_MODULES` recorta por funcionalidad y se combina con lo anterior: `core` solo son 24 tools, `aave` 21, `lp` 16, y `core` + solo-lectura deja 15. Si un agente no va a tocar préstamos, dejar esas tools fuera es una cosa menos que puede hacer mal. Las dos tools de guías se exponen siempre por encima, así que un agente restringido sigue pudiendo leer cómo usar lo que tiene.',
       },
       {
         type: 'callout',
