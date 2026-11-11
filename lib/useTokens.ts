@@ -82,7 +82,7 @@ export async function fetchTokens(address: string, network: NetworkConfig): Prom
   if (network.tokens.usdc) {
     const usdcLower = network.tokens.usdc.toLowerCase()
     if (!discovered.some(t => t.address === usdcLower)) {
-      discovered.push({ address: usdcLower, symbol: 'USDC', name: 'USD Coin', decimals: 6 })
+      discovered.push({ address: usdcLower, symbol: 'USDC', name: 'USD Coin', decimals: network.tokens.usdcDecimals })
     }
   }
 

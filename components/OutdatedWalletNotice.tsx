@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWalletVersion } from '@/lib/useWalletVersion'
 import { useI18n } from '@/lib/i18n/I18nContext'
+import { useNetwork } from '@/lib/NetworkContext'
+import SendAllModal from '@/components/SendAllModal'
 
 const GOLD = '#D4AF37'
 const AMBER = '#e6b800'
@@ -20,8 +22,10 @@ function shortAddr(a: string) {
 export default function OutdatedWalletNotice() {
   const { version, current, isOutdated, upgradeAddress, isLoading } = useWalletVersion()
   const { t } = useI18n()
+  const { network } = useNetwork()
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  const [showSendAll, setShowSendAll] = useState(false)
 
   useEffect(() => {
     if (!isOutdated || isLoading) return
@@ -51,7 +55,27 @@ export default function OutdatedWalletNotice() {
           <b>{title}</b> — {body}
         </span>
         <button
-          onClick={() => router.push('/?migrate=1')}
+          onClick={() => setShowModal(true)}
+          style={{
+            padding: '6px 11px', fontSize: '11.5px', fontWeight: 600, color: GOLD,
+            backgroundColor: 'transparent', border: `1px solid ${GOLD}`, borderRadius: '5px',
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          {t('wallet.outdatedWhatChanges')}
+        </button>
+        <button
+          onClick={() => setShowSendAll(true)}
+          style={{
+            padding: '6px 11px', fontSize: '11.5px', fontWeight: 600, color: GOLD,
+            backgroundColor: 'transparent', border: `1px solid ${GOLD}`, borderRadius: '5px',
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          {t('wallet.sendAllBtn')}
+        </button>
+        <button
+          onClick={() => router.push(`/?migrate=1&chain=${network.chainId}`)}
           style={{
             padding: '6px 13px', fontSize: '11.5px', fontWeight: 600, color: '#06080f',
             backgroundColor: GOLD, border: 'none', borderRadius: '5px', cursor: 'pointer',
@@ -73,7 +97,7 @@ export default function OutdatedWalletNotice() {
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              maxWidth: '460px', width: '100%', padding: '24px',
+              maxWidth: '460px', width: '100%', padding: '24px', maxHeight: '90vh', overflowY: 'auto',
               backgroundColor: '#0d1117', border: '1px solid rgba(230,184,0,0.35)',
               borderRadius: '10px', color: '#f0f4f8',
             }}
@@ -84,9 +108,15 @@ export default function OutdatedWalletNotice() {
             <p style={{ margin: '0 0 12px', fontSize: '13px', lineHeight: 1.6, color: '#c3cbd8' }}>
               {body}
             </p>
-            <p style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.6, color: '#c3cbd8' }}>
+            <p style={{ margin: '0 0 12px', fontSize: '13px', lineHeight: 1.6, color: '#c3cbd8' }}>
               {t('wallet.outdatedHow', { current })}
             </p>
+            <div style={{ margin: '0 0 16px', fontSize: '12.5px', fontWeight: 600, color: GOLD }}>
+              {t('wallet.outdatedChangesTitle', { current })}
+            </div>
+            <ul style={{ margin: '-10px 0 16px', paddingLeft: '18px', fontSize: '12.5px', lineHeight: 1.55, color: '#c3cbd8' }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => <li key={i} style={{ marginTop: '4px' }}>{t(`wallet.outdatedChange${i}`)}</li>)}
+            </ul>
             {upgradeAddress && (
               <div style={{
                 padding: '10px 12px', marginBottom: '16px', borderRadius: '6px',
@@ -98,9 +128,9 @@ export default function OutdatedWalletNotice() {
                 </span>
               </div>
             )}
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button
-                onClick={() => router.push('/?migrate=1')}
+                onClick={() => router.push(`/?migrate=1&chain=${network.chainId}`)}
                 style={{
                   flex: 1, padding: '10px', fontSize: '13px', fontWeight: 600, color: '#06080f',
                   backgroundColor: GOLD, border: 'none', borderRadius: '6px', cursor: 'pointer',
@@ -108,6 +138,18 @@ export default function OutdatedWalletNotice() {
               >
                 {t('wallet.outdatedCta', { current })}
               </button>
+              <a
+                href="/docs/migrate"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: '10px 14px', fontSize: '13px', fontWeight: 600, color: GOLD,
+                  border: `1px solid ${GOLD}`, borderRadius: '6px', textDecoration: 'none',
+                  whiteSpace: 'nowrap', textAlign: 'center',
+                }}
+              >
+                {t('wallet.outdatedHowToMigrate')}
+              </a>
               <button
                 onClick={() => setShowModal(false)}
                 style={{
@@ -122,6 +164,8 @@ export default function OutdatedWalletNotice() {
           </div>
         </div>
       )}
+
+      {showSendAll && <SendAllModal onClose={() => setShowSendAll(false)} />}
     </>
   )
 }

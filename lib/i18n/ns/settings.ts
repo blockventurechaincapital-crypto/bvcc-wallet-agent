@@ -73,7 +73,7 @@ export const settings = {
       devDocsTitle: 'Developer documentation',
       devDocsDesc: 'SDK, MCP server, contracts and how to connect your AI. Opens in a new tab.',
       // Footer
-      version: 'v1.1.9',
+      version: 'v1.2.0',
     },
   },
   es: {
@@ -150,7 +150,7 @@ export const settings = {
       activeNetworksNone: 'Esta wallet todavía no existe en ninguna red.',
       devDocsTitle: 'Documentación para desarrolladores',
       devDocsDesc: 'SDK, servidor MCP, contratos y cómo conectar tu IA. Se abre en otra pestaña.',
-      version: 'v1.1.9',
+      version: 'v1.2.0',
     },
   },
 }

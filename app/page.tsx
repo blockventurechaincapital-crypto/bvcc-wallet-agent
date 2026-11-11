@@ -24,7 +24,7 @@ import { useSubmitUserOp } from '@/lib/useSubmitUserOp'
 import { getPrefundNeed, type PrefundNeed } from '@/lib/prefund'
 import { classifyTransferFailure, failureSummary, type TransferFailure } from '@/lib/txFailure'
 import { useNetwork } from '@/lib/NetworkContext'
-import { NETWORKS } from '@/lib/networks'
+import { NETWORKS, getNetwork } from '@/lib/networks'
 import MarketingLanding from '@/components/MarketingLanding'
 import DisclaimerModal from '@/components/DisclaimerModal'
 import { useI18n } from '@/lib/i18n/I18nContext'
@@ -99,6 +99,13 @@ export default function Home() {
     // up. Everything downstream — deploy, then the signed setGuardians — is the ordinary
     // creation path; only the key's origin differs, and no new passkey is registered.
     if (params.get('migrate') === '1') {
+      // The network the old wallet lives on travels in the link: this effect runs before the
+      // network provider has restored the saved one, so `network` may still be the default.
+      let source = network
+      try {
+        const chain = Number(params.get('chain'))
+        if (chain) { source = getNetwork(chain); setNetworkByChainId(chain) }
+      } catch { /* unknown chain: keep the current one */ }
       (async () => {
         try {
           const stored = loadCredential()
@@ -106,7 +113,7 @@ export default function Home() {
           if (!oldWallet || !stored?.credentialId) throw new Error('No active wallet to migrate')
 
           const { createPublicClient } = await import('viem')
-          const client = createPublicClient({ chain: network.viemChain, transport: rpcTransport(network) })
+          const client = createPublicClient({ chain: source.viemChain, transport: rpcTransport(source) })
           const [qx, qy] = await client.readContract({
             address: oldWallet as Address, abi: BVCC_WALLET_ABI, functionName: 'signer',
           }) as readonly [`0x${string}`, `0x${string}`]
@@ -141,7 +148,8 @@ export default function Home() {
           const puestos = g.every(x => x && x.toLowerCase() !== ZERO_ADDRESS)
           if (puestos) setGuardians([g[0]!, g[1]!, g[2]!])
           setStep(puestos ? 'confirm' : 'guardians')
-        } catch {
+        } catch (err) {
+          setError(t('appshell.migrateReadFailed').replace('{reason}', failureSummary(err)))
           setStep('access')
         }
       })()

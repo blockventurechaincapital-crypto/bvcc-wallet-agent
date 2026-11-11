@@ -35,7 +35,8 @@ const C = {
   border: 'rgba(255,255,255,0.07)',
   gold: '#d4af37',
   goldBorder: 'rgba(212,175,55,0.2)',
-  text: '#f0f4f8',
+  text: '#f0f4f8', // headings and bold
+  body: '#b6bfcc', // running text: a step below the headings so sections stand apart
   dim: '#8892a4',
 }
 
@@ -122,8 +123,9 @@ function Block({ block }: { block: DocBlock }) {
             fontSize: 21,
             fontWeight: 700,
             letterSpacing: '-0.01em',
-            margin: '38px 0 4px',
-            paddingTop: 18,
+            color: C.gold,
+            margin: '46px 0 10px',
+            paddingTop: 22,
             borderTop: `1px solid ${C.border}`,
           }}
         >
@@ -132,13 +134,13 @@ function Block({ block }: { block: DocBlock }) {
       )
     case 'h3':
       return (
-        <h3 style={{ fontSize: 16.5, fontWeight: 650, margin: '24px 0 2px' }}>
+        <h3 style={{ fontSize: 16.5, fontWeight: 650, color: C.text, margin: '28px 0 6px' }}>
           <Inline text={block.text} />
         </h3>
       )
     case 'p':
       return (
-        <p style={{ fontSize: 14.5, lineHeight: 1.7, color: C.text, margin: '12px 0' }}>
+        <p style={{ fontSize: 14.5, lineHeight: 1.7, color: C.body, margin: '12px 0' }}>
           <Inline text={block.text} />
         </p>
       )
@@ -148,7 +150,7 @@ function Block({ block }: { block: DocBlock }) {
           {block.items.map((item, i) => (
             <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <span style={{ color: C.gold, flexShrink: 0, marginTop: 2, fontSize: 12 }}>●</span>
-              <span style={{ fontSize: 14.5, lineHeight: 1.65, color: C.text }}>
+              <span style={{ fontSize: 14.5, lineHeight: 1.65, color: C.body }}>
                 <Inline text={item} />
               </span>
             </li>
@@ -223,7 +225,7 @@ function Block({ block }: { block: DocBlock }) {
                         padding: '9px 14px',
                         borderBottom: i < block.rows.length - 1 ? `1px solid ${C.border}` : 'none',
                         lineHeight: 1.55,
-                        color: C.text,
+                        color: C.body,
                         verticalAlign: 'top',
                       }}
                     >
@@ -247,7 +249,7 @@ function Block({ block }: { block: DocBlock }) {
             borderRadius: 10,
             fontSize: 14,
             lineHeight: 1.65,
-            color: C.text,
+            color: C.body,
           }}
         >
           <span style={{ color: C.gold, fontWeight: 700, marginRight: 8 }}>
@@ -317,7 +319,7 @@ export default function DocsPage({ doc, slug }: { doc: LocalizedDoc; slug: DocSl
   return (
     <>
       <article className="docs-article">
-        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em', margin: '0 0 16px' }}>
+        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em', color: C.text, margin: '0 0 16px' }}>
           {content.title}
         </h1>
         <p style={{ fontSize: 15, lineHeight: 1.65, color: C.dim, margin: '0 0 12px' }}>

@@ -74,6 +74,7 @@ export const appshell = {
       migrateConfirmBody: 'Your new wallet will be controlled by the same passkey as your current one. Confirm that passkey is on this device before anything is deployed: if it is not, the deploy would pay for a wallet you cannot sign for.',
       migrateWrongPasskey: 'That passkey does not control your current wallet, so it could not sign for the new one either. Nothing was deployed. If the wallet was recovered through guardians, its owner is the passkey created during the recovery.',
       migratePasskeyFailed: 'The passkey was not confirmed ({reason}). Nothing was deployed.',
+      migrateReadFailed: 'Could not read the wallet to migrate ({reason}). Open it again from the dashboard on its network and press the button again.',
 
       // Setup stopped between the deploy and the passkey
       setupStopTitle: 'Your wallet is deployed, but it cannot pay for its first signature yet',
@@ -193,6 +194,7 @@ export const appshell = {
       migrateConfirmBody: 'Tu nueva wallet la controlará la misma passkey que la actual. Confirma que esa passkey está en este dispositivo antes de desplegar nada: si no lo está, el despliegue pagaría una wallet que no podrías firmar.',
       migrateWrongPasskey: 'Esa passkey no controla tu wallet actual, así que tampoco podría firmar por la nueva. No se ha desplegado nada. Si la wallet se recuperó con guardianes, su dueña es la passkey que se creó durante la recuperación.',
       migratePasskeyFailed: 'La passkey no se confirmó ({reason}). No se ha desplegado nada.',
+      migrateReadFailed: 'No se pudo leer la wallet a migrar ({reason}). Ábrela otra vez desde el dashboard en su red y vuelve a pulsar el botón.',
 
       // El alta se detiene entre el despliegue y la passkey
       setupStopTitle: 'Tu wallet está desplegada, pero todavía no puede pagar su primera firma',

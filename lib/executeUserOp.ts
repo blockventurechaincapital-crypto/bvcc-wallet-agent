@@ -32,7 +32,8 @@ function packBytes32(hi: bigint, lo: bigint): Hex {
 export async function executeWithFaceId(opts: {
   network: NetworkConfig
   walletAddress: Address
-  credentialId: string
+  /** null lets the user pick the passkey when signing. */
+  credentialId: string | null
   calls: ExecCall[]
   submitUserOp: (p: SubmitUserOpPayload) => Promise<{ txHash: string }>
   callGasLimit?: bigint

@@ -9,6 +9,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/press',
     '/docs',
     '/docs/recovery',
+    '/docs/migrate',
     '/docs/connect-ai',
     '/docs/agent-permissions',
     '/docs/agent-integration',

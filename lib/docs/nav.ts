@@ -10,6 +10,7 @@ export type DocSlug =
   | 'contracts'
   | 'bundler-api'
   | 'recovery'
+  | 'migrate'
 
 export interface Localized {
   en: string
@@ -62,6 +63,15 @@ export const DOC_NAV: DocNavGroup[] = [
         blurb: {
           en: 'Move the wallet to a new passkey with two guardians — step by step, network by network.',
           es: 'Pasa la wallet a una passkey nueva con dos guardianes — paso a paso, red a red.',
+        },
+      },
+      {
+        slug: 'migrate',
+        href: '/docs/migrate',
+        label: { en: 'Move to Wallet V5', es: 'Pasar a la wallet V5' },
+        blurb: {
+          en: 'Create a V5 wallet with the same passkey, then move funds, positions and agents across.',
+          es: 'Crea una wallet V5 con la misma passkey y pasa a ella fondos, posiciones y agentes.',
         },
       },
     ],
