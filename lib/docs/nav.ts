@@ -93,8 +93,8 @@ export const DOC_NAV: DocNavGroup[] = [
         href: '/docs/agent-permissions',
         label: { en: 'How Agent Permissions Work', es: 'Cómo funcionan los permisos' },
         blurb: {
-          en: 'Capabilities vs addresses, the four permission layers, call policies, and verifying contracts.',
-          es: 'Capacidades vs direcciones, las cuatro capas de permiso, call policies, y verificar contratos.',
+          en: 'On wallet V5: the wallet measures what leaves, limits include the fee, 0 and empty mean nothing, every DeFi call has a validator.',
+          es: 'En la wallet V5: la wallet mide lo que sale, los límites incluyen la comisión, 0 y vacío no permiten nada, cada llamada DeFi tiene validador.',
         },
       },
       {
@@ -102,8 +102,8 @@ export const DOC_NAV: DocNavGroup[] = [
         href: '/docs/agent-integration',
         label: { en: 'Agent Integration', es: 'Integración de agentes' },
         blurb: {
-          en: 'How an AI agent calls executeAsAgent — encoding, limits, whitelists, errors, Foundry + viem examples.',
-          es: 'Cómo un agente IA llama executeAsAgent — encoding, límites, whitelists, errores, ejemplos Foundry + viem.',
+          en: 'How an AI agent calls executeAsAgent on wallet V5 — encoding, validators, limits and fee, errors, Foundry + viem examples.',
+          es: 'Cómo un agente IA llama a executeAsAgent en la wallet V5 — codificación, validadores, límites y comisión, errores, ejemplos con Foundry + viem.',
         },
       },
     ],
@@ -116,8 +116,8 @@ export const DOC_NAV: DocNavGroup[] = [
         href: '/docs/contracts',
         label: { en: 'Contract Reference', es: 'Referencia de contratos' },
         blurb: {
-          en: 'Wallets, factories, AuthorizeParams, deployed addresses, security notes.',
-          es: 'Wallets, factories, AuthorizeParams, direcciones desplegadas, notas de seguridad.',
+          en: 'V5 contracts and addresses on every network, AuthorizeParams, errors, security notes; V4 as the previous generation.',
+          es: 'Contratos V5 y sus direcciones en cada red, AuthorizeParams, errores, notas de seguridad; V4 como generación anterior.',
         },
       },
       {

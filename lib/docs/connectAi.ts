@@ -57,7 +57,7 @@ export const connectAi: LocalizedDoc = {
           '`npx -y @bvcc/agent-mcp@latest` registers the tools — no plugin to install, no adapter to write.',
           'The agent is a normal EOA with its **own keypair** that signs `executeAsAgent` and pays its own gas.',
           'The **contract** is the source of truth: a blocked action reverts and the tool returns a `humanMessage` + `suggestedAction`.',
-          'Current wallets are `BVCCAgentWalletV4`. On top of spend limits, V4 requires the agent to stay a plain EOA and gates every DeFi call through a **call policy** — see step 3.',
+          'New wallets are **V5** (`BVCCAgentWalletV5`). The server reads the wallet version (`getCapabilities` reports `walletVersion`) and adapts: on V5 every DeFi call is checked by an on-chain validator, a limit of 0 allows nothing, and what leaves the wallet pays the 0.15% agent fee inside the limits. Older V4 wallets keep working with the same tools.',
         ],
       },
 
@@ -113,12 +113,12 @@ export const connectAi: LocalizedDoc = {
       { type: 'h3', text: '3. ⚠️ Authorize the agent on-chain — with limits' },
       {
         type: 'p',
-        text: 'In the dashboard, authorize the agent **address** on **each chain** you will use, and set: `allowedTokens`, `allowedProtocols` (for swaps, the router **and** Permit2), optional `allowedRecipients`, spend caps (per-tx / daily / period / total, native + per-token) and an optional `expiry`. Without this the contract reverts with `NotAuthorizedAgent`. Keep limits **tight** — a leaked agent key is only worth what you authorized.',
+        text: 'In the dashboard, authorize the agent **address** on **each chain** you will use, and set: `allowedTokens`, `allowedProtocols` (for swaps, the router **and** Permit2), `allowedRecipients`, spend caps (per-tx / daily / period / total, native + per-token) and an `expiry`. On a V5 wallet an empty list or a limit of 0 allows **nothing**, every limit includes the 0.15% fee, and the expiry is required (at most one year). Without this the contract reverts with `NotAuthorizedAgent`. Keep limits **tight** — a leaked agent key is only worth what you authorized.',
       },
       {
         type: 'callout',
         tone: 'warn',
-        text: 'Whitelisting a protocol is **not enough** for swaps or liquidity. Since V3, any DeFi call also needs a **call policy** registered for that contract + function selector, or the wallet reverts with `SelectorNotAllowed`. In the dashboard you get these by picking the **capabilities** the agent should have (swap, provide liquidity, lending…): the authorization bundles the matching `setCallPolicy` calls into the same biometric signature. Skip the capability and the tool will fail even though the router is whitelisted. Full detail in [Agent Integration](/docs/agent-integration).',
+        text: 'Whitelisting a protocol is **not enough** for swaps or liquidity. Any DeFi call also needs a **call policy** registered for that contract + function selector, or the wallet reverts with `SelectorNotAllowed`. In the dashboard you get these by picking the **capabilities** the agent should have (swap, provide liquidity, lending…): the authorization bundles the matching `setCallPolicy` calls into the same biometric signature. Skip the capability and the tool will fail even though the router is whitelisted. Full detail in [Agent Integration](/docs/agent-integration).',
       },
       { type: 'h3', text: '4. ⚠️ Fund the agent EOA with gas' },
       {
@@ -224,7 +224,11 @@ export const connectAi: LocalizedDoc = {
           ['`SelectorNotAllowed`', 'No call policy for that contract + function', 'Add the matching capability to the agent (step 3) — whitelisting the protocol alone is not enough.'],
           ['`PinnedArgMismatch`', 'A pinned calldata word (recipient/spender) is not your wallet or an allowed protocol', 'The recipient of a swap/LP must be the wallet itself. Re-run the tool without overriding it.'],
           ['`PolicyValidationFailed`', 'A DEEP-policy validator denied the call, reverted, or is not active', 'Check the capability covers this exact action; some are per-chain.'],
-          ['`AgentMustBeEOA`', 'The agent address now carries code (e.g. an EIP-7702 delegation)', 'Remove the delegation, or use a fresh agent EOA — V4 checks this on every execution.'],
+          ['`AgentMustBeEOA`', 'The agent address now carries code (e.g. an EIP-7702 delegation)', 'Remove the delegation, or use a fresh agent EOA. The wallet checks this on every execution.'],
+          ['`CallNeedsValidator` / `PolicyValidationFailed` on V5', 'On V5 every DeFi call goes through a validator', 'Use the capability for that action; the tool says before any gas if V5 does not allow it.'],
+          ['`AgentPaused` / `AgentPermissionsExpired`', 'This agent is paused, or its permissions expired (V5 expiry is at most one year)', 'Resume or renew the agent from the dashboard.'],
+          ['`TokenBatchLimitExceeded` when sending a whole balance', 'The 0.15% fee is added on top and counts inside the limits', 'Send a little less: at most what the failed send reports as movable.'],
+          ['`PostCheckFailed`', 'An Aave action would leave the health factor below 1.2', 'Borrow or withdraw less, or repay first.'],
           ['`TokenCallWithValue`', 'A transfer/approve carried native value', 'Not something you configure — report it if a tool causes this.'],
           ['`EnforcedPause`', 'Agents paused on the wallet', 'Unpause from the dashboard. A guardian recovery also pauses agents.'],
           ['Action on the wrong chain', '`network` omitted / wrong', 'Pass `network` explicitly, or set `CHAIN_ID`.'],
@@ -255,7 +259,7 @@ export const connectAi: LocalizedDoc = {
           '`npx -y @bvcc/agent-mcp@latest` registra las tools — sin plugins que instalar ni adaptadores que escribir.',
           'El agente es una EOA normal con su **propio par de claves** que firma `executeAsAgent` y paga su propio gas.',
           'El **contrato** es la fuente de verdad: una acción bloqueada revierte y la tool devuelve `humanMessage` + `suggestedAction`.',
-          'Las wallets actuales son `BVCCAgentWalletV4`. Además de los límites de gasto, V4 exige que el agente siga siendo una EOA pura y filtra cada llamada DeFi por una **call policy** — mira el paso 3.',
+          'Las wallets nuevas son **V5** (`BVCCAgentWalletV5`). El servidor lee la versión de la wallet (`getCapabilities` devuelve `walletVersion`) y se adapta: en V5 cada llamada DeFi la comprueba un validador en cadena, un límite de 0 no permite nada, y lo que sale de la wallet paga la comisión de agente del 0,15 % dentro de los límites. Las wallets V4, más antiguas, siguen funcionando con las mismas tools.',
         ],
       },
 
@@ -311,12 +315,12 @@ export const connectAi: LocalizedDoc = {
       { type: 'h3', text: '3. ⚠️ Autoriza el agente on-chain — con límites' },
       {
         type: 'p',
-        text: 'En el dashboard, autoriza la **dirección** del agente en **cada red** que vayas a usar, y define: `allowedTokens`, `allowedProtocols` (para swaps, el router **y** Permit2), `allowedRecipients` opcional, topes de gasto (por-tx / diario / periodo / total, nativo + por-token) y un `expiry` opcional. Sin esto el contrato revierte con `NotAuthorizedAgent`. Mantén los límites **ajustados** — una clave de agente filtrada solo vale lo que autorizaste.',
+        text: 'En el dashboard, autoriza la **dirección** del agente en **cada red** que vayas a usar, y define: `allowedTokens`, `allowedProtocols` (para swaps, el router **y** Permit2), `allowedRecipients`, topes de gasto (por-tx / diario / periodo / total, nativo + por-token) y un `expiry`. En una wallet V5 una lista vacía o un límite de 0 **no permiten nada**, todo límite incluye la comisión del 0,15 % y la caducidad es obligatoria (como mucho un año). Sin esto el contrato revierte con `NotAuthorizedAgent`. Mantén los límites **ajustados** — una clave de agente filtrada solo vale lo que autorizaste.',
       },
       {
         type: 'callout',
         tone: 'warn',
-        text: 'Whitelistear un protocolo **no basta** para swaps ni liquidez. Desde V3, toda llamada DeFi necesita además una **call policy** registrada para ese contrato + selector de función, o la wallet revierte con `SelectorNotAllowed`. En el dashboard las consigues eligiendo las **capacidades** que quieres darle al agente (swap, aportar liquidez, préstamos…): la autorización empaqueta los `setCallPolicy` correspondientes en la misma firma biométrica. Si te saltas la capacidad, la tool falla aunque el router esté whitelisteado. Detalle completo en [Integración de agentes](/docs/agent-integration).',
+        text: 'Whitelistear un protocolo **no basta** para swaps ni liquidez. Toda llamada DeFi necesita además una **call policy** registrada para ese contrato + selector de función, o la wallet revierte con `SelectorNotAllowed`. En el dashboard las consigues eligiendo las **capacidades** que quieres darle al agente (swap, aportar liquidez, préstamos…): la autorización empaqueta los `setCallPolicy` correspondientes en la misma firma biométrica. Si te saltas la capacidad, la tool falla aunque el router esté whitelisteado. Detalle completo en [Integración de agentes](/docs/agent-integration).',
       },
       { type: 'h3', text: '4. ⚠️ Dale gas a la EOA del agente' },
       {
@@ -422,7 +426,11 @@ export const connectAi: LocalizedDoc = {
           ['`SelectorNotAllowed`', 'Sin call policy para ese contrato + función', 'Añade la capacidad correspondiente al agente (paso 3) — whitelistear el protocolo no basta.'],
           ['`PinnedArgMismatch`', 'Una palabra pinneada del calldata (recipient/spender) no es tu wallet ni un protocolo permitido', 'El destinatario de un swap/LP tiene que ser la propia wallet. Repite la tool sin sobrescribirlo.'],
           ['`PolicyValidationFailed`', 'Un validator de policy DEEP denegó la llamada, revirtió, o no está activo', 'Comprueba que la capacidad cubre esta acción exacta; algunas van por red.'],
-          ['`AgentMustBeEOA`', 'La dirección del agente ahora tiene código (p. ej. una delegación EIP-7702)', 'Quita la delegación, o usa una EOA de agente nueva — V4 lo comprueba en cada ejecución.'],
+          ['`AgentMustBeEOA`', 'La dirección del agente ahora tiene código (p. ej. una delegación EIP-7702)', 'Quita la delegación, o usa una EOA de agente nueva. La wallet lo comprueba en cada ejecución.'],
+          ['`CallNeedsValidator` / `PolicyValidationFailed` en V5', 'En V5 toda llamada DeFi pasa por un validador', 'Usa la capacidad de esa acción; la tool avisa antes de gastar gas si V5 no la permite.'],
+          ['`AgentPaused` / `AgentPermissionsExpired`', 'Este agente está en pausa, o sus permisos caducaron (en V5 como mucho a un año)', 'Reanuda o renueva el agente desde el dashboard.'],
+          ['`TokenBatchLimitExceeded` al enviar un saldo entero', 'La comisión del 0,15 % se suma encima y cuenta dentro de los límites', 'Envía un poco menos: como mucho lo que indica el envío fallido.'],
+          ['`PostCheckFailed`', 'Una acción de Aave dejaría el factor de salud por debajo de 1,2', 'Pide prestado o retira menos, o devuelve antes.'],
           ['`TokenCallWithValue`', 'Un transfer/approve llevaba valor nativo', 'No es algo que configures — repórtalo si una tool lo provoca.'],
           ['`EnforcedPause`', 'Agentes pausados en la wallet', 'Despausa desde el dashboard. Un recovery de guardianes también pausa los agentes.'],
           ['Acción en la red equivocada', '`network` omitido / incorrecto', 'Pasa `network` explícito, o ajusta `CHAIN_ID`.'],

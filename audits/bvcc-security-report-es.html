@@ -89,6 +89,7 @@
   .toc td{padding:5px 0; border-bottom:1px solid var(--line); font-size:10pt; vertical-align:top}
   .toc td.n{width:16mm; color:var(--brand2); font-weight:700}
   .toc td.d{color:var(--muted); font-size:8.8pt}
+  table.data tr.part td{background:var(--soft); color:var(--brand); font-size:9pt; padding-top:8px}
   .toc tr.part td{border-bottom:2px solid var(--brand); padding-top:14px; font-weight:700; color:var(--brand);
                   font-size:8.4pt; text-transform:uppercase; letter-spacing:.1em}
   .sevkey td{font-size:9.2pt}
@@ -104,17 +105,17 @@
     <div class="sub">Block&nbsp;Venture&nbsp;Chain&nbsp;Capital</div>
   </div>
   <h1>Agent Wallet<br>Informe de Seguridad<br>y Pruebas</h1>
-  <div class="tag">Análisis estático, remediación de vulnerabilidad y batería de pruebas de permisos del agente on-chain</div>
+  <div class="tag">Cinco generaciones, de V1 a V5: rondas de revisión, remediación, despliegue y verificación on-chain</div>
 
   <div class="meta">
     <table>
       <tr><td class="k">Objeto</td><td>BVCC Agent Wallet (smart account ERC-4337 / ERC-7579)</td></tr>
-            <tr><td class="k">Código</td><td>Commit <span class="mono">a3e28f1</span> · árbol de <span class="mono">contracts/src</span> <span class="mono">337e84f0</span> · generación V4</td></tr>
+            <tr><td class="k">Código</td><td><b>V5 (actual):</b> commit <span class="mono">838a70f</span> · árbol de <span class="mono">contracts-v5/src</span> <span class="mono">64a5c674</span><br><b>V4 (anterior):</b> commit <span class="mono">a3e28f1</span> · árbol de <span class="mono">contracts/src</span> <span class="mono">337e84f0</span></td></tr>
       <tr><td class="k">Despliegue</td><td>Arbitrum One · Ethereum · BNB Chain · Base · Polygon · Arbitrum Sepolia</td></tr>
-      <tr><td class="k">Trabajo</td><td>Revisión de seguridad <b>interna</b> y verificación de la remediación — no es una auditoría externa</td></tr>
-      <tr><td class="k">Periodo</td><td>2026-06-06 → 2026-07-29 · cuatro rondas de revisión</td></tr>
-      <tr><td class="k">Hallazgos</td><td><span class="chip high">2 Críticos</span> <span class="chip high">3 Altos</span> <span class="chip fixed">5 Medios</span> <span class="chip fixed">1 Bajo</span> <span class="chip pass">2 Informativos</span></td></tr>
-      <tr><td class="k">Estado</td><td><span class="chip pass">9 remediados</span> <span class="chip high">4 abiertos o aceptados</span> <span class="chip pass">303/303 tests</span></td></tr>
+      <tr><td class="k">Trabajo</td><td>Revisión de seguridad <b>interna</b>; las rondas de V5, con herramientas de análisis con IA. No es una auditoría externa</td></tr>
+      <tr><td class="k">Periodo</td><td>2026-06-06 → 2026-11-11 · de V1 a V4, después cinco rondas de V5 y un ejercicio de equipo rojo</td></tr>
+      <tr><td class="k">Hallazgos</td><td><span class="chip high">2 Críticos</span> <span class="chip high">13 Altos</span> <span class="chip fixed">10 Medios</span> <span class="chip fixed">3 Bajos</span> <span class="chip pass">2 Informativos</span></td></tr>
+      <tr><td class="k">Estado (V5)</td><td><span class="chip pass">26 cerrados</span> <span class="chip fixed">4 aceptados</span> <span class="chip pass">0 abiertos</span> <span class="chip pass">191/191 tests</span> <span class="chip pass">72/72 contratos verificados</span></td></tr>
     </table>
   </div>
 
@@ -133,16 +134,16 @@
     <tr><td class="n">1</td><td>Resumen ejecutivo</td><td class="d">Resultados principales y qué debe llevarse un lector</td></tr>
     <tr><td class="n">2</td><td>Alcance, metodología y modelo de severidad</td><td class="d">Qué se revisó, en qué commit, cómo se asigna la severidad</td></tr>
     <tr><td class="n">3</td><td>Registro de hallazgos</td><td class="d">Todos los hallazgos, su severidad y su estado, en una página</td></tr>
-    <tr><td class="n">4</td><td>Hallazgos en detalle</td><td class="d">BVCC-01 … BVCC-13</td></tr>
-    <tr><td class="n">5</td><td>Remediación y verificación del despliegue</td><td class="d">Qué está vivo, en qué redes y cómo se comprobó</td></tr>
+    <tr><td class="n">4</td><td>Hallazgos en detalle</td><td class="d">BVCC-01 … BVCC-13 (revisión de V4) · BVCC-14 … BVCC-30 (revisión de V5)</td></tr>
+    <tr><td class="n">5</td><td>Remediación y verificación del despliegue</td><td class="d">V5 y V4: qué está vivo, en qué redes y cómo se comprobó</td></tr>
     <tr><td class="n">6</td><td>Riesgo residual y recomendaciones</td><td class="d">Qué sigue expuesto y qué hacer al respecto</td></tr>
     <tr><td class="n">7</td><td>Conclusión y limitaciones</td><td class="d">Valoración, y qué no establece esta revisión</td></tr>
     <tr class="part"><td colspan="3">Parte II — Anexos</td></tr>
-    <tr><td class="n">A</td><td>Arquitectura de seguridad</td><td class="d">Modelo de ejecución del agente, call policies, registry de validators</td></tr>
-    <tr><td class="n">B</td><td>Evidencia de pruebas</td><td class="d">Batería de permisos, batería de firma, gas, fork y fuzz</td></tr>
+    <tr><td class="n">A</td><td>Arquitectura de seguridad</td><td class="d">Primero el diseño de V5; después call policies y registry de V3/V4</td></tr>
+    <tr><td class="n">B</td><td>Evidencia de pruebas</td><td class="d">Suite de V5 y pruebas en cadena; baterías de V1 a V4</td></tr>
     <tr><td class="n">C</td><td>Análisis estático</td><td class="d">Ejecuciones de Slither y registro de falsos positivos</td></tr>
     <tr><td class="n">D</td><td>Previamente remediado — V1 y V2</td><td class="d">Hallazgos cerrados en generaciones superadas, con su evidencia</td></tr>
-    <tr><td class="n">E</td><td>Cronología de la remediación</td><td class="d">Las cuatro rondas, comprimidas</td></tr>
+    <tr><td class="n">E</td><td>Cronología de la remediación</td><td class="d">Todas las rondas, de V1 a V5, comprimidas</td></tr>
     <tr><td class="n">F</td><td>Identificadores y direcciones</td><td class="d">Contratos, redes, build</td></tr>
     <tr><td class="n">G</td><td>Notas de proceso</td><td class="d">En qué se equivocó esta revisión y qué implica</td></tr>
   </table>
@@ -155,58 +156,83 @@
 <div class="page section-break">
 <section>
   <h2><span class="n">1</span>Resumen ejecutivo</h2>
-  <p class="lead">La BVCC Agent Wallet es una cuenta inteligente ERC-4337 que permite a un dueño delegar
-  autoridad de gasto acotada en un agente autónomo (una EOA). Este informe cubre cuatro rondas de revisión de
-  esa vía de delegación, desde la primera batería de permisos en junio de 2026 hasta la generación V4
-  desplegada el 2026-07-28.</p>
+  <p class="lead">La BVCC Agent Wallet es una smart account ERC-4337 que permite a su dueño delegar en un
+  agente autónomo (una EOA) una capacidad de gasto acotada. Este informe recoge todas las revisiones de esa
+  vía de delegación, desde la primera batería de permisos de junio de 2026 hasta la generación V5,
+  desplegada el 2026-11-02. La V5 es la generación actual. De V1 a V4 siguen en el informe porque las
+  wallets creadas por sus factories siguen existiendo y conservan su propio bytecode.</p>
 
   <div class="kpis">
-    <div class="kpi"><div class="v">13</div><div class="l">Hallazgos, código actual</div></div>
+    <div class="kpi"><div class="v">30</div><div class="l">Hallazgos, revisiones de V4 y V5</div></div>
     <div class="kpi"><div class="v">2</div><div class="l">Críticos</div></div>
-    <div class="kpi"><div class="v">9</div><div class="l">Remediados</div></div>
-    <div class="kpi"><div class="v">303</div><div class="l">Tests, todos pasan</div></div>
+    <div class="kpi"><div class="v">0</div><div class="l">Abiertos en V5</div></div>
+    <div class="kpi"><div class="v">191</div><div class="l">Tests de V5, todos pasan</div></div>
   </div>
 
-  <h3>Qué encontró la revisión</h3>
-  <p>Dos hallazgos son Críticos. <b>BVCC-01</b>, una reentrada cruzada, permitía que un agente cuya dirección
-  adquiriera código después reentrara al <code>execute()</code> de nivel dueño y se saltara todos los límites
-  configurados de una vez; una prueba de concepto movió 49,925 ETH contra un presupuesto vitalicio de 0,003
-  ETH, y el mismo ataque funcionó contra una wallet creada desde la factory V2 viva sobre un fork de mainnet.
-  <b>BVCC-02</b>, una máscara de comandos equivocada en el validator del Universal Router, habría aceptado un
-  depósito en un puente cross-chain como si fuera un swap —justo la clase de exfiltración que el validator
-  existe para impedir— y se cazó en revisión antes de que ese validator llegara a registrarse en ninguna
-  red.</p>
-  <p>Tres hallazgos son Altos: los presupuestos del agente no acotan el gasto en protocolos cuando existe una
-  allowance de token viva (<b>BVCC-03</b>, <b>abierto</b>), los guardianes los podía elegir quien llamara
-  primero a la factory abierta (<b>BVCC-04</b>), y una recuperación completada no detenía a los agentes
-  autorizados antes de ella (<b>BVCC-05</b>). El resto son Medios o menores.</p>
+  <h3>V5, la generación actual</h3>
+  <p>La V5 reescribe el modelo de permisos del agente en lugar de parchearlo. La revisión de V4 dejó abierto
+  un riesgo material, <b>BVCC-03</b>: el presupuesto de token de un agente no acotaba lo que podía gastar a
+  través de un protocolo al que el dueño ya hubiera dado una allowance. La V5 lo cierra midiendo lo que sale
+  de la wallet. Cada lote de un agente lee el saldo de cada token relevante antes y después de ejecutarse y
+  carga la diferencia, comisión incluida, contra los límites del agente. Da igual cómo se combinen las
+  llamadas o qué allowances existan ya. Toda llamada de un agente a un protocolo necesita ahora un
+  validator on-chain. Un límite de 0 significa que no se permite nada y una lista de destinatarios vacía
+  significa ningún destinatario. Los permisos de un agente caducan en un año como mucho, las firmas del
+  dueño llevan caducidad, y los guardianes votan ahora una propuesta concreta, lo que cierra el bloqueo de
+  recuperación de <b>BVCC-09</b>.</p>
+  <p>Antes de desplegarse, el código de V5 pasó por cinco rondas de revisión y un ejercicio de equipo rojo.
+  Entre todos encontraron <b>diecisiete problemas</b>, de BVCC-14 a BVCC-30: diez altos, cinco medios y dos
+  bajos. Ninguno llegó a una red. Trece se corrigieron en el código. Cuatro se aceptan y se documentan como
+  supuestos de confianza: los validators deben ser inmutables, los hooks de Uniswap v4 aprobados y los
+  tokens permitidos son de confianza, y la wallet solo mide los tokens que declara un validator. La quinta
+  ronda no encontró nada nuevo y el código se congeló el 2026-10-29. La mayoría de los altos están en los
+  validators de posiciones de Uniswap, y varios aparecieron justo al lado del arreglo del anterior; el
+  Anexo G vuelve sobre ello.</p>
+  <p>La V5 está viva en Ethereum, Arbitrum One, Base, BNB Chain, Polygon y Arbitrum Sepolia desde el
+  2026-11-02. Los 72 contratos (12 por red) tienen el código fuente verificado en los exploradores, y los 30
+  validators están activos en el registry. Ambas cosas se releyeron de cada red para esta edición, el
+  2026-11-11.</p>
+
+  <h3>V4 y anteriores: qué encontró la revisión</h3>
+  <p>Dos hallazgos son críticos. <b>BVCC-01</b>, una reentrada entre funciones, permitía a un agente cuya
+  dirección adquiriera código después volver a entrar en el <code>execute()</code> de nivel de dueño y
+  saltarse a la vez todos los límites configurados; una prueba de concepto movió 49,925 ETH con un
+  presupuesto total de 0,003 ETH, y el mismo ataque funcionó contra una wallet creada desde la factory V2
+  viva en un fork de mainnet. <b>BVCC-02</b>, una máscara de comandos errónea en el validator del Universal
+  Router, habría aceptado un depósito de puente entre cadenas como si fuera un swap —justo la clase de
+  exfiltración que el validator existe para impedir— y se detectó en la revisión antes de que ese validator
+  se registrara en ninguna red.</p>
+  <p>Tres son altos: los presupuestos del agente no acotan el gasto en protocolos cuando existe una
+  allowance viva (<b>BVCC-03</b>, abierto en V4 y cerrado en V5), cualquiera que llamara primero a la
+  factory abierta podía elegir los guardianes (<b>BVCC-04</b>), y una recuperación completada no detenía a
+  los agentes autorizados antes (<b>BVCC-05</b>). El resto son medios o menores.</p>
 
   <h3>Qué se hizo al respecto</h3>
-  <p>Nueve hallazgos están remediados y vivos. Siete de ellos exigían cambiar el bytecode y viajaron juntos
-  como la generación <b>V4</b>, desplegada y verificada de forma independiente en las seis redes soportadas el
-  2026-07-28. La validación profunda —la capa que inspecciona calldata que un anclaje de bitmap no sabe
-  expresar— está completa: los dos selectores que delegan en el registry on-chain tienen validator activo en
-  todas las redes, y el ciclo completo de liquidez de Uniswap v4 lo ejercitó un agente en mainnet de Arbitrum,
-  terminando con la posición quemada y sin valor nativo varado.</p>
-  <p>Cuatro hallazgos siguen abiertos. Uno es Alto y es el riesgo residual material: donde el dueño ya ha
-  concedido una allowance de token a un protocolo, anclar el destino de una llamada no acota su valor, así que
-  una clave de agente comprometida vale más que su presupuesto. El plan escalonado está en <b>BVCC-03</b> y la
-  mitigación operativa en §6. Los otros tres son Medios o Informativos y son limitaciones aceptadas y
-  documentadas.</p>
+  <p>Nueve de los hallazgos de la revisión de V4 se remediaron en V4. Siete exigían cambiar el bytecode y
+  viajaron juntos como la generación <b>V4</b>, desplegada y verificada de forma independiente en las seis
+  redes el 2026-07-28. Cuatro quedaron abiertos o aceptados en V4: BVCC-03, el material, y BVCC-09, BVCC-10 y
+  BVCC-13. La V5 cierra los cuatro en el código y conserva todos los arreglos de V4.</p>
+  <p>Los diecisiete hallazgos de V5 se resolvieron antes del despliegue, cada arreglo con su test de
+  regresión. La capa de validación profunda también está completa en V5: el Universal Router, el
+  PositionManager de Uniswap v4, el Pool de Aave v3, el position manager de Uniswap v3 y el token nativo
+  envuelto tienen un validator activo en todas las redes.</p>
 
-  <div class="callout warn"><b>Dos salvedades acompañan a cualquier afirmación de que V4 arregló esto.</b>
-  Primera: una cuenta inteligente desplegada no se puede actualizar en su sitio, porque su dirección se deriva
-  de su bytecode. <b>Las wallets que sigan en V1, V2 o V3 corren el bytecode vulnerable hasta que sus dueños
-  migren</b>, y BVCC-01 afectaba a las tres generaciones por igual. Segunda: BVCC-03 sobrevive a V4 y no es
-  asunto de contratos — pon a cero cualquier allowance viva hacia un protocolo antes de autorizar a un agente
-  que pueda alcanzarlo.</div>
+  <div class="callout warn"><b>Dos advertencias deben acompañar cualquier afirmación de que V5 corrigió
+  esto.</b> Primera: una smart account desplegada no se puede actualizar por dentro, porque su dirección
+  sale de su código. <b>Las wallets que siguen en V1 a V4 ejecutan su propio bytecode hasta que sus dueños
+  migren.</b> BVCC-01 afectaba por igual a V1, V2 y V3, y BVCC-03 sigue abierto en toda wallet V4. La app
+  avisa de una wallet antigua, y una guía de migración más el botón «Enviar todo» mueven los fondos con una
+  firma por red. Segunda: las garantías de V5 descansan en cuatro supuestos de confianza declarados
+  (BVCC-19, BVCC-25, BVCC-29 y BVCC-30). El §6 explica qué pide cada uno al dueño.</div>
 
   <div class="callout"><b>Esta es una revisión interna.</b> La hizo el equipo de desarrollo sobre su propio
-  código, no un tercero independiente, y los contratos no han sido auditados externamente. Cuatro de los
-  hallazgos —BVCC-04, BVCC-06, BVCC-07 y BVCC-11— salieron de una pasada posterior sobre el mismo código con
-  una herramienta de análisis distinta, después de que tres pasadas anteriores no los vieran. Aquella pasada
-  también fue interna: <b>ningún tercero independiente ha revisado este código.</b> El §7 expone los límites
-  de lo que este documento establece.</div>
+  código. Las cinco rondas de V5 y el equipo rojo los ejecutó el equipo con herramientas de análisis con IA;
+  ningún auditor humano independiente ha revisado ninguna generación, y los contratos no han sido auditados
+  externamente. Cuatro de los hallazgos de V4 (BVCC-04, BVCC-06, BVCC-07 y BVCC-11) salieron de una pasada
+  posterior con otra herramienta después de que tres pasadas anteriores no los vieran, y las rondas de V5
+  siguieron encontrando caminos nuevos hasta la quinta. Ambas cosas dicen lo mismo: <b>que un hallazgo no
+  aparezca aquí es evidencia débil de que no exista.</b> El §7 declara los límites de lo que establece este
+  documento.</div>
 </section>
 </div>
 
@@ -218,15 +244,34 @@
   <table class="data">
     <tr><th>Elemento</th><th>Valor</th></tr>
     <tr><td>Repositorio</td><td class="mono">blockventurechaincapital-crypto/bvcc-wallet-agent</td></tr>
-    <tr><td>Commit</td><td class="mono">a3e28f1a7c8e265d5b3630f98e4c8e77c6752eb5</td></tr>
-    <tr><td>Árbol de <code>contracts/src</code></td><td class="mono">337e84f05fa11b948e3ad3221398ea4edc030f45</td></tr>
-    <tr><td>Build</td><td>solc 0.8.36 · <code>via_ir</code> · <code>optimizer_runs = 50</code> · EVM <code>cancun</code> (congelada — las direcciones CREATE2 dependen de ella)</td></tr>
-    <tr><td>Herramientas</td><td>Slither 0.11.3 · Foundry (forge 1.5.1) · viem 2.x</td></tr>
+    <tr><td>Commit de <b>V5</b></td><td class="mono">838a70fabba4c9ab9ec26a13ea9059a63f75f150</td></tr>
+    <tr><td>Árbol de <code>contracts-v5/src</code> (<b>V5</b>)</td><td class="mono">64a5c674e5fdfd1e457daf59c8bf3bb813c89e62</td></tr>
+    <tr><td>Commit de <b>V4</b></td><td class="mono">a3e28f1a7c8e265d5b3630f98e4c8e77c6752eb5</td></tr>
+    <tr><td>Árbol de <code>contracts/src</code> (<b>V4</b>)</td><td class="mono">337e84f05fa11b948e3ad3221398ea4edc030f45</td></tr>
+    <tr><td>Build</td><td>solc 0.8.36 · <code>via_ir</code> · <code>optimizer_runs = 50</code> · EVM <code>cancun</code> (congelada — las direcciones CREATE2 dependen de ella). V5 además compila sin hash de metadatos, así que la build reproduce byte a byte el bytecode desplegado</td></tr>
+    <tr><td>Dependencias (V5)</td><td>OpenZeppelin Contracts <code>v5.6.1</code> (etiqueta oficial) · forge-std <code>v1.16.1</code>, solo pruebas</td></tr>
+    <tr><td>Herramientas</td><td>Slither 0.11.3 · Foundry (forge 1.5.1; forge 1.8.6 en las rondas de V5) · viem 2.x</td></tr>
   </table>
-  <p class="foot-note">Las rondas anteriores revisaron los árboles de V1, V2 y V3 en sus propios commits; esos
-  hallazgos y sus remediaciones están en el Anexo D y el Anexo E.</p>
+  <p class="foot-note">El árbol de V5 contiene el núcleo congelado el 2026-10-29 más dos validators añadidos el
+  2026-11-02 sin tocar el núcleo (posiciones de Uniswap v3 y token nativo envuelto). Las rondas anteriores
+  revisaron los árboles de V1, V2 y V3 en sus propios commits; esos hallazgos y sus remediaciones están en el
+  Anexo D y el Anexo E.</p>
 
   <h3>Dentro del alcance</h3>
+  <p><b>V5</b> (<code>contracts-v5/src</code>):</p>
+  <ul>
+    <li><code>BVCCSmartWalletV5.sol</code> — la wallet con passkey: creación con firma de la credencial,
+    ejecución del dueño y comisiones, caducidad de firmas, votos de guardianes y recuperación.</li>
+    <li><code>BVCCAgentWalletV5.sol</code> y la librería externa <code>BVCCAgentLogicV5.sol</code> —
+    permisos, policies, pausa y caducidad por agente, y el lote medido del agente.</li>
+    <li><code>BVCCWalletFactoryV5.sol</code> — un solo contrato de factory, desplegado dos veces, que crea
+    clones ERC-1167 no actualizables por CREATE2.</li>
+    <li><code>BVCCValidatorRegistryV5.sol</code>, <code>BVCCHookRegistryV5.sol</code>,
+    <code>IBVCCValidatorV5</code> y cinco validators: Universal Router, PositionManager de Uniswap v4, Pool de
+    Aave v3, NonfungiblePositionManager de Uniswap v3 y nativo envuelto (WETH, WBNB, WPOL).</li>
+    <li>Los scripts de despliegue, porque fijan todas las direcciones y las conexiones entre contratos.</li>
+  </ul>
+  <p><b>V4</b> (<code>contracts/src</code>):</p>
   <ul>
     <li><code>BVCCAgentWallet.sol</code> — lógica de permisos del agente (<code>executeAsAgent</code>, topes
     por token y de ETH, pausa, caducidad, la capa de call policies).</li>
@@ -269,6 +314,15 @@
     transacciones reales en Arbitrum Sepolia y Arbitrum One.</li>
     <li><b>Verificación del despliegue</b> — el bytecode desplegado, el owner y el cableado del registry se
     releen de cada red al margen del script de despliegue.</li>
+    <li><b>Rondas de revisión de V5</b> — cinco rondas entre el 2026-10-27 y el 2026-10-29, cada una con una
+    herramienta de análisis con IA contra la especificación escrita y el código. Cada hallazgo se confirmó
+    con un test que fallaba, la mayoría sobre forks de las redes reales, antes de corregirlo; la ronda
+    siguiente empezaba comprobando los arreglos de la anterior.</li>
+    <li><b>Equipo rojo de V5</b> — dos sesiones de agentes de IA atacando el código, una desde dentro (como
+    agente, guardián, administrador del registry y dueño) y otra desde fuera sin ningún rol, más 128.000
+    secuencias aleatorias de acciones comprobadas contra seis invariantes del núcleo. Una revisión aparte,
+    también con IA, cubrió los dos validators añadidos tras el congelado: 14 hipótesis, 13 tests
+    adversariales, sin hallazgos.</li>
   </ul>
 
   <h3>Modelo de amenazas</h3>
@@ -325,21 +379,29 @@
   independiente ha revisado este código</b>. Que un hallazgo no aparezca en este documento es, por tanto,
   evidencia débil de que no exista. El §7 desarrolla qué
   establece y qué no establece esta revisión.</p>
+  <p>Las rondas de V5 comparten ese límite y añaden uno propio: se hicieron con herramientas de IA. Eso amplió
+  la cobertura, con diecisiete problemas encontrados antes del despliegue, pero una herramienta revisa
+  aquello a lo que se la apunta, y cuatro de las rondas de V5 encontraron un camino nuevo al lado del arreglo
+  anterior. El equipo rojo y la quinta ronda no encontraron ninguna vía de robo en el núcleo; eso es
+  evidencia sobre los caminos que probaron, no una demostración.</p>
 </section>
 </div>
 
 <div class="page section-break">
 <section>
   <h2><span class="n">3</span>Registro de hallazgos</h2>
-  <p>Trece hallazgos en el código actual, más dos cerrados en generaciones superadas (Anexo D). La severidad
-  es la que tenían al encontrarlos; el estado es a fecha de 2026-07-29.</p>
+  <p>Treinta hallazgos: trece de la revisión de V4 y anteriores (BVCC-01 a BVCC-13) y diecisiete de las rondas
+  de V5 (BVCC-14 a BVCC-30), más dos cerrados en generaciones superadas (Anexo D). La severidad es la que tenía
+  al encontrarse; el estado es a 2026-11-11. Para los hallazgos de la revisión de V4 la columna de estado da
+  las dos generaciones, porque las wallets V4 siguen en uso.</p>
 
   <table class="data">
     <tr><th>ID</th><th>Hallazgo</th><th>Requiere</th><th>Severidad</th><th>Estado</th></tr>
+    <tr class="part"><td colspan="5"><b>Revisión de V4 y anteriores</b> — 2026-06 → 2026-07</td></tr>
     <tr>
       <td class="mono">BVCC-01</td>
       <td>Reentrada cruzada vía <code>_currentAgent</code></td>
-      <td class="foot-note">Clave del agente, u operador hostil</td><td><span class="badge b-crit">CRÍTICA</span></td>
+      <td class="foot-note">Clave del agente, o un operador de agente hostil</td><td><span class="badge b-crit">CRÍTICA</span></td>
       <td><span class="badge b-pass">Corregido en V4</span></td>
     </tr>
     <tr>
@@ -351,50 +413,50 @@
     <tr>
       <td class="mono">BVCC-03</td>
       <td>Los presupuestos de token no acotan el gasto en protocolos</td>
-      <td class="foot-note">Clave del agente <b>+</b> allowance viva</td><td><span class="badge b-high">ALTA</span></td>
-      <td><span class="badge b-high">ABIERTO</span></td>
+      <td class="foot-note">Clave del agente <b>+</b> una allowance viva</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-high">ABIERTO en V4</span> <span class="badge b-pass">Cerrado en V5</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-04</td>
       <td>Apropiación de guardianes a través de la factory abierta</td>
-      <td class="foot-note"><b>Ninguna</b> — cualquier tercero</td><td><span class="badge b-high">ALTA</span></td>
+      <td class="foot-note"><b>Nada</b> — cualquier tercero</td><td><span class="badge b-high">ALTA</span></td>
       <td><span class="badge b-pass">Corregido en V4</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-05</td>
       <td>Una recuperación completada no detenía a los agentes existentes</td>
-      <td class="foot-note">Un compromiso ya en curso</td><td><span class="badge b-high">ALTA</span></td>
+      <td class="foot-note">Un compromiso ya en marcha</td><td><span class="badge b-high">ALTA</span></td>
       <td><span class="badge b-pass">Corregido en V4</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-06</td>
       <td><code>credentialId</code> sin autenticar en el evento de la factory</td>
-      <td class="foot-note"><b>Ninguna</b> — cualquier tercero</td><td><span class="badge b-med">MEDIA</span></td>
+      <td class="foot-note"><b>Nada</b> — cualquier tercero</td><td><span class="badge b-med">MEDIA</span></td>
       <td><span class="badge b-pass">Corregido en V4</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-07</td>
       <td>Credencial obsoleta tras una recuperación</td>
-      <td class="foot-note"><b>Ninguna</b> — tras cualquier recuperación</td><td><span class="badge b-med">MEDIA</span></td>
+      <td class="foot-note"><b>Nada</b> — sigue a toda recuperación</td><td><span class="badge b-med">MEDIA</span></td>
       <td><span class="badge b-pass">Corregido en V4</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-08</td>
       <td>Los guardianes no se podían rotar nunca</td>
-      <td class="foot-note"><b>Ninguna</b> — operativo</td><td><span class="badge b-med">MEDIA</span></td>
+      <td class="foot-note"><b>Nada</b> — operativo</td><td><span class="badge b-med">MEDIA</span></td>
       <td><span class="badge b-pass">Corregido en V4</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-09</td>
       <td>Un solo guardián puede bloquear una recuperación indefinidamente</td>
       <td class="foot-note">Un guardián malicioso</td><td><span class="badge b-med">MEDIA</span></td>
-      <td><span class="badge b-info">Aceptado</span></td>
+      <td><span class="badge b-info">Aceptado en V4</span> <span class="badge b-pass">Cerrado en V5</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-10</td>
       <td>Pausar o revocar un agente no retira sus allowances</td>
       <td class="foot-note">Un spender ya aprobado</td><td><span class="badge b-med">MEDIA</span></td>
-      <td><span class="badge b-high">ABIERTO</span> — interfaz</td>
+      <td><span class="badge b-high">ABIERTO en V4</span> — interfaz <span class="badge b-pass">Cerrado en V5</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-11</td>
@@ -404,15 +466,118 @@
     </tr>
     <tr>
       <td class="mono">BVCC-12</td>
-      <td><code>increaseLiquidity</code> no comprueba el dueño en el NFPM de v3</td>
-      <td class="foot-note">Clave del agente; inalcanzable hoy</td><td><span class="badge b-info">INFORMATIVA</span></td>
-      <td><span class="badge b-pass">Mitigado por exclusión</span></td>
+      <td><code>increaseLiquidity</code> no comprueba el dueño en el NFPM v3</td>
+      <td class="foot-note">Clave del agente; inalcanzable tal como está desplegado</td><td><span class="badge b-info">INFORMATIVA</span></td>
+      <td><span class="badge b-pass">Mitigado por exclusión en V4</span> <span class="badge b-pass">Cerrado en V5</span></td>
     </tr>
     <tr>
       <td class="mono">BVCC-13</td>
       <td>Los constructores de los validators aceptan la dirección cero</td>
-      <td class="foot-note"><b>Ninguna</b> — solo error de despliegue</td><td><span class="badge b-info">INFORMATIVA</span></td>
-      <td><span class="badge b-info">Aceptado</span></td>
+      <td class="foot-note"><b>Nada</b> — solo error de despliegue</td><td><span class="badge b-info">INFORMATIVA</span></td>
+      <td><span class="badge b-info">Aceptado en V4</span> <span class="badge b-pass">Cerrado en V5</span></td>
+    </tr>
+    <tr class="part"><td colspan="5"><b>Revisión de V5</b> — 2026-10-27 → 2026-11-02, todo antes de desplegar o sin despliegue</td></tr>
+    <tr>
+      <td class="mono">BVCC-14</td>
+      <td>Una lectura de saldo fallida desactivaba el presupuesto de token del agente</td>
+      <td class="foot-note">Clave del agente + un token permitido cuyo saldo no se puede leer</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-15</td>
+      <td>Una llamada a protocolo podía mover un token no permitido empaquetado en sus datos</td>
+      <td class="foot-note">Clave del agente + una aprobación antigua del dueño</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-16</td>
+      <td>Una llamada a protocolo podía pagar a un destinatario fuera de la lista del agente</td>
+      <td class="foot-note">Clave del agente + una policy sin ancla de destinatario</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-17</td>
+      <td>Retirar de Aave y reenviar salía a cero contra el presupuesto</td>
+      <td class="foot-note">Clave del agente con <code>withdraw</code> de Aave</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-18</td>
+      <td>Pagar la comisión en un token con impuesto al emisor superaba el presupuesto</td>
+      <td class="foot-note">Clave del agente + un token permitido con impuesto al emisor</td><td><span class="badge b-med">MEDIA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-19</td>
+      <td>Un validator mutable podía ampliar permisos sin la espera de 48 horas</td>
+      <td class="foot-note">Admin del registry + un validator mutable</td><td><span class="badge b-med">MEDIA</span></td>
+      <td><span class="badge b-info">Aceptado</span> — regla de despliegue</td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-20</td>
+      <td>No se comprobaba un hook congelado al añadir liquidez</td>
+      <td class="foot-note">Clave del agente + un hook congelado</td><td><span class="badge b-med">MEDIA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-21</td>
+      <td>Liquidez trasladada a una posición ajena por un cargo residual</td>
+      <td class="foot-note">Clave del agente + una posición ajena que aprueba a la wallet</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-22</td>
+      <td>Liquidez neteada hacia una posición propia aprobada a un tercero</td>
+      <td class="foot-note">Clave del agente + una aprobación de NFT del dueño</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-23</td>
+      <td>Un hook v4 no aprobado movía un token no permitido por el Universal Router</td>
+      <td class="foot-note">Clave del agente + una aprobación antigua del dueño al hook</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-24</td>
+      <td>Una retirada del agente ejecutaba un hook congelado</td>
+      <td class="foot-note">Clave del agente + hook congelado + aprobación antigua del dueño</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-25</td>
+      <td>Un hook v4 aprobado ejecuta código que la wallet no puede acotar</td>
+      <td class="foot-note">Un hook aprobado malicioso o comprometido</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-info">Aceptado</span> — decisión de confianza</td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-26</td>
+      <td>Un agente podía vaciar la posición de un tercero que aprobó a la wallet</td>
+      <td class="foot-note">Clave del agente + una aprobación de NFT de un tercero</td><td><span class="badge b-high">ALTA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-27</td>
+      <td>Los agentes no podían quemar nunca una posición v4</td>
+      <td class="foot-note"><b>Nada</b> — uso normal</td><td><span class="badge b-med">MEDIA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-28</td>
+      <td><code>pauseAgents</code> revertía si la wallet ya estaba en pausa</td>
+      <td class="foot-note"><b>Nada</b> — operación del dueño</td><td><span class="badge b-low">BAJA</span></td>
+      <td><span class="badge b-pass">Corregido antes de desplegar</span></td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-29</td>
+      <td>Un token permitido que miente sobre su saldo o mueve otro token</td>
+      <td class="foot-note">Un token permitido malicioso</td><td><span class="badge b-med">MEDIA</span></td>
+      <td><span class="badge b-info">Aceptado</span> — supuesto de confianza</td>
+    </tr>
+    <tr>
+      <td class="mono">BVCC-30</td>
+      <td>La wallet solo mide los tokens que ve o que declara un validator</td>
+      <td class="foot-note">Un validator que declara de menos</td><td><span class="badge b-low">BAJA</span></td>
+      <td><span class="badge b-info">Aceptado</span> — regla de validators</td>
     </tr>
   </table>
 
@@ -420,38 +585,55 @@
   <div class="two">
     <div>
       <table class="data">
-        <tr><th>Severidad</th><th>Nº</th></tr>
-        <tr><td><span class="badge b-crit">CRÍTICA</span></td><td>2</td></tr>
-        <tr><td><span class="badge b-high">ALTA</span></td><td>3</td></tr>
-        <tr><td><span class="badge b-med">MEDIA</span></td><td>5</td></tr>
-        <tr><td><span class="badge b-low">BAJA</span></td><td>1</td></tr>
-        <tr><td><span class="badge b-info">INFORMATIVA</span></td><td>2</td></tr>
+        <tr><th>Severidad</th><th>Total</th><th>Revisión V4</th><th>Revisión V5</th></tr>
+        <tr><td><span class="badge b-crit">CRÍTICA</span></td><td>2</td><td>2</td><td>0</td></tr>
+        <tr><td><span class="badge b-high">ALTA</span></td><td>13</td><td>3</td><td>10</td></tr>
+        <tr><td><span class="badge b-med">MEDIA</span></td><td>10</td><td>5</td><td>5</td></tr>
+        <tr><td><span class="badge b-low">BAJA</span></td><td>3</td><td>1</td><td>2</td></tr>
+        <tr><td><span class="badge b-info">INFORMATIVA</span></td><td>2</td><td>2</td><td>0</td></tr>
       </table>
     </div>
     <div>
       <table class="data">
-        <tr><th>Estado</th><th>Nº</th></tr>
-        <tr><td>Corregidos y desplegados</td><td>9</td></tr>
-        <tr><td>Abiertos</td><td>2</td></tr>
-        <tr><td>Aceptados y documentados</td><td>2</td></tr>
+        <tr><th>Estado</th><th>En V5</th><th>En wallets V4</th></tr>
+        <tr><td>Corregido o cerrado</td><td>26</td><td>9 de 13</td></tr>
+        <tr><td>Abierto</td><td>0</td><td>2</td></tr>
+        <tr><td>Aceptado y documentado</td><td>4</td><td>2</td></tr>
       </table>
     </div>
   </div>
 
-  <div class="callout"><b>Cómo leer el registro.</b> La severidad se recoge tal como estaba al encontrar el
-  problema, así que un Crítico corregido sigue leyéndose como Crítico. Es deliberado: la pregunta del lector
-  suele ser «de qué era capaz este código», no solo «qué queda». Nueve hallazgos están remediados en bytecode
-  vivo en las seis redes, y los dos Críticos están entre ellos. El que debería condicionar el comportamiento
-  de un dueño hoy es <b>BVCC-03</b>, que V4 no cierra. La columna <b>Requiere</b> importa tanto como la
-  severidad: seis de los trece no necesitan credencial alguna —un desconocido que nunca tuvo una clave llega a
-  BVCC-04 y a BVCC-06— mientras que cinco presuponen una clave de agente hostil o robada, que el modelo de
-  amenazas del §2 trata como suceso esperable y no como excusa.</div>
+  <h3>De dónde salen los identificadores de V5</h3>
+  <p>Cada ronda de V5 usó su propia numeración. Aquí se renumeran para continuar la serie; se conservan los
+  identificadores originales para poder seguir los informes de cada ronda.</p>
+  <table class="data">
+    <tr><th>Ronda</th><th>Fecha</th><th>IDs originales</th><th>En este informe</th><th>Resultado</th></tr>
+    <tr><td>V5, ronda 1</td><td>2026-10-27</td><td class="mono">V5-H-01…04 · V5-M-01…03</td><td>BVCC-14 … BVCC-20</td><td>4 altos, 3 medios</td></tr>
+    <tr><td>V5, ronda 2</td><td>2026-10-28</td><td class="mono">R2-H01</td><td>BVCC-21</td><td>Arreglos de la ronda 1 comprobados; 1 alto</td></tr>
+    <tr><td>V5, ronda 3</td><td>2026-10-28</td><td class="mono">R3-H01 · R3-H02</td><td>BVCC-22, BVCC-23</td><td>2 altos</td></tr>
+    <tr><td>V5, ronda 4</td><td>2026-10-29</td><td class="mono">R4-H01 · R4-H02</td><td>BVCC-24, BVCC-25</td><td>2 altos (uno aceptado)</td></tr>
+    <tr><td>Equipo rojo</td><td>2026-10-29</td><td class="mono">RT-01 · RT-55 · RT-30-A · RT-52/54 · RT-65</td><td>BVCC-26 … BVCC-30</td><td>Ninguna vía de robo en el núcleo; 3 corregidos, 2 aceptados</td></tr>
+    <tr><td>V5, ronda 5</td><td>2026-10-29</td><td>—</td><td>—</td><td>Arreglos del equipo rojo comprobados; sin hallazgos nuevos; código congelado</td></tr>
+    <tr><td>Validators nuevos</td><td>2026-11-02</td><td>—</td><td>—</td><td>Uniswap v3 y nativo envuelto: 14 hipótesis, 13 tests, sin hallazgos</td></tr>
+  </table>
+
+  <div class="callout"><b>Cómo leer el registro.</b> La severidad se anota como se encontró, así que un crítico
+  ya corregido se sigue leyendo como crítico. La pregunta del lector suele ser «de qué era capaz este
+  código», no solo «qué queda». En V5 no hay nada abierto: veintiséis hallazgos están cerrados en el código y
+  cuatro son supuestos de confianza aceptados que el §6 detalla. En una wallet V4, <b>BVCC-03</b> sigue
+  abierto y es el motivo para migrar. La columna <b>Requiere</b> importa tanto como la severidad. La mayoría
+  de los hallazgos de V5 necesitan un agente autorizado más algo que el dueño hizo antes, normalmente una
+  aprobación antigua de un token o de un NFT, que el modelo de amenazas del §2 trata como comportamiento
+  normal. Uno, BVCC-26, ponía en riesgo la posición de un tercero y no la del dueño.</div>
 </section>
 </div>
 
 <div class="page section-break">
 <section>
   <h2><span class="n">4</span>Hallazgos en detalle</h2>
+  <p class="foot-note">BVCC-01 a BVCC-13 salen de la revisión de V4 y anteriores; donde la V5 cambió el
+  resultado, una nota «Cerrado en V5» explica cómo. BVCC-14 a BVCC-30 salen de las rondas de V5 y van
+  después.</p>
   <p>Cada hallazgo se expone con la severidad que tenía al encontrarlo, las condiciones previas que necesita un atacante y la evidencia que lo estableció. La remediación y su verificación van en §5.</p>
   <p>El código de V3 se sometió a otra pasada interna con una herramienta de análisis distinta, que planteó
   cuatro cuestiones. Las cuatro se
@@ -608,7 +790,7 @@
     <tr><th>Ubicación</th><td><code>BVCCAgentWallet.sol</code> — <code>_validateExecutionItem</code>, caso 3</td></tr>
     <tr><th>Impacto</th><td>Crítico donde aplica: pérdida de la allowance viva entera, con independencia del presupuesto de token configurado para el agente.</td></tr>
     <tr><th>Probabilidad</th><td>Media-baja. Exige a la vez una clave de agente comprometida <i>y</i> una allowance que el dueño ya haya concedido a un protocolo alcanzable por el agente. Una wallet sin allowance viva no está expuesta.</td></tr>
-    <tr><th>Nota</th><td>El único hallazgo de este informe que V4 no cierra. Ver §6 para la mitigación y el plan escalonado.</td></tr>
+    <tr><th>Nota</th><td>El único hallazgo de la revisión de V4 que V4 no cierra. <b>Cerrado en V5</b> midiendo lo que sale; ver la nota al final de este hallazgo. Las wallets V4 siguen expuestas.</td></tr>
     </table>
 <p>Los contadores por token solo acumulan para los selectores <code>transfer</code> y <code>approve</code>
   de ERC-20: a <code>_checkTokenWhitelistAndAmount</code> se llega desde esas dos ramas y desde ninguna más.
@@ -688,6 +870,19 @@
   propietario puede conceder una allowance desde cualquier dApp, y nada on-chain lo impide. La comprobación
   en el momento de autorizar es por tanto una foto que cierra el caso común —la allowance olvidada— no un
   invariante. Solo la capa de validators lo convierte en uno.</div>
+
+  <div class="callout"><b>Cerrado en V5.</b> La V5 tomó la fila «contabilidad dentro de la wallet» del plan
+  anterior y la metió en el núcleo, midiendo en lugar de decodificar. Cada lote de un agente lee el saldo de
+  todo token permitido, todo token encontrado en los datos y todo token que declare un validator, antes y
+  después de ejecutarse. Lo que haya salido de la wallet se carga contra los límites por lote, diario y total
+  del agente, con la comisión del 0,15 % incluida. Una allowance viva ya no importa: un swap que usa una
+  aprobación que el dueño dio antes se cobra como cualquier otro gasto, como se probó sobre un fork de
+  Arbitrum con los contratos reales de Uniswap. Un swap hacia un token sin valor se cobra igualmente por todo
+  el valor que salió, así que la pérdida queda acotada por el presupuesto del agente. La V5 no añade un
+  control de precio. Aave también queda cubierto: <code>borrow</code> se carga al presupuesto, el activo debe
+  estar en la lista del agente, y pedir prestado, retirar o cambiar el colateral se rechaza si el factor de
+  salud quedara por debajo de 1,2. Las retiradas se cobran al entrar (BVCC-17). El mecanismo nuevo trajo sus
+  propios hallazgos, de BVCC-14 a BVCC-30, todos resueltos antes del despliegue.</div>
   </div>
   <div class="finding" id="BVCC-04">
     <div class="fid">BVCC-04<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido en V4</span></div>
@@ -821,6 +1016,15 @@
   recuperación funcione, y así está probado. Implica que el dueño debe vigilar todas las redes donde exista
   su wallet, que es el mismo requisito operativo que la apropiación de guardianes del BVCC-04 dejó al
   descubierto por otra vía.</div>
+
+  <div class="callout"><b>Cerrado en V5.</b> La recuperación ya no tiene un paso de «iniciar» que cualquiera
+  pueda sobrescribir. Cada guardián vota una propuesta concreta (clave y credencial nuevas) y solo controla su
+  propio voto. Dos votos iguales arman la propuesta y empiezan las 48 horas; un tercer guardián no puede
+  reiniciar ni borrar los votos de los otros, y la propuesta sigue armada mientras tenga dos votos. Un guardián
+  hostil puede como mucho retrasar un ciclo votando y retirando su voto. 128.000 acciones aleatorias de
+  guardianes confirmaron los invariantes: armada exactamente cuando coinciden dos votos, ningún guardián cambia
+  una propuesta que no sostiene, y la clave nunca cambia antes de 48 horas. El dueño puede cancelar siempre con
+  su passkey.</div>
   </div>
   <div class="finding" id="BVCC-10">
     <div class="fid">BVCC-10<span class="badge b-med">MEDIA</span><span class="badge b-high">ABIERTO — interfaz</span></div>
@@ -839,6 +1043,12 @@
   respuesta ante incidentes más que al modelo de permisos: tras revocar un agente, el propietario debería
   además poner a cero las allowances que le concedió. Un aviso explícito al pausar y una pantalla de
   revocación de allowances lo cubren.</p>
+  <div class="callout"><b>Cerrado en V5.</b> Un agente ya no puede dejar una allowance viva. Al final de cada
+  lote del agente, cada aprobación que hizo vuelve a su valor anterior (pasando antes por cero, para tokens
+  como USDT), así que las aprobaciones del propio dueño no se tocan. Un <code>approve</code> del agente solo
+  puede nombrar un protocolo de su lista, nunca un destinatario cualquiera. Las allowances que da el
+  <i>dueño</i> siguen viviendo en los contratos de los tokens; las gestiona él, y el agente no puede usarlas
+  por encima de su presupuesto.</div>
   </div>
   <div class="finding" id="BVCC-11">
     <div class="fid">BVCC-11<span class="badge b-low">BAJA</span><span class="badge b-pass">Corregido en V4</span></div>
@@ -866,7 +1076,7 @@
     <tr><th>Ubicación</th><td><code>NonfungiblePositionManager</code> de Uniswap v3; presets de call policy</td></tr>
     <tr><th>Impacto</th><td>Alto si estuviera en la whitelist: a diferencia de <code>decreaseLiquidity</code>, <code>collect</code> y <code>burn</code>, el position manager no comprueba el dueño en <code>increaseLiquidity</code>. Un agente podría llevar los tokens aprobados de la wallet a una posición del atacante — un bypass de la lista de destinatarios que no se puede anclar, porque la palabra 0 es el <code>tokenId</code>, no una dirección.</td></tr>
     <tr><th>Probabilidad</th><td>No alcanzable tal como está desplegado: el selector está deliberadamente fuera de todos los presets de policy.</td></tr>
-    <tr><th>Nota</th><td>Se registra para que nadie deshaga la exclusión añadiendo el selector por comodidad. Para añadir liquidez, el agente mintea una posición nueva con el destinatario anclado a la wallet. Reactivarlo exige un validator profundo que compruebe <code>ownerOf(tokenId) == wallet</code>.</td></tr>
+    <tr><th>Nota</th><td>Se registra para que nadie deshaga la exclusión añadiendo el selector por comodidad. Para añadir liquidez, el agente mintea una posición nueva con el destinatario anclado a la wallet. Reactivarlo exige un validator profundo que compruebe <code>ownerOf(tokenId) == wallet</code>. <b>Cerrado en V5:</b> es lo que hace el validator de Uniswap v3 de V5. <code>increaseLiquidity</code> solo se permite en una posición de la wallet y sin aprobación individual.</td></tr>
     </table>
 
   </div>
@@ -877,9 +1087,314 @@
     <tr><th>Ubicación</th><td><code>BVCCUniversalRouterValidator.sol</code>, <code>BVCCPositionManagerValidator.sol</code> — constructores</td></tr>
     <tr><th>Impacto</th><td>Ninguno tal como está desplegado. Un validator construido con router o position manager a cero no casaría con nada y denegaría todas las llamadas: un fallo en la dirección segura.</td></tr>
     <tr><th>Probabilidad</th><td>Solo error en el despliegue; no lo controla un atacante.</td></tr>
-    <tr><th>Nota</th><td>Se releyó cada instancia desplegada en las seis redes y ambos inmutables son distintos de cero. Aceptado en vez de corregido: añadir la comprobación obligaría a redesplegar y volver a registrar validators que son demostrablemente correctos.</td></tr>
+    <tr><th>Nota</th><td>Se releyó cada instancia desplegada en las seis redes y ambos inmutables son distintos de cero. Aceptado en vez de corregido: añadir la comprobación obligaría a redesplegar y volver a registrar validators que son demostrablemente correctos. <b>Cerrado en V5:</b> el constructor de todo validator de V5 revierte con la dirección cero.</td></tr>
     </table>
 
+  </div>
+  <h3 style="margin-top:26px">Revisión de V5 — BVCC-14 a BVCC-30</h3>
+  <p>Los hallazgos siguientes salen de las cinco rondas de V5 y del equipo rojo. Ninguno llegó a un contrato
+  desplegado: la V5 se desplegó después de congelar el código el 2026-10-29. Cada uno se confirmó con un test
+  que fallaba sobre el código de ese momento, la mayoría sobre un fork de una red real con los contratos de
+  Uniswap y Aave desplegados. Esos tests pasan ahora como tests de regresión y tienen que seguir fallando con
+  el código antiguo. Las garantías de V5 a las que se refieren (G-1 a G-7) están en el Anexo A.</p>
+  <div class="finding" id="BVCC-14">
+    <div class="fid">BVCC-14<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Una lectura de saldo fallida desactivaba el presupuesto de token del agente</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentLogicV5.sol</code> — <code>prepare</code> / <code>settle</code> (medición)</td></tr>
+    <tr><th>Impacto</th><td>Un token permitido cuyo <code>balanceOf</code> revierte, o necesita más de las 100.000 unidades de gas de la lectura, salía de la wallet sin ningún cargo. Repitiendo envíos se podía vaciar.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: necesita un token inusual, o uno cuya implementación cambie. Los ERC-20 estándar no se ven afectados.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-H-01</span>. Rompe G-2.</td></tr>
+    </table>
+  <p>La medición previa al lote guardaba si cada lectura de saldo había funcionado y seguía igualmente. Al
+  liquidar, un token cuya lectura había fallado se trataba como si no hubiera salido nada. La prueba de
+  concepto permitía una unidad de un token cuyo <code>balanceOf</code> revierte y enviaba diez: la
+  transferencia pasaba y el presupuesto no registraba nada.</p>
+  <p><b>Arreglo.</b> Una lectura fallida revierte ahora todo el lote con <code>MeasurementFailed</code> antes
+  de ejecutar nada (<code>test_Measure_UnreadableBalanceReverts</code>). El coste se acepta y se documenta: un
+  token así bloquea los lotes de ese agente hasta que el dueño lo quite de su lista.</p>
+  </div>
+  <div class="finding" id="BVCC-15">
+    <div class="fid">BVCC-15<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Una llamada a protocolo podía mover un token no permitido empaquetado en sus datos</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentLogicV5.sol</code> — rama de protocolo y rastreo de los datos</td></tr>
+    <tr><th>Impacto</th><td>Usando una aprobación que el dueño había dado antes, un protocolo permitido podía sacar un token que el agente nunca tuvo permitido, sin pasar por ningún presupuesto.</td></tr>
+    <tr><th>Probabilidad</th><td>Media: necesita una aprobación antigua del dueño y una función de protocolo que el dueño habilitó sin validator.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-H-02</span>. Rompe G-2 y G-3.</td></tr>
+    </table>
+  <p>La wallet encuentra los tokens a medir buscando en los datos de la llamada palabras completas de 32 bytes
+  con direcciones. Un token empaquetado dentro de una ruta <code>bytes</code>, como los codifican los routers,
+  es invisible para ese rastreo. En el primer borrador de V5 se podía permitir una función de protocolo sin
+  validator, así que nadie más declaraba el token. La prueba de concepto usó un contrato con una ruta
+  empaquetada y movió 100 unidades de un token fuera de la lista del agente.</p>
+  <p><b>Arreglo.</b> Toda llamada de un agente a un protocolo necesita ahora un validator: una policy sin el bit
+  <code>DEEP</code> revierte con <code>CallNeedsValidator</code>, sea cual sea la función. Desaparece la antigua
+  lista de «funciones peligrosas». El validator responde de declarar todo token que la llamada pueda mover
+  (ver BVCC-30). Como consecuencia, SwapRouter02 deja de estar disponible para agentes; sus swaps van por el
+  Universal Router. Regresión: <code>test_Policy_EveryProtocolCallNeedsValidator</code>, más
+  <code>test_Fork_UR_NotAllowedTokenRejected</code> en el router real.</p>
+  </div>
+  <div class="finding" id="BVCC-16">
+    <div class="fid">BVCC-16<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Una llamada a protocolo podía pagar a un destinatario fuera de la lista del agente</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentLogicV5.sol</code> — rama de protocolo</td></tr>
+    <tr><th>Impacto</th><td>Una función de protocolo permitida que recibe un destino como argumento podía pagar a una dirección que eligiera el agente, fuera de su lista de destinatarios. El importe se cobraba, pero el destino no se comprobaba.</td></tr>
+    <tr><th>Probabilidad</th><td>Media: necesita una policy de protocolo que el dueño habilitó sin ancla de destinatario.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-H-03</span>, calificado «alto, condicional». Rompe G-4.</td></tr>
+    </table>
+  <p>Los envíos directos comprobaban la lista de destinatarios; las llamadas a protocolos solo comprobaban las
+  anclas que el dueño hubiera puesto en la policy, y el ancla de destinatario era opcional. El hallazgo
+  dependía de cómo se leyera G-4, así que el equipo lo decidió: G-4 se aplica a todo pago que pueda provocar
+  un agente.</p>
+  <p><b>Arreglo.</b> El mismo que en BVCC-15. Con un validator obligatorio en toda llamada a protocolo, cada
+  validator fija todos los destinatarios de pago de las funciones que permite (en la práctica, la propia
+  wallet). Regresión: <code>test_Policy_EveryProtocolCallNeedsValidator</code> y
+  <code>test_Fork_UR_ForeignRecipientRejected</code>.</p>
+  </div>
+  <div class="finding" id="BVCC-17">
+    <div class="fid">BVCC-17<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Retirar de Aave y reenviar salía a cero contra el presupuesto</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAaveV3ValidatorV5.sol</code> — <code>withdraw</code>; <code>BVCCAgentLogicV5.sol</code> — liquidación</td></tr>
+    <tr><th>Impacto</th><td>Un agente podía convertir colateral de Aave en dinero y enviarlo fuera en un solo lote sin que su presupuesto registrara nada. Reproducido contra el Pool real de Aave v3: 99 USDC fuera con un límite de 1 USDC.</td></tr>
+    <tr><th>Probabilidad</th><td>Media: necesita un agente con <code>withdraw</code> de Aave y colateral en la wallet. Nada más.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-H-04</span>. Rompe G-2.</td></tr>
+    </table>
+  <p>La V5 cobra la salida neta de cada token medido a lo largo del lote. El aToken no se medía, así que retirar
+  99 USDC a la wallet y después enviar 99 USDC dejaba el saldo de USDC donde empezó: salida neta cero, cargo
+  cero, comisión cero, y el colateral perdido. El test sobre un fork de Arbitrum en el bloque 518.809.446
+  comprobaba exactamente eso.</p>
+  <p><b>Arreglo.</b> Entradas cobradas. La interfaz del validator ganó un quinto valor de retorno,
+  <code>chargeInflow</code>. Cuando un validator lo activa, la wallet lee los tokens declarados antes y
+  después de esa llamada concreta y suma lo que entró a los costes del agente. Lo usan <code>withdraw</code> de
+  Aave y toda llamada al PositionManager de Uniswap v4, así que sacar dinero de una posición que la wallet no
+  mide se cobra al 0,15 % como cualquier otro gasto. Con el Pool real, retirar 99 USDC y reenviarlos con un
+  límite de 10 revierte ahora, y retirar 5 cobra 5,0075 (<code>test_Fork_Aave_WithdrawIsChargedAndCapped</code>).</p>
+  </div>
+  <div class="finding" id="BVCC-18">
+    <div class="fid">BVCC-18<span class="badge b-med">MEDIA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Pagar la comisión en un token con impuesto al emisor superaba el presupuesto</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentLogicV5.sol</code> — pago de la comisión</td></tr>
+    <tr><th>Impacto</th><td>Con un token que cobra un impuesto al emisor en cada transferencia, la propia transferencia de la comisión costaba más de lo cargado, así que la wallet perdía algo más que el límite del agente.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: necesita un token con impuesto al emisor en la lista del agente. El exceso es pequeño y depende del token.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-M-01</span>. Rompe G-2 por una cantidad pequeña.</td></tr>
+    </table>
+  <p>El cargo se anotaba antes de pagar la comisión y el saldo no se volvía a leer después. Con un impuesto del
+  10 % y un límite de exactamente 110,165 unidades, un envío de 100 le costaba a la wallet 110,1815.</p>
+  <p><b>Arreglo.</b> Después de pagar cada comisión, la wallet vuelve a leer el saldo y revierte si bajó más que
+  la comisión (<code>test_Fee_SenderTaxedTokenReverts</code>). Por tanto, los agentes no pueden mover tokens con
+  impuesto al emisor; los que cobran al receptor sí funcionan. Figura entre los límites de V5 del §6.</p>
+  </div>
+  <div class="finding" id="BVCC-19">
+    <div class="fid">BVCC-19<span class="badge b-med">MEDIA</span><span class="badge b-info">Aceptado — regla de despliegue</span></div>
+    <h3>Un validator mutable podía ampliar permisos sin la espera de 48 horas</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCValidatorRegistryV5.sol</code> — registro</td></tr>
+    <tr><th>Impacto</th><td>El registry retrasa 48 horas una <i>dirección</i> de validator nueva, pero llama al código que haya en esa dirección. Un validator con su propio admin, o detrás de un proxy, podría empezar a decir que sí al instante.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja tal como está desplegado: necesita que el admin del registry registre un validator mutable. Ninguno de los cinco validators desplegados tiene estado ni admin.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-M-02</span>. Rompería G-6.</td></tr>
+    </table>
+  <p>El registry no puede saber si el código al que apunta puede cambiar de opinión. Comprobar el hash del
+  código no detectaría un cambio de estado ni la actualización de un proxy, así que no hay un arreglo de una
+  línea en el contrato.</p>
+  <p><b>Decisión.</b> G-6 lleva ahora una regla de despliegue: solo se registran validators inmutables y sin
+  estado. Los cinco validators desplegados reciben todos sus parámetros en el constructor como inmutables y
+  no guardan nada. Su código fuente está verificado en todos los exploradores, así que cualquiera puede
+  comprobarlo antes de que pasen las 48 horas. Registrar un validator que incumpla la regla debilitaría G-6;
+  por eso figura como supuesto de confianza aceptado y no como corregido.</p>
+  </div>
+  <div class="finding" id="BVCC-20">
+    <div class="fid">BVCC-20<span class="badge b-med">MEDIA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>No se comprobaba un hook congelado al añadir liquidez</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCPositionManagerValidatorV5.sol</code> — <code>INCREASE_LIQUIDITY</code></td></tr>
+    <tr><th>Impacto</th><td>Después de que la gobernanza congelara un hook de Uniswap v4, un agente aún podía añadir liquidez a una posición existente en el pool de ese hook.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: necesita un hook aprobado y congelado después, y una posición en su pool.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 1, <span class="mono">V5-M-03</span>.</td></tr>
+    </table>
+  <p>El validator comprobaba el hook en <code>MINT_POSITION</code> pero respondía que sí a
+  <code>INCREASE_LIQUIDITY</code> sin buscar el pool de la posición.</p>
+  <p><b>Arreglo.</b> El validator lee del PositionManager la clave del pool de la posición y exige que su hook
+  sea ninguno o esté aprobado (<code>test_PM_IncreaseChecksHook</code>). La misma rama recibió después las
+  comprobaciones de dueño de BVCC-21 y BVCC-22.</p>
+  </div>
+  <div class="finding" id="BVCC-21">
+    <div class="fid">BVCC-21<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Liquidez trasladada a una posición ajena por un cargo residual</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCPositionManagerValidatorV5.sol</code> — <code>INCREASE_LIQUIDITY</code></td></tr>
+    <tr><th>Impacto</th><td>Un agente podía vaciar una posición de la wallet en una posición suya. Reproducido en Arbitrum con el PositionManager desplegado: se trasladó una liquidez de 1e12 mientras al agente se le cobraban como mucho dos unidades mínimas de cada token.</td></tr>
+    <tr><th>Probabilidad</th><td>Media: necesita un agente que gestione liquidez v4 y una posición de la wallet. El resto lo prepara el propio agente.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 2, <span class="mono">R2-H01</span>. Rompe G-2 y G-4.</td></tr>
+    </table>
+  <p>El PositionManager de Uniswap v4 acepta acciones del dueño de una posición <i>o de un operador
+  aprobado</i>. Un agente puede crear su propia posición y aprobar a la wallet como operadora. El validator
+  solo comprobaba el hook en <code>INCREASE_LIQUIDITY</code>, así que una sola llamada a
+  <code>modifyLiquidities</code> podía reducir la posición de la wallet y aumentar la del agente en el mismo
+  pool y rango. El PositionManager compensa los dos movimientos por dentro, así que casi ningún ERC-20 salía
+  de la wallet y la entrada cobrada (BVCC-17) no veía nada que cobrar. La especificación suponía que
+  «Uniswap v4 ya exige ser el dueño»; esa nota era incorrecta.</p>
+  <p><b>Arreglo.</b> <code>INCREASE_LIQUIDITY</code> exige <code>ownerOf(tokenId) == wallet</code>. Regresión en el
+  fork de Arbitrum: <code>test_Fork_PM_ForeignOwnedNFTRejected</code> y
+  <code>test_Fork_PM_LiquidityMoveToForeignNFTRejected</code>.</p>
+  </div>
+  <div class="finding" id="BVCC-22">
+    <div class="fid">BVCC-22<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Liquidez neteada hacia una posición propia aprobada a un tercero</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCPositionManagerValidatorV5.sol</code> — combinaciones de acciones</td></tr>
+    <tr><th>Impacto</th><td>Pérdida de una posición de la wallet: un agente pasaba su liquidez a una segunda posición de la wallet que el dueño había aprobado a otra persona, que después se la llevaba.</td></tr>
+    <tr><th>Probabilidad</th><td>Media-baja: necesita una aprobación individual de NFT que el dueño diera antes sobre una de las posiciones de la wallet.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 3, <span class="mono">R3-H01</span>. Rompe G-2 y G-4.</td></tr>
+    </table>
+  <p>El arreglo de BVCC-21 comprueba que la posición de destino es de la wallet. No impide que esa posición
+  esté aprobada a un tercero. En el test sobre fork, el dueño tiene dos posiciones en el mismo pool y rango y
+  solo ha aprobado la pequeña a un tercero. El agente reduce la grande y aumenta la pequeña en una llamada; el
+  tercero se lleva después la posición pequeña con la aprobación que ya tenía.</p>
+  <p><b>Arreglo.</b> Dos reglas. Una llamada al PositionManager ya no puede sacar liquidez
+  (<code>DECREASE</code>/<code>BURN</code>) y meterla (<code>MINT</code>/<code>INCREASE</code>) a la vez, en ningún
+  orden, porque eso es lo que permite que la liquidez cambie de posición sin movimiento de tokens que cobrar.
+  Y <code>INCREASE_LIQUIDITY</code> exige que la posición no tenga aprobación individual
+  (<code>getApproved == 0</code>). Mover liquidez entre posiciones son ahora dos llamadas, y lo que sale paga el
+  0,15 % como entrada. Regresión: los tres tests de <code>AuditPositionManagerForkV5.t.sol</code>.</p>
+  </div>
+  <div class="finding" id="BVCC-23">
+    <div class="fid">BVCC-23<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Un hook v4 no aprobado movía un token no permitido por el Universal Router</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCUniversalRouterValidatorV5.sol</code> — <code>V4_SWAP</code> / <code>SWAP_EXACT_IN</code></td></tr>
+    <tr><th>Impacto</th><td>Un agente sin ningún token permitido enviaba un swap por un pool con un hook elegido por él; el hook gastaba una aprobación antigua del dueño y se llevaba 1e18 unidades de un token no permitido.</td></tr>
+    <tr><th>Probabilidad</th><td>Media-baja: necesita una aprobación antigua del dueño a la dirección del hook y acceso del agente al Universal Router.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 3, <span class="mono">R3-H02</span>. Rompe G-2, G-3 y G-4.</td></tr>
+    </table>
+  <p>El validator aceptaba <code>SWAP_EXACT_IN</code> sin decodificar su ruta, así que nunca veía el pool, el
+  hook ni sus datos. Uniswap v4 ejecuta el <code>beforeSwap</code> del hook durante el swap, y un hook puede
+  llamar a cualquier token con cualquier aprobación que la wallet haya dejado. El test sobre fork usó el
+  Universal Router y el PoolManager desplegados en Arbitrum, con el hook en una dirección de prueba.</p>
+  <p><b>Arreglo.</b> Se decodifica cada salto; se declaran para medir la moneda de entrada y todas las
+  intermedias; se rechazan los tramos en nativo; y el hook de cada salto debe ser ninguno o estar aprobado en
+  el hook registry. Un test extra sobre fork confirma que el validator lee la ruta igual que el router,
+  incluido el Universal Router 2.1.2, que añade un campo al swap v4.</p>
+  </div>
+  <div class="finding" id="BVCC-24">
+    <div class="fid">BVCC-24<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Una retirada del agente ejecutaba un hook congelado</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCPositionManagerValidatorV5.sol</code> — <code>DECREASE_LIQUIDITY</code> / <code>BURN_POSITION</code></td></tr>
+    <tr><th>Impacto</th><td>Un hook congelado por la gobernanza seguía ejecutándose cuando un agente retiraba liquidez, y podía gastar aprobaciones antiguas del dueño: 1e18 unidades de un token no permitido en el test sobre fork.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: necesita un hook aprobado, congelado después por malicioso, y una aprobación antigua del dueño hacia él.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 4, <span class="mono">R4-H01</span>. Rompe G-2 y G-3.</td></tr>
+    </table>
+  <p>Retirar liquidez se dejó sin comprobar a propósito para que el dueño pudiera salir siempre de un pool con
+  el hook congelado. Pero Uniswap v4 llama a <code>beforeRemoveLiquidity</code> también al retirar, así que un
+  hook congelado seguía actuando cada vez que un agente retiraba.</p>
+  <p><b>Arreglo.</b> Para agentes, <code>DECREASE</code> y <code>BURN</code> resuelven el pool de la posición y
+  exigen que su hook sea ninguno o esté aprobado. Salir de un pool con un hook congelado es ahora decisión del
+  dueño, con su propia ejecución, que este validator no gobierna. Añadir, retirar y quemar declaran además las
+  dos monedas del pool para medirlas. La contrapartida está en el §6: «siempre se puede salir» no está
+  garantizado con un hook congelado, porque el hook puede seguir actuando o hacer fallar la salida.</p>
+  </div>
+  <div class="finding" id="BVCC-25">
+    <div class="fid">BVCC-25<span class="badge b-high">ALTA</span><span class="badge b-info">Aceptado — decisión de confianza</span></div>
+    <h3>Un hook v4 aprobado ejecuta código que la wallet no puede acotar</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCUniversalRouterValidatorV5.sol</code>, <code>BVCCPositionManagerValidatorV5.sol</code> — comprobación de hooks</td></tr>
+    <tr><th>Impacto</th><td>Un hook aprobado malicioso o comprometido puede hacer lo que hizo el hook no aprobado de BVCC-23: gastar aprobaciones antiguas del dueño de tokens que el agente no puede usar.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: necesita que la gobernanza apruebe un hook que sea, o se vuelva, hostil. Aprobarlo lleva 48 horas públicas y congelarlo es inmediato.</td></tr>
+    <tr><th>Origen</th><td>V5, ronda 4, <span class="mono">R4-H02</span>; ya figuraba en la especificación como decisión de confianza.</td></tr>
+    </table>
+  <p>Los validators comprueban la <i>dirección</i> del hook en el hook registry. No pueden limitar lo que hace su
+  código, qué datos recibe ni qué aprobaciones usa. Fijar el hash del código detectaría un cambio de bytecode,
+  pero no demostraría que el código es inofensivo, ni detectaría cambios de estado o la actualización de un
+  proxy.</p>
+  <p><b>Decisión.</b> Los hooks siguen disponibles para los agentes, así que G-2, G-3 y G-4 se cumplen con la
+  condición de que los hooks aprobados sean de fiar. Cada hook se revisa antes de proponerlo, nunca se aprueban
+  hooks actualizables (proxies), toda aprobación espera 48 horas a la vista y un hook se puede congelar al
+  instante. Los agentes que solo usan pools sin hook no están expuestos. El dueño reduce más la exposición si no
+  deja aprobaciones antiguas de tokens a contratos de hooks.</p>
+  </div>
+  <div class="finding" id="BVCC-26">
+    <div class="fid">BVCC-26<span class="badge b-high">ALTA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Un agente podía vaciar la posición de un tercero que aprobó a la wallet</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCPositionManagerValidatorV5.sol</code> — <code>DECREASE_LIQUIDITY</code> / <code>BURN_POSITION</code></td></tr>
+    <tr><th>Impacto</th><td>Pérdida total de la posición v4 <i>de un tercero</i>, NFT incluido en la variante con quema. La wallet se mantenía dentro de sus límites: los tokens retirados se cargaban al presupuesto del agente y luego se enviaban a un destinatario permitido.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: necesita un tercero que haya aprobado a la wallet como operadora de su posición.</td></tr>
+    <tr><th>Origen</th><td>Equipo rojo, <span class="mono">RT-01</span>. Reproducido sobre forks de cinco redes, contra cinco versiones desplegadas del PositionManager.</td></tr>
+    </table>
+  <p>Es BVCC-21 al revés. La comprobación de dueño se había añadido solo a <code>INCREASE_LIQUIDITY</code>, y el
+  PositionManager acepta operadores aprobados en todas las acciones, así que un agente podía retirar y quemar
+  una posición que no era de la wallet.</p>
+  <p><b>Arreglo.</b> <code>DECREASE</code> y <code>BURN</code> exigen también <code>ownerOf(tokenId) == wallet</code>.
+  Los forks de cinco redes rechazan la posición ajena en ambas acciones. La ronda 5 pidió tests de retirar y
+  quemar la misma posición en una llamada, en los dos órdenes, propia y ajena; se añadieron, incluido uno con
+  estado real de Arbitrum.</p>
+  </div>
+  <div class="finding" id="BVCC-27">
+    <div class="fid">BVCC-27<span class="badge b-med">MEDIA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3>Los agentes no podían quemar nunca una posición v4</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentLogicV5.sol</code> — rastreo de los datos</td></tr>
+    <tr><th>Impacto</th><td>Denegación de servicio, sin robo: un agente podía abrir posiciones v4 pero toda quema revertía, así que nunca podía cerrar una.</td></tr>
+    <tr><th>Probabilidad</th><td>Segura para cualquier agente que gestione liquidez v4.</td></tr>
+    <tr><th>Origen</th><td>Equipo rojo, <span class="mono">RT-55</span>.</td></tr>
+    </table>
+  <p>El rastreo trata como token a cualquier contrato que responda a <code>balanceOf</code>. El PositionManager es
+  un ERC-721 y responde con el número de posiciones de la wallet, así que quemar una parecía la salida de un
+  token no permitido y el lote revertía con <code>TokenNotAllowed</code>. La misma quema hecha por el dueño
+  funcionaba.</p>
+  <p><b>Arreglo.</b> El rastreo descarta los contratos que se declaran ERC-721 por ERC-165, con una consulta de
+  solo lectura y gas limitado. Los tokens de la lista del agente y los declarados por validators se siguen
+  midiendo primero. La ronda 5 comprobó que un falso «ERC-721» no puede usar esto para esconder un token
+  permitido o declarado.</p>
+  </div>
+  <div class="finding" id="BVCC-28">
+    <div class="fid">BVCC-28<span class="badge b-low">BAJA</span><span class="badge b-pass">Corregido antes de desplegar</span></div>
+    <h3><code>pauseAgents</code> revertía si la wallet ya estaba en pausa</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentWalletV5.sol</code> — <code>pauseAgents</code> / <code>unpauseAgents</code></td></tr>
+    <tr><th>Impacto</th><td>Un lote del dueño que pausaba a todos los agentes fallaba si ya estaban en pausa, por ejemplo tras una recuperación. Sin riesgo para los fondos.</td></tr>
+    <tr><th>Probabilidad</th><td>Uso normal del dueño.</td></tr>
+    <tr><th>Origen</th><td>Equipo rojo, <span class="mono">RT-30-A</span>.</td></tr>
+    </table>
+  <p><b>Arreglo.</b> Las dos funciones no hacen nada si la wallet ya está en el estado pedido. Los eventos se
+  siguen emitiendo, así que quien vigile la wallet debe leer <code>paused()</code> para conocer el estado.</p>
+  </div>
+  <div class="finding" id="BVCC-29">
+    <div class="fid">BVCC-29<span class="badge b-med">MEDIA</span><span class="badge b-info">Aceptado — supuesto de confianza</span></div>
+    <h3>Un token permitido que miente sobre su saldo o mueve otro token</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td>Contratos de token en la lista del agente</td></tr>
+    <tr><th>Impacto</th><td>Un token permitido malicioso puede salir sin cargo declarando un saldo falso, o sacar otro token distinto de la wallet al transferirse.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja: el dueño tiene que poner un token así en la lista del agente.</td></tr>
+    <tr><th>Origen</th><td>Equipo rojo, <span class="mono">RT-52</span> (bajo) y <span class="mono">RT-54</span> (medio), unidos aquí.</td></tr>
+    </table>
+  <p>La V5 mide saldos, y un saldo es lo que diga el contrato del token. Un token también puede ejecutar
+  cualquier código en <code>transfer</code>, incluida la transferencia de un segundo token que tenga permiso
+  para mover. Ninguna wallet puede defenderse de un token que miente sobre sí mismo.</p>
+  <p><b>Decisión.</b> Los tokens permitidos son de confianza, igual que un hook aprobado: elegirlos es decisión
+  del dueño. La lista de un agente debe contener ERC-20 estándar. El caso del impuesto en el mismo token falla
+  cerrado (BVCC-18).</p>
+  </div>
+  <div class="finding" id="BVCC-30">
+    <div class="fid">BVCC-30<span class="badge b-low">BAJA</span><span class="badge b-info">Aceptado — regla de validators</span></div>
+    <h3>La wallet solo mide los tokens que ve o que declara un validator</h3>
+    <table class="fmeta">
+    <tr><th>Ubicación</th><td><code>BVCCAgentLogicV5.sol</code> — rastreo de los datos; todos los validators</td></tr>
+    <tr><th>Impacto</th><td>Un token empaquetado en los datos y no declarado por el validator de la llamada no se mide. Con un validator que declare de menos, podría salir sin presupuesto.</td></tr>
+    <tr><th>Probabilidad</th><td>Baja con los validators desplegados, que declaran los tokens de cada acción que aceptan. Sería media si un validator registrado declarara de menos.</td></tr>
+    <tr><th>Origen</th><td>Equipo rojo, <span class="mono">RT-65</span>.</td></tr>
+    </table>
+  <p>Es lo que queda de BVCC-15. El rastreo lee palabras completas de 32 bytes; una dirección empaquetada es
+  invisible para él, igual que un token cuya lectura de saldo necesita más gas del tope y no está en la lista
+  permitida.</p>
+  <p><b>Regla.</b> Un validator debe declarar todo token que su contrato destino pueda mover y rechazar lo que no
+  sepa decodificar. El validator del Universal Router declara todas las monedas de la ruta, los de posiciones
+  declaran las dos monedas del pool, el de Aave declara el activo y el del nativo envuelto declara el token
+  envuelto.</p>
   </div>
 </section>
 </div>
@@ -887,7 +1402,107 @@
 <div class="page section-break">
 <section>
   <h2><span class="n">5</span>Remediación y verificación del despliegue</h2>
-  <p class="lead">Nueve hallazgos están remediados. Siete exigían cambiar el bytecode y viajaron juntos como la generación V4; los otros dos se cerraron antes de que el código afectado llegara a ninguna red. Esta sección recoge qué está vivo, dónde, y cómo se comprobó al margen del script de despliegue.</p>
+  <p class="lead">La V5 es la generación que está viva hoy, en seis redes. Esta sección recoge qué está
+  desplegado, cómo se comprobó al margen de los scripts de despliegue y qué se ha ejercitado en redes reales.
+  Después sigue el registro de la remediación de V4, como generación anterior.</p>
+
+<h3>Despliegue de V5 — Ethereum · Arbitrum One · Base · BNB Chain · Polygon · Arbitrum Sepolia</h3>
+  <table class="data">
+    <tr><th>Contrato</th><th>Dirección (CREATE2, idéntica en todas las redes)</th></tr>
+    <tr><td>Librería de lógica de agentes (<code>BVCCAgentLogicV5</code>)</td><td class="mono addr">0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E</td></tr>
+    <tr><td>ValidatorRegistry V5</td><td class="mono addr">0x7269334AE74DCE4e607eec36268383DD35f28350</td></tr>
+    <tr><td>HookRegistry V5</td><td class="mono addr">0xEaEaC7F6071f7F576Be2aD97898Dd0c0F51BE78A</td></tr>
+    <tr><td>Lógica SmartWallet V5</td><td class="mono addr">0xc9dE89d54beB786bc916131CA6c8c5374507Bd15</td></tr>
+    <tr><td>Lógica AgentWallet V5</td><td class="mono addr">0x360f991B23a3D5202Dc422292697aB07dA279cFA</td></tr>
+    <tr><td><b>SmartWalletFactory V5</b></td><td class="mono addr">0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2</td></tr>
+    <tr><td><b>AgentWalletFactory V5</b></td><td class="mono addr">0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52</td></tr>
+  </table>
+  <p>Todo se desplegó con el desplegador CREATE2 estándar (<span class="mono">0x4e59…956C</span>): Arbitrum
+  Sepolia el 2026-10-30 y las cinco mainnets el 2026-11-02, con el código congelado el 2026-10-29. El script se
+  niega a desplegar en una mainnet si las dos factories no caen en las direcciones fijadas de arriba. Las
+  wallets son clones ERC-1167 de los dos contratos de lógica y no se pueden actualizar. Los registries y el
+  interruptor <code>kill</code> de las factories pertenecen a la hardware wallet de gobernanza
+  <span class="mono">0x3145Bd5e…5A4c</span>, con la propiedad transferible solo en dos pasos, y las comisiones
+  van a <span class="mono">0x3e3eb089…07D4</span>, una constante compilada en la lógica. Ninguna de las dos
+  direcciones puede mover fondos de usuarios: los registries no guardan nada y <code>kill</code> solo impide
+  crear wallets nuevas.</p>
+  <p>Crear una wallet cuesta unas 537.000 unidades de gas, frente a unos 4,7 millones en V4, porque cada wallet
+  es un clon pequeño. La lógica de la wallet de agentes ocupa 22.604 bytes, 1.972 por debajo del límite
+  EIP-170, con el código de permisos movido a la librería externa.</p>
+
+  <h3>Validators de V5 por red</h3>
+  <p>Cada validator está ligado a un contrato de protocolo, así que la mayoría de direcciones cambian por red.
+  Los 30 se releyeron con <code>validators(target)</code> en el registry de V5 el 2026-11-11: todos están
+  <b>activos</b> y apuntan al validator esperado. Los tres primeros de Arbitrum Sepolia se activaron el
+  2026-11-01 y los otros 27 entre el 2026-11-04 y el 2026-11-08. Todos pasaron por la espera pública de 48
+  horas del registry.</p>
+  <table class="data">
+    <tr><th>Red</th><th>Validator de</th><th>Dirección</th></tr>
+    <tr><td>Ethereum</td><td>Universal Router</td><td class="mono addr">0x48A6d5415C369Fa38E0ebEafC779527fb6cF32A0</td></tr>
+    <tr><td>Ethereum</td><td>PositionManager de Uniswap v4</td><td class="mono addr">0xb05fc3aaD6E4cAaD69b680C1adae645DB0B56f1f</td></tr>
+    <tr><td>Ethereum</td><td>Pool de Aave v3</td><td class="mono addr">0xeD51c5063dB3bB4609Cf95fC349d87b68bEECC28</td></tr>
+    <tr><td>Ethereum</td><td>Posiciones de Uniswap v3</td><td class="mono addr">0xfcf4AB3E1FC5b32A00161e66ebe537B617fC9678</td></tr>
+    <tr><td>Ethereum</td><td>Nativo envuelto</td><td class="mono addr">0xDC2480bD3DfDC5A4c92ab1C37f2234FF5f91521F</td></tr>
+    <tr><td>Arbitrum One</td><td>Universal Router</td><td class="mono addr">0x332E88FDc5f26a7421534902Cbb9C95B70E8AA0d</td></tr>
+    <tr><td>Arbitrum One</td><td>PositionManager de Uniswap v4</td><td class="mono addr">0xc9Ae38709cd76b51F4f11a21Ee2aAC1cf67a013D</td></tr>
+    <tr><td>Arbitrum One</td><td>Pool de Aave v3</td><td class="mono addr">0xC7bD86E147b211DDC1c6bbCad07A01B51C7CAff4</td></tr>
+    <tr><td>Arbitrum One</td><td>Posiciones de Uniswap v3</td><td class="mono addr">0xfcf4AB3E1FC5b32A00161e66ebe537B617fC9678</td></tr>
+    <tr><td>Arbitrum One</td><td>Nativo envuelto</td><td class="mono addr">0x80DBf05b4406927c22cDFaFb3f226665F863A58D</td></tr>
+    <tr><td>Base</td><td>Universal Router</td><td class="mono addr">0x5b9cDCC1a4Ac139E8b13A4FC4ca4519906F651A5</td></tr>
+    <tr><td>Base</td><td>PositionManager de Uniswap v4</td><td class="mono addr">0x0E43866CFFC41E814C1f4e0341Fed09234d1d8B1</td></tr>
+    <tr><td>Base</td><td>Pool de Aave v3</td><td class="mono addr">0x30Bd59CF41c2F4FE02e9666065dd294FD44333bb</td></tr>
+    <tr><td>Base</td><td>Posiciones de Uniswap v3</td><td class="mono addr">0x2B52943E9F361CCA42f1100a78b74daaEB25F02e</td></tr>
+    <tr><td>Base</td><td>Nativo envuelto</td><td class="mono addr">0xEF913B99C970E4Bc3B987F0668d0F20CD8B90c6E</td></tr>
+    <tr><td>BNB Chain</td><td>Universal Router</td><td class="mono addr">0x656f0EB67ce76c3b416D8F3dFB46e81c7aA442D7</td></tr>
+    <tr><td>BNB Chain</td><td>PositionManager de Uniswap v4</td><td class="mono addr">0x12298d84D1d3272a51a7b21755D222da26996786</td></tr>
+    <tr><td>BNB Chain</td><td>Pool de Aave v3</td><td class="mono addr">0x822E3ab17d7AC4E49cA18E881392CED15ba1E7bb</td></tr>
+    <tr><td>BNB Chain</td><td>Posiciones de Uniswap v3</td><td class="mono addr">0x5C700655e00FA7003672617d8723d5AeBF9E9c9A</td></tr>
+    <tr><td>BNB Chain</td><td>Nativo envuelto</td><td class="mono addr">0x4F2974859169262158065a1506070ee52EFeD6De</td></tr>
+    <tr><td>Polygon</td><td>Universal Router</td><td class="mono addr">0xDd313C3884a6fA1636fc5cba3E251874073e1B3f</td></tr>
+    <tr><td>Polygon</td><td>PositionManager de Uniswap v4</td><td class="mono addr">0xd5315B0B30Fa25C5EcbFAA2BBD514262E33Db911</td></tr>
+    <tr><td>Polygon</td><td>Pool de Aave v3</td><td class="mono addr">0xC7bD86E147b211DDC1c6bbCad07A01B51C7CAff4</td></tr>
+    <tr><td>Polygon</td><td>Posiciones de Uniswap v3</td><td class="mono addr">0xfcf4AB3E1FC5b32A00161e66ebe537B617fC9678</td></tr>
+    <tr><td>Polygon</td><td>Nativo envuelto</td><td class="mono addr">0xc4E512BEEbBCb03A79C10c109B4CD6cef8aa5E5e</td></tr>
+    <tr><td>Arbitrum Sepolia</td><td>Universal Router</td><td class="mono addr">0x1D0394e997a0799883AE433383Bc82280E17E403</td></tr>
+    <tr><td>Arbitrum Sepolia</td><td>PositionManager de Uniswap v4</td><td class="mono addr">0x6Cd6e2D7328b0128Ab82921939526dde6f45F2d3</td></tr>
+    <tr><td>Arbitrum Sepolia</td><td>Pool de Aave v3</td><td class="mono addr">0xA61ac81B9fAA48eE33Ac8A1f28ad80C577e276FA</td></tr>
+    <tr><td>Arbitrum Sepolia</td><td>Posiciones de Uniswap v3</td><td class="mono addr">0xbaBA421723a25363BB25468B94A1100B3972DB84</td></tr>
+    <tr><td>Arbitrum Sepolia</td><td>Nativo envuelto</td><td class="mono addr">0x0A9F4027e3A2136d4e688D0Ee0A5b42cE94b3702</td></tr>
+  </table>
+
+  <div class="callout"><b>72 de 72 contratos con el código verificado.</b> Doce contratos por red (los siete del
+  núcleo y cinco validators), comprobados desde fuera con la API de los exploradores el 2026-11-11: todos
+  verificados, en las seis redes. Cualquiera puede comparar el código publicado con el árbol citado en el
+  §2.</div>
+
+  <h3>V5 en redes reales</h3>
+  <table class="data">
+    <tr><th>Dónde</th><th>Qué se ejecutó</th><th>Resultado</th></tr>
+    <tr><td>Arbitrum Sepolia, 2026-11-01 → 11-08</td><td>Un agente manejado con el servidor MCP sobre una
+    wallet de agentes V5: swaps en Uniswap v3 y v4 y desde nativo, depositar, pedir prestado, devolver y
+    retirar en Aave, posiciones de Uniswap v4 y v3 abiertas, cobradas, reducidas, cerradas y quemadas,
+    envolver y desenvolver, envíos, y cada límite probado a propósito</td><td>Todo según el diseño. Las
+    operaciones por encima del límite, a destinatarios ajenos o no soportadas se rechazaron con el error
+    esperado antes o al ejecutar</td></tr>
+    <tr><td>Arbitrum Sepolia, 2026-11-06</td><td>Recuperación por guardianes: dos guardianes votaron la misma
+    passkey nueva, la propuesta se armó y 48 horas después se ejecutó</td><td>Clave y credencial del dueño
+    rotadas; todos los agentes en pausa, como está especificado; el dueño los reactivó con la passkey
+    nueva</td></tr>
+    <tr><td>BNB Chain, 2026-11-11</td><td>Migración de una wallet de agentes V4 a una wallet de agentes V5
+    (<span class="mono">0x566669C6…4936</span>) con «Enviar todo»: una firma del dueño, un lote</td>
+    <td><span class="mono">0x549492c6…91724b</span> (BNB) y <span class="mono">0xf0141064…ac27a16</span>
+    (USDC y BNB juntos): importes y comisión del 0,15 % exactos</td></tr>
+  </table>
+  <div class="callout">Antes del despliegue, el despliegue de producción se simuló también sobre forks de las
+  seis redes con los monederos reales de comisiones y admin, incluida una operación del dueño por el
+  EntryPoint real (v0.9) y un agente autorizado por UserOp y operando. <b>Lo que aún no se ha ejecutado</b> es
+  un agente operando una wallet V5 en una mainnet. La vía del agente está cubierta en Arbitrum Sepolia y en
+  forks de mainnet; lo que este informe afirma para mainnet es «desplegado, verificado y conectado», no
+  «ejercitado por un agente».</div>
+
+<h3>Remediación de V4 (generación anterior)</h3>
+  <p>Nueve hallazgos de la revisión de V4 están remediados en V4. Siete exigían cambiar el bytecode y viajaron juntos como la generación V4; los otros dos se cerraron antes de que el código afectado llegara a ninguna red. El resto de esta sección recoge qué está vivo para V4, dónde, y cómo se comprobó.</p>
+
 <p>Siete hallazgos exigían cambiar el bytecode. Los siete están corregidos y <b>vivos en las seis
   redes</b>. Como las direcciones CREATE2 se derivan del bytecode, no se podían aplicar a las wallets ya
   desplegadas: la migración es el mismo playbook que V1→V2 y V2→V3 —los usuarios recrean su wallet y mueven
@@ -960,68 +1575,105 @@
 <div class="page section-break">
 <section>
   <h2><span class="n">6</span>Riesgo residual y recomendaciones</h2>
-  <p class="lead">Cuatro hallazgos no los cierra V4. Uno es el riesgo material para un titular hoy; los
-  otros tres son limitaciones aceptadas o trabajo de interfaz. Esta sección dice qué debería hacer un dueño
-  en la práctica.</p>
+  <p class="lead">En V5 no hay nada abierto. Cuatro hallazgos se aceptan como supuestos de confianza, la V5
+  tiene límites conocidos que el dueño debe entender, y las wallets que siguen en V4 o anteriores conservan
+  sus propios hallazgos abiertos hasta que sus dueños migren. Esta sección dice qué debería hacer un
+  dueño.</p>
 
-  <h3>El que importa: BVCC-03</h3>
-  <p>V3 ancló el destino de las llamadas a protocolo del agente, y eso se sostiene. Pero anclar un destino no
-  es lo mismo que acotar un valor. Donde el dueño ya ha concedido una allowance de token a un protocolo que
-  el agente alcanza, una clave de agente comprometida puede cambiar un activo valioso por uno inútil en un
-  pool que el atacante controla: el ancla de destino manda el resultado a casa y el valor se queda con el
-  atacante. Ningún validator mira cantidades ni precios.</p>
-  <p><b>Qué debería hacer un dueño hoy, sin tocar contratos:</b> poner a cero cualquier allowance viva hacia
-  los protocolos que el agente pueda alcanzar <i>antes</i> de autorizarlo, y preferir aprobaciones por
-  transacción a las permanentes. Una wallet sin allowance viva no está expuesta a esto.</p>
-  <p><b>El plan escalonado.</b> La interfaz puede estrecharlo ya: topes de token no nulos obligatorios cuando
-  un agente tiene acceso a protocolos, revocación de las allowances existentes al autorizar, y una pantalla
-  de revocación de emergencia. Lo que lo cierra de verdad es la capa de validators: un validator profundo con
-  oráculo o TWAP que rechace un swap cuya salida sea inverosímil frente al precio de mercado. Un vault o una
-  contabilidad interna lo cerraría del todo y es la opción de horizonte más largo. La primera fase es trabajo
-  de interfaz y se deja <b>fuera</b> del contrato a propósito — ver el presupuesto de bytecode en §5.</p>
+  <h3>Lo primero: migrar</h3>
+  <p>Una wallet desplegada no se puede actualizar por dentro. Una wallet V4 sigue con <b>BVCC-03</b> abierto:
+  si el dueño ha dado una allowance a un protocolo que un agente puede alcanzar, una clave de agente
+  comprometida vale más que su presupuesto. Las wallets de V1 a V3 además ejecutan el crítico BVCC-01. La
+  solución es crear una wallet V5 con la misma passkey y pasar los fondos. La app detecta una wallet antigua,
+  enumera lo que cambia en V5 y ofrece una guía de migración y un botón «Enviar todo» que mueve todos los
+  tokens elegidos de una red con una firma. Las posiciones en Uniswap o Aave pertenecen a la dirección antigua
+  y hay que cerrarlas antes; los agentes hay que autorizarlos de nuevo en la wallet nueva y revocarlos en la
+  antigua.</p>
 
-  <h3>Limitaciones aceptadas</h3>
+  <h3>Qué pide la V5 que el dueño confíe</h3>
   <ul>
-    <li><b>BVCC-09</b> — un solo guardián puede bloquear una recuperación. Denegación de servicio contra la
-    vía de rescate, no robo. Elige los guardianes en consecuencia: el mecanismo asume que al menos dos de los
-    tres son honestos y localizables.</li>
-    <li><b>BVCC-10</b> — pausar un agente no retira sus allowances. Revócalas explícitamente; pausar por sí
-    solo no es contención.</li>
-    <li><b>BVCC-13</b> — faltan comprobaciones de dirección cero en los constructores de los validators.
-    Inerte tal como está desplegado, verificado en las seis redes.</li>
+    <li><b>Hooks de Uniswap v4 aprobados (BVCC-25).</b> Un hook aprobado ejecuta su propio código en los swaps
+    y en la liquidez de los agentes y puede alcanzar aprobaciones antiguas del dueño. Toda aprobación de hook
+    espera 48 horas a la vista y se puede congelar al instante; los agentes que se limitan a pools sin hook no
+    están expuestos.</li>
+    <li><b>Tokens permitidos (BVCC-29).</b> Un token que miente sobre su saldo, o que mueve otro token al
+    transferirse, derrota cualquier límite basado en saldos. Da a los agentes solo ERC-20 estándar.</li>
+    <li><b>Validators (BVCC-19, BVCC-30).</b> Solo se registran validators inmutables y sin estado, y cada uno
+    debe declarar todo token que deje mover. Los cinco validators desplegados cumplen las dos reglas, y su
+    código está verificado en todas las redes.</li>
+    <li><b>Las aprobaciones del propio dueño.</b> Las allowances que el dueño da desde cualquier dApp viven en
+    los contratos de los tokens. Un agente no puede usarlas por encima de su presupuesto, pero un hook aprobado
+    hostil sí podría (BVCC-25), así que revoca las que ya no uses.</li>
+  </ul>
+
+  <h3>Límites conocidos de V5</h3>
+  <ul>
+    <li><b>No es actualizable.</b> Un fallo grave exigiría una V6 y otra migración.</li>
+    <li><b>Los agentes deben ser EOAs normales</b>, comprobado al autorizar y en cada llamada. Una dirección de
+    agente con una delegación EIP-7702 deja de funcionar.</li>
+    <li><b>Los límites significan lo que dicen.</b> 0 no permite nada, una lista de destinatarios vacía no
+    permite a nadie, y «sin límite» hay que elegirlo de forma explícita. Los permisos de un agente caducan en
+    365 días como mucho y se pueden renovar.</li>
+    <li><b>La comisión se cobra encima</b>, el 0,15 % de lo que sale de la wallet, dentro de los límites del
+    agente. Un agente no puede enviar todo su saldo de un token: tiene que dejar sitio para la comisión.</li>
+    <li><b>Los tokens con impuesto al emisor</b> no los pueden mover los agentes (BVCC-18). Los que cobran al
+    receptor funcionan.</li>
+    <li><b>Con un hook congelado</b>, solo el dueño puede intentar salir de ese pool, y el hook puede seguir
+    actuando o hacer fallar la salida (BVCC-24).</li>
+    <li><b>Mover liquidez entre posiciones</b> son dos llamadas, y lo que sale paga el 0,15 % como entrada
+    (BVCC-22). La parte en ETH nativo de salir de una posición v4 no se cobra al entrar.</li>
+    <li><b>La recuperación es por red.</b> Tras perder la passkey original, una wallet no se puede recuperar
+    en una red donde nunca se desplegó: nacería con la clave perdida y sin guardianes. Despliega en todas las
+    redes que puedas usar.</li>
+    <li><b>Los agentes siguen operando mientras hay una recuperación armada</b> y se pausan al ejecutarla. Fue
+    una decisión deliberada: una recuperación significa una passkey perdida, no robada, y pausar 48 horas
+    podría impedir que un agente gestione un préstamo de Aave.</li>
+    <li><b>Los NFT no se miden.</b> Los agentes solo llegan a las posiciones a través de validators, y lo que
+    sale de una posición hacia la wallet se cobra.</li>
   </ul>
 
   <h3>Recomendaciones operativas</h3>
   <ol>
-    <li><b>Migrar.</b> Una wallet desplegada no se actualiza en su sitio. Los fondos que se queden en V1, V2 o
-    V3 corren sobre bytecode con BVCC-01 sin corregir.</li>
-    <li><b>Autorizar agentes con una lista de destinatarios no vacía</b> que excluya la dirección del propio
-    agente. En wallets sin migrar es lo que cierra BVCC-01; en V4 sigue siendo buena práctica.</li>
-    <li><b>Poner a cero las allowances vivas</b> antes de autorizar un agente — la mitigación de BVCC-03, y la
-    única de esta lista que V4 no vuelve redundante.</li>
-    <li><b>Verificar los guardianes de una wallet en cada red antes de fondearla ahí.</b> Redundante en V4,
-    sigue siendo necesario para wallets creadas por una factory anterior.</li>
-    <li><b>Desplegar proactivamente en todas las redes soportadas</b> para no dejar ninguna dirección sin
-    reclamar.</li>
+    <li><b>Migra</b> toda wallet V4 o anterior que tenga fondos, en todas las redes.</li>
+    <li><b>Despliega en todas las redes soportadas</b>, para que la dirección sea tuya en todas y la
+    recuperación funcione allí.</li>
+    <li><b>Da a cada agente lo mínimo que necesite</b>: tokens, límites, destinatarios y caducidad concretos.
+    Pausa solo a un agente en vez de a todos cuando solo uno se porte mal.</li>
+    <li><b>Revoca las aprobaciones de tokens que ya no uses</b>, sobre todo las dadas a contratos de hooks.</li>
+    <li><b>Vigila los registries.</b> Cualquier ampliación de lo que pueden hacer los agentes se anuncia en
+    cadena 48 horas antes de tener efecto; pausar o revocar agentes en esa ventana es inmediato.</li>
   </ol>
 
-<p>V4 hace innecesarias tres de las cuatro mitigaciones provisionales que llevaba este informe: la
-  apropiación de guardianes se cierra en la factory, la credencial la emite la wallet y una recuperación
-  pausa los agentes. Sobrevive una, y no es cosa de contratos: <b>poner a cero cualquier allowance viva
-  hacia los protocolos que un agente pueda alcanzar antes de autorizarlo</b>. Esa es la exposición del caso
-  3 de BVCC-03, y sigue abierta hasta que llegue la fase de validators.</p>
-  <p><b>Quien esté en V1, V2 o V3 sigue sobre el bytecode viejo hasta que migre.</b> Una wallet desplegada
-  no se puede actualizar en su sitio, así que todos los hallazgos anteriores siguen aplicando a los fondos
-  que se queden atrás —incluida la reentrada cruzada de BVCC-01, explotable en las tres generaciones previas—.
-  La interfaz detecta una wallet obsoleta por su dominio EIP-712 y propone la migración; el
-  <code>kill()</code> de las factories sustituidas solo se hace cuando los usuarios se hayan movido.</p>
+  <h3>Wallets que siguen en V4 o anteriores</h3>
+  <p>Hasta que migren, estos dueños conservan el cuadro de V4. Anclar el destino no es lo mismo que acotar el
+  valor: donde existe una allowance viva, una clave de agente comprometida puede cambiar un activo valioso
+  por uno sin valor en un pool que controla el atacante, y el valor se queda con él. La medida provisional no
+  necesita cambiar el contrato: <b>pon a cero toda allowance viva hacia los protocolos que un agente pueda
+  alcanzar antes de autorizarlo</b>, y prefiere aprobaciones por operación. BVCC-09 (un solo guardián puede
+  bloquear una recuperación) y BVCC-10 (pausar un agente no retira sus allowances) también siguen aplicando
+  allí. Los fondos que queden en V1, V2 o V3 ejecutan bytecode con BVCC-01 sin corregir; en esas wallets, una
+  lista de destinatarios no vacía que excluya la dirección del propio agente es lo que lo cierra.</p>
 </section>
 </div>
 
 <div class="page section-break">
 <section>
   <h2><span class="n">7</span>Conclusión y limitaciones</h2>
-<p>La BVCC Agent Wallet aplica un modelo de permisos completo y por capas. Se identificaron tres
+<p><b>V5.</b> La generación V5 cambia «comprobar adónde puede ir el dinero» por «medir lo que de verdad ha
+  salido». Ese cambio cierra BVCC-03, el único riesgo material que dejó abierto V4, y con él la clase de
+  problemas en los que una allowance viva o un lote bien combinado dejaba a un agente gastar fuera de su
+  presupuesto. La V5 conserva además todos los arreglos de V4, cierra el bloqueo de recuperación de BVCC-09,
+  impide que el agente deje allowances vivas, hace que 0 signifique nada y que todo permiso caduque, y exige un
+  validator en toda llamada a protocolo. Cinco rondas de revisión y un equipo rojo encontraron diecisiete
+  problemas en el código nuevo antes de publicarlo: trece corregidos y cuatro aceptados como supuestos de
+  confianza declarados. La última ronda no encontró nada nuevo. La V5 está desplegada en seis redes con los 72
+  contratos verificados y los 30 validators activos.</p>
+  <p>La mayoría de los hallazgos de V5 salieron del mismo sitio: los validators de posiciones de Uniswap, donde
+  el valor puede moverse entre NFTs sin que ningún token salga de la wallet. Cada arreglo ahí vino seguido de
+  un hallazgo a su lado, hasta que las reglas se hicieron simétricas (comprobación de dueño en todas las
+  acciones, nada de sacar y meter en una llamada, hooks comprobados en todos los caminos). Ese patrón es la
+  razón principal para seguir revisando la V5, y el Anexo G lo recoge.</p>
+  <p><b>Generaciones anteriores.</b> La BVCC Agent Wallet aplica un modelo de permisos completo y por capas. Se identificaron tres
   incidencias de severidad alta a lo largo de tres rondas de revisión, cada una reproducida, remediada,
   redesplegada y re-verificada, y la batería de permisos on-chain pasa sobre el bytecode parcheado. Al
   preparar esta edición aparecieron cuatro más: una reentrada cruzada, la apropiación de guardianes por la
@@ -1056,7 +1708,9 @@
   <h3>Qué establece y qué no establece esta revisión</h3>
   <p>Establece que los hallazgos concretos aquí recogidos se reprodujeron, se remediaron donde así se indica,
   y que la remediación está presente en bytecode desplegado en las redes del Anexo F — cada una releída de la
-  cadena, no deducida de un script de despliegue. Cada hallazgo tiene su test de regresión y la suite pasa.</p>
+  cadena, no deducida de un script de despliegue. Cada hallazgo tiene su test de regresión y la suite pasa.
+  Para V5 establece además que los contratos desplegados tienen el código verificado (72 de 72) y que los 30
+  validators están activos y apuntan donde deben.</p>
   <p><b>No</b> establece que los contratos estén libres de otros defectos. Es una revisión interna hecha por
   el equipo que escribió el código. Los cuatro hallazgos aportados por una pasada posterior con otra herramienta —BVCC-04,
   BVCC-06, BVCC-07 y BVCC-11— habían sobrevivido cada uno a tres rondas anteriores, que es la medida más
@@ -1064,10 +1718,17 @@
   este código</b>, así que nada de lo que hay aquí lo ha comprobado alguien con interés en encontrar
   fallos. Los contratos no han sido auditados externamente y este
   documento no debe leerse como sustituto de una auditoría.</p>
-  <p>La cobertura tampoco es uniforme por red. La batería de permisos se ejecutó en Arbitrum Sepolia; la capa
-  de call policies y el ciclo de liquidez de Uniswap v4, en Arbitrum One. En las otras cuatro redes los
-  contratos están desplegados y verificados byte a byte, y se releyó el cableado de los validators, pero no
-  se ejecutó ningún ciclo de extremo a extremo.</p>
+  <p>Las rondas de V5 se hicieron con herramientas de análisis con IA, dirigidas por el mismo equipo.
+  Encontraron más antes del despliegue que ninguna ronda anterior, y también mostraron su límite: las rondas 2
+  a 4 encontraron cada una un camino que la anterior no había buscado. El auditor de la quinta ronda no pudo
+  comparar por su cuenta el código con el de la ronda 4; esa comparación la hizo el equipo. Una revisión con IA
+  es un buen segundo par de ojos, pero no es una auditoría independiente.</p>
+  <p>La cobertura tampoco es uniforme por red. En V4, la batería de permisos se ejecutó en Arbitrum Sepolia; la
+  capa de call policies y el ciclo de liquidez de Uniswap v4, en Arbitrum One. En las otras cuatro redes los
+  contratos están desplegados y verificados byte a byte, y se releyó el cableado de los validators, pero no se
+  ejecutó ningún ciclo de extremo a extremo. En V5, la batería completa del agente se ejecutó en Arbitrum
+  Sepolia y en forks de mainnet; en mainnet se han hecho operaciones del dueño (BNB Chain), pero ningún agente
+  ha operado todavía una wallet V5.</p>
 
 </section>
 </div>
@@ -1075,7 +1736,102 @@
 <div class="page section-break">
 <section>
   <h2><span class="n">A</span>Arquitectura de seguridad</h2>
-  <p>Material de referencia sobre los mecanismos a los que aluden los hallazgos: cómo se valida una llamada de agente, qué codifica una call policy y cómo funciona el registry de validators on-chain.</p>
+  <p>Material de referencia sobre los mecanismos a los que aluden los hallazgos. Primero va el diseño de V5,
+  porque es la generación actual; después la capa de call policies y el registry de validators de V3 y V4, en
+  los que se apoya la V5 y que siguen usando las wallets V4.</p>
+
+  <h3>V5 — qué garantiza</h3>
+  <p>La especificación de V5 declara siete garantías. Cada una es un invariante que comprueba la suite de
+  tests, varias con 128.000 secuencias aleatorias de acciones.</p>
+  <table class="data">
+    <tr><th>ID</th><th>Garantía</th></tr>
+    <tr><td class="mono">G-1</td><td>Solo la passkey del dueño, o una recuperación 2-de-3 de los guardianes completada tras 48 horas, puede cambiar quién es el dueño.</td></tr>
+    <tr><td class="mono">G-2</td><td>Un agente nunca saca de la wallet más de un token que su presupuesto para ese token, comisión incluida, haya las aprobaciones que haya y combine como combine las llamadas.</td></tr>
+    <tr><td class="mono">G-3</td><td>Un agente nunca mueve un token que no tenga permitido.</td></tr>
+    <tr><td class="mono">G-4</td><td>Un agente nunca envía fondos a un destino que no tenga permitido, directamente o a través de un protocolo.</td></tr>
+    <tr><td class="mono">G-5</td><td>Un agente no puede llamar a las funciones de la propia wallet ni recuperar el control de dueño a mitad de operación (reentrada).</td></tr>
+    <tr><td class="mono">G-6</td><td>La gobernanza externa solo puede restringir al instante; ampliar lleva 48 horas visibles en cadena. Exige validators inmutables y sin estado (BVCC-19).</td></tr>
+    <tr><td class="mono">G-7</td><td>Nadie salvo el dueño fija la credencial o los guardianes de la wallet, tampoco quien la despliega.</td></tr>
+  </table>
+  <p class="foot-note">G-2, G-3 y G-4 se cumplen con la condición de que los hooks aprobados y los tokens
+  permitidos sean de fiar (BVCC-25, BVCC-29).</p>
+
+  <h3>V5 — el lote del agente, paso a paso</h3>
+  <p>El agente envía su propia transacción a <code>executeAsAgent(mode, executionData)</code>; solo se acepta el
+  modo de lote ERC-7579. Dentro:</p>
+  <ol>
+    <li><b>Comprobación del agente.</b> Una EOA normal en esta misma llamada, activa, sin caducar, sin pausa
+    global y sin pausa propia.</li>
+    <li><b>Por operación, antes de ejecutar nada.</b> El destino no es la wallet ni está bloqueado por el
+    dueño. Un envío nativo debe ir a un destinatario permitido; un <code>transfer</code>, de un token permitido
+    a un destinatario permitido; un <code>approve</code>, de un token permitido a un <i>protocolo
+    permitido</i>. Cualquier otra llamada necesita un protocolo permitido, una policy para ese agente y función
+    con el bit <code>DEEP</code>, las anclas que haya puesto el dueño y un sí del validator del protocolo, que
+    además devuelve los tokens a medir, los costes (como un préstamo), si quiere una comprobación posterior y si
+    se cobran las entradas.</li>
+    <li><b>Medir.</b> Leer el saldo de todo token permitido, todo token encontrado en los datos y todo token
+    declarado por un validator, hasta 60. Una lectura fallida revierte.</li>
+    <li><b>Nativo.</b> Cargar el valor nativo enviado, más su comisión, a los límites nativos.</li>
+    <li><b>Ejecutar</b> el lote con la marca de reentrada puesta, midiendo las entradas cobradas alrededor de
+    las llamadas que lo pidieron.</li>
+    <li><b>Restaurar aprobaciones.</b> Cada aprobación que hizo el agente vuelve a su valor anterior.</li>
+    <li><b>Medir otra vez y cobrar.</b> Por cada token que bajó: uno no permitido revierte el lote; uno
+    permitido se carga salida + costes + comisión del 0,15 % contra los límites por lote, diario y total, y la
+    comisión se paga en ese mismo token.</li>
+    <li><b>Comprobaciones posteriores.</b> Los validators que lo pidieron vuelven a decidir; en Aave, el factor
+    de salud debe quedar en 1,2 o más.</li>
+  </ol>
+
+  <h3>V5 — permisos por agente</h3>
+  <table class="data">
+    <tr><th>Ajuste</th><th>V5</th><th>V4</th></tr>
+    <tr><td>Caducidad</td><td>Obligatoria, como mucho 365 días; <code>renewAgent</code> la amplía</td><td>0 significaba nunca</td></tr>
+    <tr><td>Límites nativos y de token (por lote, diario, total, periodo)</td><td>0 = nada permitido; «sin límite» solo como máximo explícito</td><td>0 significaba sin límite</td></tr>
+    <tr><td>Tokens permitidos</td><td>Hasta 50, cada uno con sus límites</td><td>Hasta 20</td></tr>
+    <tr><td>Destinatarios</td><td>Lista vacía = nadie</td><td>Lista vacía = cualquiera</td></tr>
+    <tr><td>Call policies</td><td>Por agente; validator obligatorio en toda llamada a protocolo; anclas extra para tokens, destinatarios y conjuntos de valores</td><td>Por wallet; anclas por posición, validator solo para dos funciones</td></tr>
+    <tr><td>Pausa</td><td>Por agente, más una pausa global</td><td>Solo global</td></tr>
+    <tr><td>Bloquear un protocolo</td><td>El dueño puede bloquear un destino para todos los agentes a la vez</td><td>—</td></tr>
+  </table>
+
+  <h3>V5 — la parte del dueño</h3>
+  <ul>
+    <li><b>Crear la wallet exige la passkey.</b> <code>createWallet</code> verifica una firma de la passkey sobre
+    la dirección de la wallet y la credencial, así que nadie puede desplegar la wallet de otro ni elegir sus
+    guardianes (la clase de BVCC-04 y BVCC-06, cerrada para siempre). La firma no lleva chain id a propósito,
+    para que la misma wallet se pueda desplegar en todas las redes.</li>
+    <li><b>La credencial vive en la wallet</b> y solo cambia al crearla, por el dueño o por una recuperación,
+    que pone la nueva (BVCC-07).</li>
+    <li><b>Las firmas del dueño caducan.</b> Toda UserOperation lleva un <code>validUntil</code> que firma la
+    passkey y aplica el EntryPoint; la app usa unos 15 minutos.</li>
+    <li><b>Recuperación por votos</b> sobre una propuesta concreta, como se describe en BVCC-09. Ejecutarla pausa
+    a todos los agentes.</li>
+    <li><b>La ejecución del dueño</b> mantiene los tres casos de comisión de V4 (nativo, transferencia ERC-20,
+    otras llamadas) al 0,05 %, o al 0,15 % en una wallet de agentes, con semántica SafeERC20 y lecturas de saldo
+    limitadas a 32 bytes de respuesta.</li>
+    <li><b>Reentrada:</b> se mantienen las dos capas de V4 (la comprobación de EOA en cada llamada y ningún
+    <code>execute()</code> externo durante un lote de agente), ahora en almacenamiento transitorio.</li>
+  </ul>
+
+  <h3>V5 — validators</h3>
+  <p>La interfaz devuelve cinco valores: sí o no, los tokens a medir, los costes, si quiere comprobación
+  posterior y si se cobran las entradas. Los validators son contratos <code>view</code> que se llaman con
+  <code>staticcall</code>; un revert significa no.</p>
+  <table class="data">
+    <tr><th>Validator</th><th>Qué deja hacer a los agentes y cómo lo limita</th></tr>
+    <tr><td>Universal Router</td><td>Swaps de token a token (v3 y v4). Bytes de comando exactos; todo destinatario es la wallet; cada salto v4 decodificado, cada hook ninguno o aprobado; todas las monedas de la ruta declaradas; valor nativo rechazado.</td></tr>
+    <tr><td>PositionManager de Uniswap v4</td><td>Crear, añadir, retirar, quemar, cobrar. Solo posiciones de la wallet; añadir exige que no haya aprobación individual; nada de sacar y meter en una llamada; hooks ninguno o aprobado en cada acción; las dos monedas del pool declaradas; entradas cobradas.</td></tr>
+    <tr><td>Pool de Aave v3</td><td>Depositar, retirar, pedir prestado (variable), devolver, ajustes de colateral y eMode. Beneficiario fijado a la wallet; un préstamo cuenta como coste contra el presupuesto; las retiradas se cobran como entrada; factor de salud ≥ 1,2 tras cualquier cambio con riesgo.</td></tr>
+    <tr><td>Posiciones de Uniswap v3</td><td>Crear hacia la wallet; añadir solo en posiciones propias sin aprobación; retirar, quemar y cobrar solo posiciones propias, cobrar exactamente hacia la wallet. Todo lo demás, y cualquier valor nativo, rechazado.</td></tr>
+    <tr><td>Nativo envuelto</td><td>Solo <code>deposit()</code> con valor y <code>withdraw(importe)</code> sin él. El valor ya se cobra en los límites nativos.</td></tr>
+  </table>
+  <p class="foot-note">Clones y librería: cada wallet es un clon ERC-1167 de un contrato de lógica con los
+  inicializadores desactivados; el código de permisos de agentes es una librería externa a la que se llega por
+  <code>DELEGATECALL</code>, sin almacenamiento propio. La dirección del registry es una constante dentro de
+  cada wallet.</p>
+
+  <h3 style="margin-top:26px">V3 y V4 — call policies y registry de validators</h3>
+
 <h3>Modelo de ejecución del agente</h3>
   <p>El agente llama a <code>executeAsAgent(bytes32 mode, bytes executionData)</code> como una
   transacción EOA ordinaria (no una UserOp). <code>mode</code> es el selector de batch ERC-7579
@@ -1292,7 +2048,41 @@
 <div class="page section-break">
 <section>
   <h2><span class="n">B</span>Evidencia de pruebas</h2>
-  <p>Las baterías de pruebas detrás de los hallazgos y sus remediaciones. Cada hallazgo del §4 tiene su test de regresión; estas son las baterías que ejercitan el modelo en conjunto.</p>
+  <p>Las baterías de pruebas detrás de los hallazgos y sus remediaciones. Cada hallazgo del §4 tiene su test de
+  regresión. Primero va V5.</p>
+
+  <h3>Suite de tests de V5 — 191 tests: 145 locales y 46 sobre forks de redes</h3>
+  <table class="data">
+    <tr><th>Suite</th><th>Tests</th><th>Foco</th></tr>
+    <tr><td><code>AgentWalletV5.t.sol</code></td><td>58</td><td>Permisos del agente, medición, comisiones, restauración de aprobaciones, policies, pausa, caducidad</td></tr>
+    <tr><td><code>SmartWalletV5.t.sol</code></td><td>19</td><td>Ejecución del dueño, los tres casos de comisión, SafeERC20, creación con firma de la credencial</td></tr>
+    <tr><td><code>ValidatorsV5.t.sol</code></td><td>18</td><td>Validators del Universal Router, PositionManager v4 y Aave, registry y hook registry</td></tr>
+    <tr><td><code>RecoveryV5.t.sol</code></td><td>17</td><td>Votos, armado, retirada, cancelación, ejecución y pausa de agentes</td></tr>
+    <tr><td><code>AgentInvariantsV5.t.sol</code> · <code>RecoveryInvariantsV5.t.sol</code></td><td>11</td><td>Invariantes con 128.000 acciones aleatorias cada uno: límites, tokens permitidos, salida del dueño, aprobaciones del agente, contadores, atomicidad; armado y plazos de la recuperación</td></tr>
+    <tr><td><code>SignaturesV5.t.sol</code></td><td>7</td><td>ERC-7739 en clones, caducidad de firmas, reutilización entre wallets y entre redes</td></tr>
+    <tr><td><code>GasV5.t.sol</code> · <code>DeployV5.t.sol</code></td><td>11</td><td>Límites de gas; direcciones CREATE2 y conexiones</td></tr>
+    <tr><td><code>RedTeamV5.t.sol</code> · <code>AuditRound2PoCsV5.t.sol</code></td><td>4</td><td>Pruebas de concepto del equipo rojo y de la ronda 2, ahora tests de regresión</td></tr>
+    <tr><td><code>fork/AllChainsDeployV5.t.sol</code></td><td>6</td><td>Despliegue de producción en las seis redes con los monederos reales; operaciones del dueño y del agente por el EntryPoint real</td></tr>
+    <tr><td><code>fork/ArbitrumForkV5.t.sol</code> · <code>EthereumUsdtForkV5.t.sol</code></td><td>12</td><td>Universal Router, Permit2, Aave v3 y USDT reales</td></tr>
+    <tr><td><code>fork/Audit*ForkV5.t.sol</code> · <code>RedTeamForkV5.t.sol</code></td><td>13</td><td>Las pruebas de concepto de las rondas 2 a 4 y del equipo rojo, sobre contratos reales de Uniswap en cinco redes</td></tr>
+    <tr><td><code>fork/V3PositionManagerForkV5.t.sol</code> · <code>WrappedNativeForkV5.t.sol</code></td><td>15</td><td>Los dos validators añadidos tras el congelado</td></tr>
+  </table>
+  <p>Los tests sobre fork simulan en local con el estado real de la red; no envían transacciones. La suite se
+  ejecutó también con los tests de ataque de cada ronda: cada prueba de concepto fallaba con el código contra
+  el que se escribió y pasa como regresión con el código congelado. Otros 13 tests adversariales de la revisión
+  de los dos validators nuevos también pasan, incluidos WBNB en BNB Chain y WPOL en Polygon.</p>
+  <table class="data">
+    <tr><th>Lote de agente (V5)</th><th>Gas</th></tr>
+    <tr><td>Solo nativo, o un token</td><td>~142.000 – 148.000</td></tr>
+    <tr><td>Cuatro tokens medidos</td><td>~163.000</td></tr>
+    <tr><td>Veinte tokens</td><td>~306.000</td></tr>
+    <tr><td>Peor caso, 60 tokens medidos</td><td>~956.000</td></tr>
+  </table>
+  <p class="foot-note">El coste depende de los tokens que tenga permitidos ese agente, no del máximo. Crear una
+  wallet V5 cuesta unas 537.000 unidades de gas. Las ejecuciones de V5 en redes reales están en el §5.</p>
+
+  <h3 style="margin-top:26px">Baterías de V1 a V4</h3>
+
 <p>Ejecutada contra la wallet parcheada <span class="mono">0x1ED261…F0C3</span> con el EOA del agente
   <span class="mono">0x3852…4aB4</span>. Reverts confirmados por simulación; casos válidos como
   transacciones reales. Los destinatarios permitidos fueron los dos guardianes de recovery (controlados
@@ -1423,6 +2213,15 @@
 <section>
   <h2><span class="n">C</span>Análisis estático</h2>
   <p>Slither se pasó sobre el árbol en cada ronda. Este anexo recoge los resultados y, tan importante como eso, qué resultados son falsos positivos y por qué — para no volver a investigarlos, y para que nadie borre las dos funciones virtuales que marca como código muerto.</p>
+  <h3>Análisis estático — V5</h3>
+  <p>Slither 0.11.3 se pasó sobre el árbol de V5 el 2026-10-26, antes de las rondas de revisión. Encontró un
+  problema real: una lectura de <code>allowance</code> que copiaba todos los datos que devolviera el token (un
+  «return bomb», la misma clase que la lectura de <code>balanceOf</code> sin límite señalada en V4). Se
+  corrigió; en V5 toda lectura de la respuesta de un token está limitada a 32 bytes y tiene tope de gas. El
+  resto de resultados son por diseño (la hora del bloque para plazos y caducidades, una llamada al registry
+  por cada operación de protocolo de un lote) o falsos positivos. Se aplicaron las lecciones de V4: la pragma
+  es exacta y se conservan las dos funciones que Slither marca como no usadas.</p>
+  <h3>Generaciones anteriores</h3>
 <p>Slither 0.11.3 se ejecutó sobre ambos repositorios antes del redespliegue. Reportó 39 resultados
   en 59 contratos; <b>ninguno accionable</b>. La tabla resume las categorías y su tratamiento.</p>
 
@@ -1472,7 +2271,7 @@
 <div class="page section-break">
 <section>
   <h2><span class="n">D</span>Previamente remediado — V1 y V2</h2>
-  <p>Estos hallazgos se reprodujeron y cerraron en generaciones que V4 sustituye. Se conservan con su evidencia porque las wallets creadas por aquellas factories siguen vivas hasta que sus dueños migren, y porque V4 hereda las remediaciones que describen.</p>
+  <p>Estos hallazgos se reprodujeron y cerraron en generaciones que V4 y V5 sustituyen. Se conservan con su evidencia porque las wallets creadas por aquellas factories siguen vivas hasta que sus dueños migren, y porque V4 hereda las remediaciones que describen.</p>
 <p><span class="badge b-high">ALTA</span> &nbsp; <span class="badge b-pass">CORREGIDO Y REDESPLEGADO</span></p>
 
   <h3>Descripción</h3>
@@ -1635,6 +2434,22 @@
         <td>BVCC-01, BVCC-04 a BVCC-08 y BVCC-11 encontrados y corregidos; desplegado y verificado en seis redes</td></tr>
     <tr><td>—</td><td>2026-07-28 → 07-29</td><td>Activación de validators</td>
         <td>Capa de validación profunda completada en las seis redes; ciclo de liquidez v4 ejercitado en mainnet</td></tr>
+    <tr><td><b>V5</b></td><td>2026-10-23 → 10-26</td><td>Diseño y código</td>
+        <td>Especificación con siete garantías; núcleo escrito; 146 tests, con forks de despliegue en seis redes; return bomb de Slither corregido</td></tr>
+    <tr><td>V5, ronda 1</td><td>2026-10-27</td><td>Revisión completa con una herramienta de IA</td>
+        <td>BVCC-14 a BVCC-20 encontrados; validator obligatorio en toda llamada a protocolo; entradas cobradas</td></tr>
+    <tr><td>V5, rondas 2–3</td><td>2026-10-28</td><td>Comprobación de arreglos, rutas de Uniswap sobre forks</td>
+        <td>BVCC-21 a BVCC-23 encontrados y corregidos en los validators</td></tr>
+    <tr><td>V5, ronda 4 · equipo rojo</td><td>2026-10-29</td><td>Hooks; ataques desde dentro y desde fuera</td>
+        <td>BVCC-24 a BVCC-30: cinco corregidos; BVCC-25, BVCC-29 y BVCC-30 aceptados</td></tr>
+    <tr><td>V5, ronda 5</td><td>2026-10-29</td><td>Arreglos del equipo rojo, preparación del congelado</td>
+        <td>Sin hallazgos nuevos; código congelado (176 tests en ese momento)</td></tr>
+    <tr><td>—</td><td>2026-10-30 → 11-02</td><td>Despliegue</td>
+        <td>Arbitrum Sepolia y después las cinco mainnets; validators de Uniswap v3 y nativo envuelto añadidos y revisados (sin hallazgos)</td></tr>
+    <tr><td>—</td><td>2026-11-01 → 11-08</td><td>Activación de validators y pruebas</td>
+        <td>30 de 30 validators activos tras las esperas de 48 horas; batería completa del agente y una recuperación V5 en Arbitrum Sepolia</td></tr>
+    <tr><td>—</td><td>2026-11-11</td><td>Verificación y migración</td>
+        <td>72 de 72 contratos con el código verificado; una wallet V4 migrada a V5 en BNB Chain; esta edición</td></tr>
   </table>
   <p class="foot-note">A continuación, el registro de despliegue de V3, la build congelada, la capa off-chain y las notas de migración.</p>
 
@@ -1715,13 +2530,23 @@
     <tr><td>AgentWalletFactory V3 (todas las redes)</td><td class="mono addr">0xd866a7563cDaC9F71423be3332b62c329C676064</td></tr>
     <tr><td>SmartWalletFactory V4 (todas las redes)</td><td class="mono addr">0xfd105197109244483b5f870501326E6faec9F93c</td></tr>
     <tr><td>AgentWalletFactory V4 (todas las redes)</td><td class="mono addr">0xf3A61F9d64d45362E149A111289546523BCd26a6</td></tr>
+    <tr><td>SmartWalletFactory V5 (todas las redes)</td><td class="mono addr">0x2672951DC1E3f865BA6Fc98e5509dc4B23B260a2</td></tr>
+    <tr><td>AgentWalletFactory V5 (todas las redes)</td><td class="mono addr">0xE36fb66c21C38536454C1a58fBC5EB1Cb455aD52</td></tr>
+    <tr><td>Lógica SmartWallet V5 (todas las redes)</td><td class="mono addr">0xc9dE89d54beB786bc916131CA6c8c5374507Bd15</td></tr>
+    <tr><td>Lógica AgentWallet V5 (todas las redes)</td><td class="mono addr">0x360f991B23a3D5202Dc422292697aB07dA279cFA</td></tr>
+    <tr><td>Librería de lógica de agentes V5 (todas las redes)</td><td class="mono addr">0x7504bf3c1230eF99eaEFAc03287c8F036CBb6D0E</td></tr>
+    <tr><td>ValidatorRegistry V5 (todas las redes)</td><td class="mono addr">0x7269334AE74DCE4e607eec36268383DD35f28350</td></tr>
+    <tr><td>HookRegistry V5 (todas las redes)</td><td class="mono addr">0xEaEaC7F6071f7F576Be2aD97898Dd0c0F51BE78A</td></tr>
+    <tr><td>Validators V5</td><td>Por red, en el §5</td></tr>
+    <tr><td>Monedero de comisiones V5 (todas las redes, constante)</td><td class="mono addr">0x3e3eb089169a7315a994947465ce5f5FC3A307D4</td></tr>
+    <tr><td>Prueba de migración V5 (BNB Chain)</td><td class="mono addr">0x566669C6cC8FDD33c08Ed56A51c23ec1972A4936</td></tr>
     <tr><td>ValidatorRegistry (todas las redes, V3 y V4)</td><td class="mono addr">0x5e371D54AC97a57B0a99145Ed04A3c9fA07850C2</td></tr>
     <tr><td>HookRegistry (todas las redes, V3 y V4)</td><td class="mono addr">0x551C6e7ABdA04a110790888e711198f25621b066</td></tr>
     <tr><td>Posición LP v4 de prueba (Arbitrum One)</td><td class="mono">tokenId 190877 — minteada y quemada por un agente</td></tr>
     <tr><td>Wallet de pruebas V3 (Arbitrum One)</td><td class="mono addr">0x605A4C65dBa64bd26d9F7701e1e4Cda48c594A5c</td></tr>
     <tr><td>Admin de gobernanza (hardware wallet)</td><td class="mono addr">0x3145Bd5e2489d8bDdAb17F23F26F07Ac5aD55A4c</td></tr>
-    <tr><td>Redes V2/V3/V4</td><td>Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arbitrum Sepolia</td></tr>
-    <tr><td>Build V3/V4</td><td>solc 0.8.36 · via-IR · optimizer 50 · EVM cancun (congelada para CREATE2)</td></tr>
+    <tr><td>Redes V2/V3/V4/V5</td><td>Arbitrum One · Base · BNB Chain · Ethereum · Polygon · Arbitrum Sepolia</td></tr>
+    <tr><td>Build V3/V4/V5</td><td>solc 0.8.36 · via-IR · optimizer 50 · EVM cancun (congelada para CREATE2); V5 sin hash de metadatos</td></tr>
     <tr><td>Herramientas</td><td>Slither 0.11.3 · Foundry (forge 1.5.1) · viem 2.x</td></tr>
   </table>
   <p class="foot-note">Confidencial — Block Venture Chain Capital. Preparado para revisión interna e
@@ -1729,7 +2554,8 @@
   Sepolia); la capa de call policies de V3 y el ciclo de liquidez v4 se verificaron además en Arbitrum One
   mainnet. Las factories V2, V3 y V4 están desplegadas en Arbitrum One, Ethereum, BNB Chain, Base, Polygon y
   Arbitrum Sepolia, con los validators del Universal Router y del PositionManager v4 registrados en las
-  seis.</p>
+  seis. La V5 está desplegada en las mismas seis redes con sus propios registries y cinco validators por red,
+  todos activos, y todos los contratos de V5 tienen el código verificado.</p>
 </section>
 </div>
 
@@ -1747,6 +2573,20 @@
   arreglo la cerró. Las herramientas encuentran patrones; los hallazgos de aquí salieron de leer el código y
   preguntarse qué haría un atacante con él. Los contratos siguen siendo de revisión interna y no están
   auditados externamente.</p>
+  <p>La V5 añadió tres más. <b>Los arreglos traen vecinos.</b> Las rondas 2, 3 y 4 y el equipo rojo encontraron
+  cada uno un camino nuevo a un paso del arreglo anterior, todos en los validators de posiciones de Uniswap:
+  comprobación de dueño al añadir pero no al retirar, comprobación de la posición de destino pero no de sus
+  aprobaciones, comprobación de hook en los swaps pero no en las retiradas. Las reglas solo aguantaron cuando
+  se hicieron simétricas en todas las acciones. Después de arreglar un validator conviene preguntarse «¿qué
+  acción hermana no ha tocado este arreglo?». <b>Los saldos no lo ven todo.</b> Medir lo que sale cerró
+  BVCC-03, pero el valor también puede moverse como liquidez entre NFTs, como colateral o a través de un hook,
+  sin que salga ningún token de la wallet. Cada caso necesitó su propia regla, y los que no se pueden descartar
+  quedan escritos como supuestos de confianza. <b>Primero la especificación.</b> Las rondas de V5 se
+  contrastaron con siete garantías escritas, lo que convirtió las discusiones sobre intenciones en tests que
+  pasan o fallan. Donde la especificación era ambigua (G-4 para pagos de protocolos, BVCC-16), el hallazgo
+  obligó a decidir en lugar de debatir. La ronda 5 señaló además que su auditor no tenía copia del código de la
+  ronda 4 para comparar; esa comparación la hizo el equipo, y el código congelado queda ligado ahora a un
+  commit, sus hashes, sus tests y sus direcciones.</p>
 </section>
 </div>
 

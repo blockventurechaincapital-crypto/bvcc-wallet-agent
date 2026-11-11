@@ -1,4 +1,5 @@
 // Mirrored from docs/agent-integration.md (monorepo, English canonical) — keep in sync
+// Wallet V5 is the current generation; V4 differences are in the last section.
 import type { LocalizedDoc } from '@/components/DocsPage'
 
 // Code blocks are shared between languages (code is not translated)
@@ -8,32 +9,40 @@ const CODE_BATCH_MODE = 'BATCH_MODE = 0x0100000000000000000000000000000000000000
 
 const CODE_EXECUTION = `struct Execution {
     address target;   // contract or recipient to call
-    uint256 value;    // ETH (wei) to send with the call
-    bytes   callData; // calldata; empty for pure ETH sends
+    uint256 value;    // native value (wei) to send with the call
+    bytes   callData; // calldata; empty for pure native sends
 }
 
-// executionData = abi.encode(Execution[])`
+// executionData = abi.encode(Execution[])  — a single call is a batch of one`
 
-const CODE_GETTERS = `// Full permission struct, including arrays
+const CODE_GETTERS = `// Permissions, including the agent's own pause flag and expiry
 function getAgentPermission(address agent) external view returns (AgentPermission memory);
-
-// Every agent ever authorized (including revoked)
-function getAgents() external view returns (address[] memory);
-
-// ETH spent by the agent in the current UTC day
+// Native spending counters (total, period)
+function getAgentSpending(address agent) external view returns (AgentSpending memory);
+// Native spent in the current UTC day
 function getDailySpent(address agent) external view returns (uint128);
+// Token spent: current UTC day + lifetime (charges include the fee)
+function getTokenSpent(address agent, address token) external view returns (uint128 daily, uint128 total);
+// Policy and value set for one function of one contract
+function getAgentCallPolicy(address agent, address target, bytes4 selector) external view returns (uint256);
+function getAgentValueSet(address agent, address target, bytes4 selector) external view returns (bytes32[] memory);
+function isTargetBlocked(address target) external view returns (bool);
+function paused() external view returns (bool); // all agents paused
+function getAgents() external view returns (address[] memory);`
 
-// Token spent: current UTC day + lifetime
-function getTokenSpent(address agent, address token)
-    external view returns (uint128 dailySpent, uint128 totalSpent);`
-
-const CODE_EVENTS = `event AgentExecution(address indexed agent, uint128 ethSpent, uint32 dayIndex, uint128 totalSpentWei);
+const CODE_EVENTS = `// Charges include the fees
+event AgentExecution(address indexed agent, uint256 ethCharged, uint256 ethFee,
+                     address[] tokens, uint256[] tokenCharges, uint256[] tokenFees);
 event AgentAuthorized(address indexed agent, uint128 maxPerTxWei, uint128 dailyLimitWei,
                       uint128 totalBudgetWei, uint128 periodBudgetWei, uint64 periodDuration, uint64 expiry);
 event AgentRevoked(address indexed agent);
-event AgentsPaused(address indexed by);
-event AgentsUnpaused(address indexed by);
-event AgentBudgetIncreased(address indexed agent, uint128 additionalWei, uint128 newTotalBudget);`
+event AgentRenewed(address indexed agent, uint64 expiry);
+event AgentPausedSet(address indexed agent, bool paused);
+event AgentsPaused();
+event AgentsUnpaused();
+event AgentBudgetIncreased(address indexed agent, uint128 additionalWei, uint128 newTotalBudget);
+event AgentCallPolicySet(address indexed agent, address indexed target, bytes4 indexed selector, uint256 policy);
+event TargetBlocked(address indexed target, bool blocked);`
 
 const CODE_FOUNDRY = `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
@@ -129,398 +138,368 @@ export const agentIntegration: LocalizedDoc = {
   en: {
     title: 'Agent Integration Guide',
     intro:
-      'How an external AI agent (or any automated system) executes transactions through a BVCC Agent Wallet (`BVCCAgentWalletV4`). All permissions, spending limits and call policies are enforced on-chain — the agent cannot exceed them no matter what its code does.',
+      'How an external AI agent (or any automated system) executes transactions through a BVCC Agent Wallet V5 (`BVCCAgentWalletV5`), the current generation. All permissions, limits and checks are enforced on-chain: the agent cannot exceed them, whatever its code does. Differences on older V4 wallets are at the end.',
     blocks: [
       { type: 'h2', text: 'How it works' },
       {
         type: 'list',
         items: [
-          'The wallet owner authorizes an agent address from the app (`/wallet/agents`), signing with biometrics / WebAuthn (passkey). This calls `authorizeAgent()` on the wallet with the agent’s limits.',
-          'The agent calls `executeAsAgent()` on the wallet directly, as a normal EVM transaction — no ERC-4337 UserOp, no bundler, no WebAuthn signature needed.',
-          'The agent pays gas from its own EOA. The transferred funds come from the wallet.',
-          'Every execution is validated against the agent’s on-chain permission set and charged a 0.15% protocol fee.',
-        ],
-      },
-      { type: 'p', text: 'Two hard requirements for the agent account:' },
-      {
-        type: 'list',
-        items: [
-          'Must be an EOA. `authorizeAgent` rejects addresses with deployed code (`AgentMustBeEOA`). Smart-contract agents are not supported.',
-          'Must be authorized and not expired at execution time, and agents must not be paused (`pauseAgents()` is the owner’s emergency stop).',
-        ],
-      },
-
-      { type: 'h2', text: 'The entrypoint: executeAsAgent' },
-      { type: 'code', lang: 'solidity', code: CODE_SIG },
-      { type: 'p', text: '`mode` — ERC-7821/7579 execution mode. Use the batch mode constant:' },
-      { type: 'code', lang: 'text', code: CODE_BATCH_MODE },
-      { type: 'p', text: '`executionData` — ABI-encoded array of `Execution` structs:' },
-      { type: 'code', lang: 'solidity', code: CODE_EXECUTION },
-      {
-        type: 'p',
-        text: 'A single call can batch multiple executions; limits are checked over the whole batch (cumulative ETH and cumulative per-token amounts).',
-      },
-
-      { type: 'h2', text: 'The four call types' },
-      {
-        type: 'p',
-        text: 'Each `Execution` item is classified on-chain and checked against the matching whitelist:',
-      },
-      {
-        type: 'table',
-        headers: ['Case', 'Shape', 'Checks applied'],
-        rows: [
-          ['1. ETH send', '`value > 0`, empty `callData`', 'recipient whitelist'],
-          [
-            '2. ERC-20 transfer',
-            '`callData` starts with `0xa9059cbb` (`transfer(address,uint256)`)',
-            'token whitelist + per-token amount cap + recipient whitelist',
-          ],
-          [
-            '2b. ERC-20 approve',
-            '`callData` starts with `0x095ea7b3` (`approve(address,uint256)`)',
-            'token whitelist + per-token amount cap + spender checked against recipient whitelist',
-          ],
-          ['3. DeFi / anything else', 'any other `callData`', '`target` in the protocol whitelist + a call policy registered for the selector'],
-        ],
-      },
-      {
-        type: 'list',
-        items: [
-          'The agent can never call the wallet itself (`AgentCannotCallWallet`) — owner functions stay owner-only.',
-          '`approve` amounts count toward per-token daily/total budgets, same as transfers. This is intentionally conservative: it prevents draining via an external `transferFrom` after a large approve.',
-        ],
-      },
-
-      { type: 'h2', text: 'Call policies (case 3)' },
-      {
-        type: 'p',
-        text: 'For a DeFi call to go through, the wallet owner must have registered a call policy for that protocol + selector. This is separate from `allowedProtocols` (which only whitelists the target) and is what stops a stolen agent key from redirecting funds. You don’t set policies — the owner does, in the app — but you need to know what passes:',
-      },
-      {
-        type: 'list',
-        items: [
-          'Selector must be allowed. If the owner hasn’t registered a policy for the exact `target` + selector, it reverts with `SelectorNotAllowed`.',
-          'Recipient must be the wallet. For pinned selectors (SwapRouter02, Aave Pool supply/withdraw/borrow/repay, …) the recipient / `to` / `onBehalfOf` argument must be the agent wallet — put the wallet there, not your own address. Otherwise `PinnedArgMismatch`.',
-          'Complex calldata is validated on-chain. For the Universal Router (`execute`) and Uniswap v4 PositionManager (`modifyLiquidities`), the call is routed to an on-chain validator that checks every recipient. Fails closed (`PolicyValidationFailed`) if the validator isn’t active on that chain or a recipient isn’t the wallet.',
-        ],
-      },
-      {
-        type: 'p',
-        text: 'Cases 1, 2 and 2b (ETH send, token transfer, approve) are not affected by call policies — they keep using the recipient/token whitelists. Call policies only gate case 3.',
-      },
-
-      { type: 'h2', text: 'Spending limits' },
-      {
-        type: 'p',
-        text: 'All set per-agent in `authorizeAgent`. `0` always means unlimited / disabled. Checked in this order:',
-      },
-      {
-        type: 'table',
-        headers: ['Limit', 'Scope', 'Error on violation'],
-        rows: [
-          ['`maxPerTxWei`', 'ETH per single `Execution` item', '`ExceedsPerTxLimit`'],
-          ['`tokenMaxAmounts[i]`', 'token amount per batch (per token)', '`TokenBatchLimitExceeded` / `ExceedsTokenMaxAmount`'],
-          ['`tokenDailyLimits[i]`', 'token amount per UTC day', '`TokenDailyLimitExceeded`'],
-          ['`tokenTotalBudgets[i]`', 'token amount lifetime', '`TokenTotalBudgetExceeded`'],
-          [
-            '`periodBudgetWei` + `periodDuration`',
-            'ETH per rolling period (auto-rollover when the period elapses)',
-            '`PeriodBudgetExceeded`',
-          ],
-          ['`dailyLimitWei`', 'ETH per UTC day (resets at 00:00 UTC)', '`DailyLimitExceeded`'],
-          ['`totalBudgetWei`', 'ETH lifetime', '`AgentBudgetExceeded`'],
-          ['`expiry`', 'unix timestamp after which the agent is disabled', '`AgentPermissionsExpired`'],
+          'The wallet owner authorizes an agent address from the app (`/wallet/agents`), signing with their passkey. This calls `authorizeAgent()` on the wallet with the agent’s limits and policies.',
+          'The agent calls `executeAsAgent()` on the wallet directly, as a normal EVM transaction: no ERC-4337 UserOp, no bundler, no passkey signature.',
+          'The agent pays gas from its own EOA. The funds it moves come from the wallet.',
+          'The wallet measures what leaves during the batch and charges it, plus a 0.15% agent fee, against the agent’s limits.',
         ],
       },
       {
         type: 'callout',
         tone: 'info',
-        text: 'Spending history (`totalSpentWei`, `periodSpentWei`, per-token spent) is preserved across re-authorizations — the owner can change limits without resetting what the agent already spent.',
+        text: 'The TypeScript SDK (`@bvcc/agent-sdk`) and the MCP server (`@bvcc/agent-mcp`) do all of this for you: they read the wallet version, build the batch, check the limits first and decode the errors. See Connect an AI. This page is for integrating by hand.',
       },
-
-      { type: 'h2', text: 'Whitelists' },
-      { type: 'p', text: 'Max 20 entries each. Semantics differ:' },
+      { type: 'p', text: 'Requirements for the agent account:' },
       {
-        type: 'table',
-        headers: ['Whitelist', 'Empty means'],
-        rows: [
-          ['`allowedTokens`', 'deny all ERC-20 transfers/approves'],
-          ['`allowedProtocols`', 'reverts (`NoProtocolsWhitelisted`) — at least one protocol required for DeFi'],
-          [
-            '`allowedRecipients`',
-            'any destination allowed (applies to ETH recipients, token recipients, and approve spenders when set)',
-          ],
+        type: 'list',
+        items: [
+          'It must be a plain EOA, at authorization and at every call. An address with code, including an EIP-7702 delegation added later, is rejected (`AgentMustBeEOA`).',
+          'It must be authorized, not expired, not paused on its own, and agents must not be paused globally.',
         ],
       },
 
-      { type: 'h2', text: 'Fees' },
+      { type: 'h2', text: 'The entrypoint: executeAsAgent' },
+      { type: 'code', lang: 'solidity', code: CODE_SIG },
+      { type: 'p', text: '`mode` must be the ERC-7579 batch mode; anything else reverts with `UnsupportedExecutionMode`:' },
+      { type: 'code', lang: 'text', code: CODE_BATCH_MODE },
+      { type: 'p', text: '`executionData` is an ABI-encoded array of `Execution` structs:' },
+      { type: 'code', lang: 'solidity', code: CODE_EXECUTION },
+      { type: 'p', text: 'Limits are checked over the whole batch: the native value of all items added up, and the net outflow of each token.' },
+
+      { type: 'h2', text: 'What the wallet checks on each item' },
+      {
+        type: 'table',
+        headers: ['Item', 'Shape', 'Checks'],
+        rows: [
+          ['Native send', '`value > 0`, empty `callData`', '`target` in `allowedRecipients`'],
+          ['ERC-20 transfer', '`transfer(address,uint256)`, no value', 'token in `allowedTokens`, recipient in `allowedRecipients`'],
+          ['ERC-20 approve', '`approve(address,uint256)`, no value', 'token in `allowedTokens`, spender in `allowedProtocols`; reset after the batch'],
+          ['Protocol call', 'anything else', '`target` in `allowedProtocols`, a policy with `ALLOWED` and `DEEP` for that agent and selector, the owner’s anchors, and a yes from the target’s validator'],
+        ],
+      },
+      {
+        type: 'list',
+        items: [
+          'The agent can never call the wallet itself (`AgentCannotCallWallet`), nor a contract the owner has blocked (`TargetIsBlocked`).',
+          'Policies are set by the owner, in the app. You only need to know what passes.',
+        ],
+      },
+
+      { type: 'h2', text: 'Protocol calls and validators' },
       {
         type: 'p',
-        text: 'Every agent execution pays a 0.15% protocol fee to the BVCC fee wallet (`0x3e3eb089169a7315a994947465ce5f5FC3A307D4`), versus 0.05% for the personal smart wallet. Fee logic per call type: deducted from ETH sends, charged on top of token transfers (the wallet must hold `amount + fee`), and computed from balance deltas on DeFi calls.',
+        text: 'Every protocol call is checked by the validator registered for that contract on that network. A validator answers yes or no and tells the wallet which tokens to measure. What passes:',
+      },
+      {
+        type: 'list',
+        items: [
+          'Universal Router `execute`: v3 exact-in / exact-out and v4 swaps between ERC-20 tokens. Every recipient must be the wallet (or the router’s "message sender" placeholder). v4 hooks must be none or approved. No native value: to swap native ETH, wrap it first.',
+          'Uniswap v4 PositionManager `modifyLiquidities`: positions owned by the wallet only. Adding liquidity needs a position with no individual approval. One call cannot both remove and add liquidity; use two items. Hooks none or approved.',
+          'Aave v3 Pool: `supply`, `withdraw`, `borrow` (variable rate), `repay`, `setUserUseReserveAsCollateral`, `setUserEMode`, always with the wallet as beneficiary. The asset must be an allowed token. A loan is charged against the budget, and after the batch the health factor must be at least 1.2 (`PostCheckFailed` otherwise).',
+          'Uniswap v3 NonfungiblePositionManager: `mint` to the wallet; `increaseLiquidity`, `decreaseLiquidity`, `burn` and `collect` on the wallet’s own positions; `collect` to the wallet exactly.',
+          'Wrapped native (WETH, WBNB, WPOL): `deposit()` with value, `withdraw(uint256)` without.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'A validator that is not active on that network denies the call (`PolicyValidationFailed`). Withdrawals from Aave and from Uniswap positions are charged as they come into the wallet, so they count against the token’s budget too.',
+      },
+
+      { type: 'h2', text: 'Spending limits' },
+      {
+        type: 'p',
+        text: 'Set per agent in `authorizeAgent`. `0` means nothing allowed; "unlimited" is `type(uint128).max`. Every charge includes the 0.15% fee.',
+      },
+      {
+        type: 'table',
+        headers: ['Limit', 'Scope', 'Error on violation'],
+        rows: [
+          ['`maxPerTxWei`', 'native value of the whole batch, plus fee', '`ExceedsPerTxLimit`'],
+          ['`dailyLimitWei`', 'native per UTC day', '`DailyLimitExceeded`'],
+          ['`totalBudgetWei`', 'native lifetime', '`TotalBudgetExceeded`'],
+          ['`periodBudgetWei` + `periodDuration`', 'native per rolling period (only if duration > 0)', '`PeriodBudgetExceeded`'],
+          ['`tokenMaxAmounts[i]`', 'token outflow + costs + fee, per batch', '`TokenBatchLimitExceeded`'],
+          ['`tokenDailyLimits[i]`', 'per token, per UTC day', '`TokenDailyLimitExceeded`'],
+          ['`tokenTotalBudgets[i]`', 'per token, lifetime', '`TokenTotalBudgetExceeded`'],
+          ['`expiry`', 'required, at most 365 days ahead; renewable with `renewAgent`', '`AgentPermissionsExpired`'],
+        ],
+      },
+      {
+        type: 'callout',
+        tone: 'info',
+        text: 'Spending history is kept when the owner re-authorizes an agent, so changing limits does not reset what was already spent.',
+      },
+
+      { type: 'h2', text: 'Fees and measurement' },
+      {
+        type: 'list',
+        items: [
+          'The 0.15% agent fee is charged on what leaves the wallet, in the same asset, on top of the amount. A transfer of 100 USDC costs the wallet 100.15 USDC and counts 100.15 against the limits.',
+          'To move a whole balance, leave room for the fee: send at most `balance / 1.0015`. Otherwise the batch reverts.',
+          'What comes into the wallet from a swap pays nothing. Withdrawals from Aave or a liquidity position are charged as inflows.',
+          'Every token on the agent’s list, every token found in the calldata and every token a validator declares is measured, up to 60. A balance that cannot be read reverts the batch (`MeasurementFailed`).',
+          'Tokens that charge the sender a tax cannot be moved by agents: the fee payment would take more than the fee.',
+          'Approvals the agent makes are set back to their previous value when the batch ends. Permit2 allowances for the Universal Router and the PositionManager come from the owner, not from the agent.',
+        ],
       },
 
       { type: 'h2', text: 'Reading agent state' },
       { type: 'code', lang: 'solidity', code: CODE_GETTERS },
-      {
-        type: 'p',
-        text: 'A well-behaved agent should read these before submitting and size its transaction to fit the remaining budget.',
-      },
+      { type: 'p', text: 'A well-behaved agent reads these before submitting and sizes its batch to fit what is left, fee included.' },
 
       { type: 'h2', text: 'Error reference' },
-      {
-        type: 'p',
-        text: 'All reverts use custom errors (4-byte selectors). The most relevant for an agent:',
-      },
       {
         type: 'table',
         headers: ['Error', 'Cause'],
         rows: [
           ['`NotAuthorizedAgent()`', 'caller is not an active agent (never authorized, or revoked)'],
-          ['`AgentPermissionsExpired()`', '`block.timestamp >= expiry`'],
-          ['`EnforcedPause()`', 'owner called `pauseAgents()` (OpenZeppelin Pausable)'],
-          ['`AgentCannotCallWallet()`', 'an `Execution.target` is the wallet itself'],
-          ['`ExceedsPerTxLimit()`', 'one item’s `value` > `maxPerTxWei`'],
-          [
-            '`DailyLimitExceeded()` / `PeriodBudgetExceeded()` / `AgentBudgetExceeded()`',
-            'ETH limits (day / period / lifetime)',
-          ],
-          ['`NoTokensWhitelisted()` / `TokenNotAllowed()`', 'token transfer with empty whitelist / token not listed'],
-          ['`ExceedsTokenMaxAmount()` / `TokenBatchLimitExceeded()`', 'per-tx/batch token cap'],
-          ['`TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'per-token day / lifetime budgets'],
-          ['`NoProtocolsWhitelisted()` / `ProtocolNotAllowed()`', 'DeFi call with empty whitelist / target not listed'],
-          ['`AgentMustBeEOA()`', 'the agent address carries code — V4 checks this on every execution, so an EIP-7702 delegation added later locks the agent out until removed'],
-          ['`TokenCallWithValue()`', 'a transfer/approve carried native value — V4 requires zero value on token calls'],
-          ['`SelectorNotAllowed()`', 'no call policy registered for this `target` + selector'],
-          ['`PinnedArgMismatch()`', 'a pinned calldata word (recipient/spender) is not the wallet / not a whitelisted protocol'],
-          ['`PolicyValidationFailed()`', 'a DEEP-policy validator denied the call, reverted, or isn’t registered/active (V3)'],
-          ['`CalldataTooShort()`', 'DeFi calldata under 4 bytes — no selector to check (V3)'],
-          ['`RecipientNotAllowed()`', 'destination/spender not in `allowedRecipients`'],
+          ['`AgentPermissionsExpired()`', 'the expiry has passed; the owner can renew'],
+          ['`AgentPaused()` / `EnforcedPause()`', 'this agent is paused / every agent is paused'],
+          ['`AgentMustBeEOA()`', 'the agent address has code (for example an EIP-7702 delegation)'],
+          ['`UnsupportedExecutionMode()`', '`mode` is not the batch mode'],
+          ['`AgentCannotCallWallet()` / `TargetIsBlocked()`', 'an item targets the wallet itself / a contract the owner blocked'],
+          ['`RecipientNotAllowed()`', 'native or token destination not in `allowedRecipients`'],
+          ['`TokenNotAllowed()`', 'token not in `allowedTokens`, or an unlisted token left the wallet'],
+          ['`ProtocolNotAllowed()`', 'protocol call target, or approve spender, not in `allowedProtocols`'],
+          ['`TokenCallWithValue()`', 'a transfer or approve carried native value'],
+          ['`SelectorNotAllowed()` / `CallNeedsValidator()`', 'no policy for this function / a policy without `DEEP`'],
+          ['`PinnedArgMismatch()` / `CalldataTooShort()`', 'an anchored calldata word does not match / calldata under 4 bytes'],
+          ['`PolicyValidationFailed()`', 'the validator said no, reverted, or is not active on this network'],
+          ['`PostCheckFailed()`', 'a validator’s check after the batch failed (Aave health factor below 1.2)'],
+          ['`ExceedsPerTxLimit()` / `DailyLimitExceeded()` / `PeriodBudgetExceeded()` / `TotalBudgetExceeded()`', 'native limits'],
+          ['`TokenBatchLimitExceeded()` / `TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'token limits'],
+          ['`MeasurementFailed()` / `TooManyMeasuredTokens()`', 'a balance could not be read / more than 60 tokens to measure'],
+          ['`FeeTransferFailed()`', 'the fee could not be paid exactly (for example a sender-taxed token)'],
         ],
       },
       {
         type: 'p',
-        text: 'Owner-side errors (`OnlyWallet`, `InvalidAgent`, `AgentMustBeEOA`, `ArrayLengthMismatch`, `TooManyTokens/Protocols/Recipients`, `UnknownAgent`, `AgentNotActive`, `ZeroAmount`) only appear when authorizing/managing agents.',
+        text: 'Owner-side errors (`OnlyWallet`, `InvalidAgent`, `InvalidExpiry`, `InvalidPolicy`, `ArrayLengthMismatch`, `TooManyTokens/Protocols/Recipients/Values`, `UnknownAgent`, `ZeroAmount`) only appear when authorizing or managing agents.',
       },
 
       { type: 'h2', text: 'Events' },
       { type: 'code', lang: 'solidity', code: CODE_EVENTS },
-      { type: 'p', text: '`AgentExecution` is the one to index for monitoring agent activity off-chain.' },
+      { type: 'p', text: '`AgentExecution` is the one to index to follow agent activity off-chain. Its charges include the fees.' },
 
       { type: 'h2', text: 'Example A — Foundry script (Solidity)' },
-      { type: 'p', text: 'Send ETH from the agent wallet, signed by the agent EOA:' },
+      { type: 'p', text: 'Send ETH from the agent wallet, signed by the agent EOA. The recipient must be on the agent’s list, and the fee is added on top:' },
       { type: 'code', lang: 'solidity', code: CODE_FOUNDRY },
       { type: 'code', lang: 'bash', code: CODE_FORGE_CMD },
 
       { type: 'h2', text: 'Example B — TypeScript / viem' },
-      { type: 'p', text: 'The same call from Node.js — an ETH send plus a USDC transfer in one batch:' },
+      { type: 'p', text: 'The same call from Node.js: an ETH send plus a USDC transfer in one batch:' },
       { type: 'code', lang: 'typescript', code: CODE_VIEM },
       {
         type: 'p',
-        text: 'If the call reverts, simulate it first (`client.simulateContract` with the same args) — viem decodes the custom error name, which maps directly to the error reference above.',
+        text: 'If the call reverts, simulate it first (`client.simulateContract` with the same arguments). viem decodes the custom error name, which maps to the error reference above.',
       },
 
-      {"type": "h2", "text": "V5 wallets: differences for integrators"},
-      {"type": "list", "items": ["`executeAsAgent(bytes32 mode, bytes executionData)` accepts only the batch mode (`0x01` followed by zeroes). `executionData` is `abi.encode(Execution[])`; a single call is a batch of one.", "`getAgentPermission(agent)` returns a new struct: it adds `paused` and drops the spending counters. Read spending with `getAgentSpending(agent)`, `getDailySpent(agent)` and `getTokenSpent(agent, token)`.", "Limits: `0` means nothing allowed and `type(uint128).max` means unlimited. An empty recipient list means no recipient.", "Every protocol call needs a validator: Universal Router `execute` (V3 exact in/out and V4 swaps, ERC-20 only, output to the wallet), PositionManager `modifyLiquidities`, and the Aave Pool (`supply`, `withdraw`, `borrow`, `repay`, `setUserUseReserveAsCollateral`, `setUserEMode`; health factor at least 1.2 after the batch).", "Approvals made inside a batch are reset when it ends. Permit2 allowances for the Universal Router and the PositionManager come from the owner.", "The 0.15% agent fee is taken on what leaves the wallet, in the same asset, and counts inside the limits.", "New errors include `AgentPermissionsExpired`, `AgentPaused`, `EnforcedPause` (all agents paused), `TargetIsBlocked`, `PolicyValidationFailed`, `PostCheckFailed`, `AgentCannotCallWallet` and `UnsupportedExecutionMode`.", "The SDK and the MCP server currently target V4 wallets."]},
+      { type: 'h2', text: 'Older wallets (V4)' },
+      {
+        type: 'p',
+        text: 'The entrypoint, the batch encoding and the examples are the same on V4 agent wallets. What differs:',
+      },
+      {
+        type: 'list',
+        items: [
+          '`0` means unlimited and an empty `allowedRecipients` means any destination. `maxPerTxWei` applies to each item, not to the batch.',
+          'Protocol calls need a policy per selector, but only the Universal Router and the Uniswap v4 PositionManager go through a validator; other policies pin the recipient to the wallet (`PinnedArgMismatch`). SwapRouter02 is available. `approve` spenders are checked against `allowedRecipients`.',
+          'The wallet does not measure outflows: token budgets count transfers and approvals only, so spending through an approval the owner gave earlier is not counted. Agent approvals are not reset.',
+          'Expiry is optional, there is no per-agent pause and no target blocking. The lifetime native error is `AgentBudgetExceeded`; `getAgentPermission` includes the spending counters.',
+          'The 0.15% fee follows the owner’s three cases: taken from native sends, added on top of token transfers, and computed on balance increases for other calls.',
+        ],
+      },
+      { type: 'callout', tone: 'info', text: 'New agent wallets are V5. To move an existing one, see Move to wallet V5.' },
     ],
   },
 
   es: {
     title: 'Guía de integración de agentes',
     intro:
-      'Cómo un agente IA externo (o cualquier sistema automatizado) ejecuta transacciones a través de una BVCC Agent Wallet (`BVCCAgentWalletV4`). Todos los permisos, límites de gasto y call policies se aplican on-chain — el agente no puede excederlos haga lo que haga su código.',
+      'Cómo un agente IA externo (o cualquier sistema automatizado) ejecuta transacciones a través de una BVCC Agent Wallet V5 (`BVCCAgentWalletV5`), la generación actual. Todos los permisos, límites y comprobaciones se aplican en cadena: el agente no puede superarlos, haga lo que haga su código. Las diferencias de las wallets V4, más antiguas, están al final.',
     blocks: [
       { type: 'h2', text: 'Cómo funciona' },
       {
         type: 'list',
         items: [
-          'El dueño de la wallet autoriza la dirección de un agente desde la app (`/wallet/agents`), firmando con biometría / WebAuthn (passkey). Esto llama a `authorizeAgent()` en la wallet con los límites del agente.',
-          'El agente llama a `executeAsAgent()` en la wallet directamente, como una transacción EVM normal — sin UserOp ERC-4337, sin bundler, sin firma WebAuthn.',
-          'El agente paga el gas desde su propia EOA. Los fondos transferidos salen de la wallet.',
-          'Cada ejecución se valida contra el set de permisos on-chain del agente y paga una comisión de protocolo del 0,15%.',
-        ],
-      },
-      { type: 'p', text: 'Dos requisitos imprescindibles para la cuenta del agente:' },
-      {
-        type: 'list',
-        items: [
-          'Debe ser una EOA. `authorizeAgent` rechaza direcciones con código desplegado (`AgentMustBeEOA`). No se soportan agentes que sean smart contracts.',
-          'Debe estar autorizado y no expirado en el momento de ejecutar, y los agentes no deben estar pausados (`pauseAgents()` es el freno de emergencia del dueño).',
-        ],
-      },
-
-      { type: 'h2', text: 'El punto de entrada: executeAsAgent' },
-      { type: 'code', lang: 'solidity', code: CODE_SIG },
-      { type: 'p', text: '`mode` — modo de ejecución ERC-7821/7579. Usa la constante de modo batch:' },
-      { type: 'code', lang: 'text', code: CODE_BATCH_MODE },
-      { type: 'p', text: '`executionData` — array de structs `Execution` codificado en ABI:' },
-      { type: 'code', lang: 'solidity', code: CODE_EXECUTION },
-      {
-        type: 'p',
-        text: 'Una sola llamada puede agrupar varias ejecuciones; los límites se comprueban sobre el batch completo (ETH acumulado y cantidades acumuladas por token).',
-      },
-
-      { type: 'h2', text: 'Los cuatro tipos de llamada' },
-      {
-        type: 'p',
-        text: 'Cada item `Execution` se clasifica on-chain y se comprueba contra la whitelist correspondiente:',
-      },
-      {
-        type: 'table',
-        headers: ['Caso', 'Forma', 'Comprobaciones'],
-        rows: [
-          ['1. Envío de ETH', '`value > 0`, `callData` vacío', 'whitelist de destinatarios'],
-          [
-            '2. Transfer ERC-20',
-            '`callData` empieza por `0xa9059cbb` (`transfer(address,uint256)`)',
-            'whitelist de tokens + tope de cantidad por token + whitelist de destinatarios',
-          ],
-          [
-            '2b. Approve ERC-20',
-            '`callData` empieza por `0x095ea7b3` (`approve(address,uint256)`)',
-            'whitelist de tokens + tope por token + el spender se comprueba contra la whitelist de destinatarios',
-          ],
-          ['3. DeFi / cualquier otra', 'cualquier otro `callData`', 'el `target` en la whitelist de protocolos + una call policy registrada para el selector (V3)'],
-        ],
-      },
-      {
-        type: 'list',
-        items: [
-          'El agente nunca puede llamar a la propia wallet (`AgentCannotCallWallet`) — las funciones de dueño siguen siendo solo del dueño.',
-          'Las cantidades de `approve` cuentan contra los presupuestos diario/total por token, igual que los transfers. Es deliberadamente conservador: evita drenar fondos con un `transferFrom` externo tras un approve grande.',
-        ],
-      },
-
-      { type: 'h2', text: 'Call policies (caso 3, V3)' },
-      {
-        type: 'p',
-        text: 'Para que una llamada DeFi pase, el dueño de la wallet debe haber registrado una call policy para ese protocolo + selector. Es independiente de `allowedProtocols` (que solo whitelistea el target) y es lo que impide que una clave de agente robada redirija fondos. Tú no fijas policies — lo hace el dueño en la app — pero necesitas saber qué pasa:',
-      },
-      {
-        type: 'list',
-        items: [
-          'El selector debe estar permitido. Si el dueño no registró una policy para ese `target` + selector exacto, revierte con `SelectorNotAllowed`.',
-          'El destinatario debe ser la wallet. Para selectores pinneados (SwapRouter02, Aave Pool supply/withdraw/borrow/repay, …) el argumento recipient / `to` / `onBehalfOf` debe ser la agent wallet — pon ahí la wallet, no tu propia dirección. Si no, `PinnedArgMismatch`.',
-          'El calldata complejo se valida on-chain. Para el Universal Router (`execute`) y el v4 PositionManager (`modifyLiquidities`), la llamada se enruta a un validator on-chain que comprueba cada destinatario. Falla cerrado (`PolicyValidationFailed`) si el validator no está activo en esa red o algún destinatario no es la wallet.',
-        ],
-      },
-      {
-        type: 'p',
-        text: 'Los casos 1, 2 y 2b (envío de ETH, transfer de token, approve) no se ven afectados por las call policies — siguen usando las whitelists de destinatarios/tokens. Las call policies solo gobiernan el caso 3.',
-      },
-
-      { type: 'h2', text: 'Límites de gasto' },
-      {
-        type: 'p',
-        text: 'Todos se fijan por agente en `authorizeAgent`. `0` siempre significa ilimitado / desactivado. Se comprueban en este orden:',
-      },
-      {
-        type: 'table',
-        headers: ['Límite', 'Ámbito', 'Error al violarlo'],
-        rows: [
-          ['`maxPerTxWei`', 'ETH por item `Execution` individual', '`ExceedsPerTxLimit`'],
-          ['`tokenMaxAmounts[i]`', 'cantidad de token por batch (por token)', '`TokenBatchLimitExceeded` / `ExceedsTokenMaxAmount`'],
-          ['`tokenDailyLimits[i]`', 'cantidad de token por día UTC', '`TokenDailyLimitExceeded`'],
-          ['`tokenTotalBudgets[i]`', 'cantidad de token de por vida', '`TokenTotalBudgetExceeded`'],
-          [
-            '`periodBudgetWei` + `periodDuration`',
-            'ETH por periodo renovable (auto-rollover cuando el periodo vence)',
-            '`PeriodBudgetExceeded`',
-          ],
-          ['`dailyLimitWei`', 'ETH por día UTC (se resetea a las 00:00 UTC)', '`DailyLimitExceeded`'],
-          ['`totalBudgetWei`', 'ETH de por vida', '`AgentBudgetExceeded`'],
-          ['`expiry`', 'timestamp unix a partir del cual el agente queda desactivado', '`AgentPermissionsExpired`'],
+          'El dueño de la wallet autoriza una dirección de agente desde la app (`/wallet/agents`), firmando con su passkey. Eso llama a `authorizeAgent()` en la wallet con los límites y las policies del agente.',
+          'El agente llama a `executeAsAgent()` en la wallet directamente, como una transacción EVM normal: sin UserOp ERC-4337, sin bundler y sin firma de passkey.',
+          'El agente paga el gas desde su propia EOA. Los fondos que mueve salen de la wallet.',
+          'La wallet mide lo que sale durante el lote y lo carga, más una comisión de agente del 0,15 %, contra los límites del agente.',
         ],
       },
       {
         type: 'callout',
         tone: 'info',
-        text: 'El historial de gasto (`totalSpentWei`, `periodSpentWei`, gasto por token) se conserva entre re-autorizaciones — el dueño puede cambiar límites sin resetear lo que el agente ya gastó.',
+        text: 'El SDK de TypeScript (`@bvcc/agent-sdk`) y el servidor MCP (`@bvcc/agent-mcp`) hacen todo esto por ti: leen la versión de la wallet, montan el lote, comprueban antes los límites y traducen los errores. Ver Conectar una IA. Esta página es para integrar a mano.',
       },
-
-      { type: 'h2', text: 'Whitelists' },
-      { type: 'p', text: 'Máximo 20 entradas cada una. La semántica difiere:' },
+      { type: 'p', text: 'Requisitos de la cuenta del agente:' },
       {
-        type: 'table',
-        headers: ['Whitelist', 'Vacía significa'],
-        rows: [
-          ['`allowedTokens`', 'denegar todos los transfers/approves ERC-20'],
-          ['`allowedProtocols`', 'revierte (`NoProtocolsWhitelisted`) — se requiere al menos un protocolo para DeFi'],
-          [
-            '`allowedRecipients`',
-            'cualquier destino permitido (cuando está definida aplica a destinatarios de ETH, de tokens y a spenders de approve)',
-          ],
+        type: 'list',
+        items: [
+          'Debe ser una EOA normal, al autorizarla y en cada llamada. Una dirección con código, incluida una delegación EIP-7702 añadida después, se rechaza (`AgentMustBeEOA`).',
+          'Debe estar autorizada, sin caducar, sin pausa propia, y los agentes no deben estar en pausa global.',
         ],
       },
 
-      { type: 'h2', text: 'Comisiones' },
+      { type: 'h2', text: 'El punto de entrada: executeAsAgent' },
+      { type: 'code', lang: 'solidity', code: CODE_SIG },
+      { type: 'p', text: '`mode` debe ser el modo lote de ERC-7579; cualquier otro revierte con `UnsupportedExecutionMode`:' },
+      { type: 'code', lang: 'text', code: CODE_BATCH_MODE },
+      { type: 'p', text: '`executionData` es un array de structs `Execution` codificado en ABI:' },
+      { type: 'code', lang: 'solidity', code: CODE_EXECUTION },
+      { type: 'p', text: 'Los límites se comprueban sobre todo el lote: el valor nativo de todas las operaciones sumado, y la salida neta de cada token.' },
+
+      { type: 'h2', text: 'Qué comprueba la wallet en cada operación' },
+      {
+        type: 'table',
+        headers: ['Operación', 'Forma', 'Comprobaciones'],
+        rows: [
+          ['Envío nativo', '`value > 0`, `callData` vacío', '`target` en `allowedRecipients`'],
+          ['Transferencia ERC-20', '`transfer(address,uint256)`, sin valor', 'token en `allowedTokens`, destinatario en `allowedRecipients`'],
+          ['Approve ERC-20', '`approve(address,uint256)`, sin valor', 'token en `allowedTokens`, spender en `allowedProtocols`; se restaura al terminar el lote'],
+          ['Llamada a protocolo', 'cualquier otra', '`target` en `allowedProtocols`, una policy con `ALLOWED` y `DEEP` para ese agente y función, las anclas del dueño y un sí del validador del contrato'],
+        ],
+      },
+      {
+        type: 'list',
+        items: [
+          'El agente nunca puede llamar a la propia wallet (`AgentCannotCallWallet`), ni a un contrato que el dueño haya bloqueado (`TargetIsBlocked`).',
+          'Las policies las pone el dueño, en la app. Tú solo necesitas saber qué pasa.',
+        ],
+      },
+
+      { type: 'h2', text: 'Llamadas a protocolos y validadores' },
       {
         type: 'p',
-        text: 'Cada ejecución de agente paga una comisión de protocolo del 0,15% a la fee wallet de BVCC (`0x3e3eb089169a7315a994947465ce5f5FC3A307D4`), frente al 0,05% de la smart wallet personal. Lógica por tipo de llamada: se descuenta de los envíos de ETH, se cobra aparte en transfers de tokens (la wallet debe tener `amount + fee`) y se calcula por deltas de balance en llamadas DeFi.',
+        text: 'Toda llamada a un protocolo la comprueba el validador registrado para ese contrato en esa red. Un validador responde sí o no y le dice a la wallet qué tokens medir. Lo que pasa:',
+      },
+      {
+        type: 'list',
+        items: [
+          'Universal Router `execute`: swaps v3 exact-in / exact-out y swaps v4 entre tokens ERC-20. Todo destinatario debe ser la wallet (o el marcador de «quien llama» del router). Los hooks v4 deben ser ninguno o aprobados. Sin valor nativo: para cambiar ETH nativo, envuélvelo antes.',
+          'PositionManager de Uniswap v4 `modifyLiquidities`: solo posiciones de la wallet. Añadir liquidez exige una posición sin aprobación individual. Una llamada no puede retirar y añadir liquidez a la vez; usa dos operaciones. Hooks ninguno o aprobados.',
+          'Pool de Aave v3: `supply`, `withdraw`, `borrow` (tipo variable), `repay`, `setUserUseReserveAsCollateral`, `setUserEMode`, siempre con la wallet como beneficiaria. El activo debe ser un token permitido. Un préstamo se carga al presupuesto, y tras el lote el factor de salud debe ser al menos 1,2 (si no, `PostCheckFailed`).',
+          'NonfungiblePositionManager de Uniswap v3: `mint` hacia la wallet; `increaseLiquidity`, `decreaseLiquidity`, `burn` y `collect` en posiciones de la propia wallet; `collect` exactamente hacia la wallet.',
+          'Nativo envuelto (WETH, WBNB, WPOL): `deposit()` con valor, `withdraw(uint256)` sin él.',
+        ],
+      },
+      {
+        type: 'p',
+        text: 'Un validador que no esté activo en esa red deniega la llamada (`PolicyValidationFailed`). Las retiradas de Aave y de posiciones de Uniswap se cobran al entrar en la wallet, así que también cuentan contra el presupuesto del token.',
+      },
+
+      { type: 'h2', text: 'Límites de gasto' },
+      {
+        type: 'p',
+        text: 'Se fijan por agente en `authorizeAgent`. `0` significa nada permitido; «sin límite» es `type(uint128).max`. Todo cargo incluye la comisión del 0,15 %.',
+      },
+      {
+        type: 'table',
+        headers: ['Límite', 'Alcance', 'Error si se supera'],
+        rows: [
+          ['`maxPerTxWei`', 'valor nativo de todo el lote, más comisión', '`ExceedsPerTxLimit`'],
+          ['`dailyLimitWei`', 'nativo por día UTC', '`DailyLimitExceeded`'],
+          ['`totalBudgetWei`', 'nativo total', '`TotalBudgetExceeded`'],
+          ['`periodBudgetWei` + `periodDuration`', 'nativo por periodo móvil (solo si la duración es > 0)', '`PeriodBudgetExceeded`'],
+          ['`tokenMaxAmounts[i]`', 'salida + costes + comisión del token, por lote', '`TokenBatchLimitExceeded`'],
+          ['`tokenDailyLimits[i]`', 'por token, por día UTC', '`TokenDailyLimitExceeded`'],
+          ['`tokenTotalBudgets[i]`', 'por token, total', '`TokenTotalBudgetExceeded`'],
+          ['`expiry`', 'obligatoria, como mucho a 365 días; renovable con `renewAgent`', '`AgentPermissionsExpired`'],
+        ],
+      },
+      {
+        type: 'callout',
+        tone: 'info',
+        text: 'El historial de gasto se conserva cuando el dueño vuelve a autorizar un agente, así que cambiar los límites no reinicia lo ya gastado.',
+      },
+
+      { type: 'h2', text: 'Comisiones y medición' },
+      {
+        type: 'list',
+        items: [
+          'La comisión de agente del 0,15 % se cobra sobre lo que sale de la wallet, en el mismo activo y encima del importe. Una transferencia de 100 USDC le cuesta a la wallet 100,15 USDC y cuenta 100,15 contra los límites.',
+          'Para mover un saldo entero, deja sitio para la comisión: envía como mucho `saldo / 1,0015`. Si no, el lote revierte.',
+          'Lo que entra en la wallet por un swap no paga. Las retiradas de Aave o de una posición de liquidez se cobran como entradas.',
+          'Se mide todo token de la lista del agente, todo token encontrado en los datos y todo token que declare un validador, hasta 60. Un saldo que no se puede leer revierte el lote (`MeasurementFailed`).',
+          'Los tokens que cobran un impuesto al emisor no los pueden mover los agentes: pagar la comisión costaría más que la comisión.',
+          'Las aprobaciones que hace el agente vuelven a su valor anterior al terminar el lote. Las allowances de Permit2 para el Universal Router y el PositionManager las da el dueño, no el agente.',
+        ],
       },
 
       { type: 'h2', text: 'Leer el estado del agente' },
       { type: 'code', lang: 'solidity', code: CODE_GETTERS },
-      {
-        type: 'p',
-        text: 'Un agente bien hecho debería leer estos getters antes de enviar y dimensionar su transacción al presupuesto restante.',
-      },
+      { type: 'p', text: 'Un agente bien hecho los lee antes de enviar y ajusta su lote a lo que le queda, comisión incluida.' },
 
       { type: 'h2', text: 'Referencia de errores' },
-      {
-        type: 'p',
-        text: 'Todos los reverts usan custom errors (selectores de 4 bytes). Los más relevantes para un agente:',
-      },
       {
         type: 'table',
         headers: ['Error', 'Causa'],
         rows: [
-          ['`NotAuthorizedAgent()`', 'el caller no es un agente activo (nunca autorizado, o revocado)'],
-          ['`AgentPermissionsExpired()`', '`block.timestamp >= expiry`'],
-          ['`EnforcedPause()`', 'el dueño llamó a `pauseAgents()` (Pausable de OpenZeppelin)'],
-          ['`AgentCannotCallWallet()`', 'un `Execution.target` es la propia wallet'],
-          ['`ExceedsPerTxLimit()`', 'el `value` de un item > `maxPerTxWei`'],
-          [
-            '`DailyLimitExceeded()` / `PeriodBudgetExceeded()` / `AgentBudgetExceeded()`',
-            'límites de ETH (día / periodo / vida)',
-          ],
-          ['`NoTokensWhitelisted()` / `TokenNotAllowed()`', 'transfer de token con whitelist vacía / token no listado'],
-          ['`ExceedsTokenMaxAmount()` / `TokenBatchLimitExceeded()`', 'tope de token por tx/batch'],
-          ['`TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'presupuestos por token (día / vida)'],
-          ['`NoProtocolsWhitelisted()` / `ProtocolNotAllowed()`', 'llamada DeFi con whitelist vacía / target no listado'],
-          ['`AgentMustBeEOA()`', 'the agent address carries code — V4 checks this on every execution, so an EIP-7702 delegation added later locks the agent out until removed'],
-          ['`TokenCallWithValue()`', 'a transfer/approve carried native value — V4 requires zero value on token calls'],
-          ['`SelectorNotAllowed()`', 'sin call policy registrada para este `target` + selector (V3)'],
-          ['`PinnedArgMismatch()`', 'una palabra pinneada del calldata (recipient/spender) no es la wallet / no es un protocolo whitelisteado (V3)'],
-          ['`PolicyValidationFailed()`', 'un validator de policy DEEP denegó la llamada, revirtió, o no está registrado/activo (V3)'],
-          ['`CalldataTooShort()`', 'calldata DeFi de menos de 4 bytes — no hay selector que comprobar (V3)'],
-          ['`RecipientNotAllowed()`', 'destino/spender fuera de `allowedRecipients`'],
+          ['`NotAuthorizedAgent()`', 'quien llama no es un agente activo (nunca autorizado, o revocado)'],
+          ['`AgentPermissionsExpired()`', 'pasó la caducidad; el dueño puede renovar'],
+          ['`AgentPaused()` / `EnforcedPause()`', 'este agente está en pausa / todos los agentes están en pausa'],
+          ['`AgentMustBeEOA()`', 'la dirección del agente tiene código (por ejemplo, una delegación EIP-7702)'],
+          ['`UnsupportedExecutionMode()`', '`mode` no es el modo lote'],
+          ['`AgentCannotCallWallet()` / `TargetIsBlocked()`', 'una operación apunta a la propia wallet / a un contrato bloqueado por el dueño'],
+          ['`RecipientNotAllowed()`', 'destino nativo o de token fuera de `allowedRecipients`'],
+          ['`TokenNotAllowed()`', 'token fuera de `allowedTokens`, o salió de la wallet un token no permitido'],
+          ['`ProtocolNotAllowed()`', 'destino de una llamada a protocolo, o spender de un approve, fuera de `allowedProtocols`'],
+          ['`TokenCallWithValue()`', 'un transfer o approve llevaba valor nativo'],
+          ['`SelectorNotAllowed()` / `CallNeedsValidator()`', 'no hay policy para esa función / la policy no tiene `DEEP`'],
+          ['`PinnedArgMismatch()` / `CalldataTooShort()`', 'una palabra anclada de los datos no coincide / datos de menos de 4 bytes'],
+          ['`PolicyValidationFailed()`', 'el validador dijo que no, revirtió o no está activo en esta red'],
+          ['`PostCheckFailed()`', 'falló la comprobación posterior de un validador (salud de Aave por debajo de 1,2)'],
+          ['`ExceedsPerTxLimit()` / `DailyLimitExceeded()` / `PeriodBudgetExceeded()` / `TotalBudgetExceeded()`', 'límites nativos'],
+          ['`TokenBatchLimitExceeded()` / `TokenDailyLimitExceeded()` / `TokenTotalBudgetExceeded()`', 'límites de token'],
+          ['`MeasurementFailed()` / `TooManyMeasuredTokens()`', 'no se pudo leer un saldo / más de 60 tokens que medir'],
+          ['`FeeTransferFailed()`', 'la comisión no se pudo pagar exacta (por ejemplo, un token con impuesto al emisor)'],
         ],
       },
       {
         type: 'p',
-        text: 'Los errores del lado del dueño (`OnlyWallet`, `InvalidAgent`, `AgentMustBeEOA`, `ArrayLengthMismatch`, `TooManyTokens/Protocols/Recipients`, `UnknownAgent`, `AgentNotActive`, `ZeroAmount`) solo aparecen al autorizar/gestionar agentes.',
+        text: 'Los errores del lado del dueño (`OnlyWallet`, `InvalidAgent`, `InvalidExpiry`, `InvalidPolicy`, `ArrayLengthMismatch`, `TooManyTokens/Protocols/Recipients/Values`, `UnknownAgent`, `ZeroAmount`) solo aparecen al autorizar o gestionar agentes.',
       },
 
       { type: 'h2', text: 'Eventos' },
       { type: 'code', lang: 'solidity', code: CODE_EVENTS },
-      { type: 'p', text: '`AgentExecution` es el evento a indexar para monitorizar la actividad del agente off-chain.' },
+      { type: 'p', text: '`AgentExecution` es el que hay que indexar para seguir la actividad del agente fuera de la cadena. Sus cargos incluyen las comisiones.' },
 
       { type: 'h2', text: 'Ejemplo A — Script de Foundry (Solidity)' },
-      { type: 'p', text: 'Enviar ETH desde la agent wallet, firmado por la EOA del agente:' },
+      { type: 'p', text: 'Enviar ETH desde la wallet de agente, firmado por la EOA del agente. El destinatario debe estar en la lista del agente, y la comisión se suma encima:' },
       { type: 'code', lang: 'solidity', code: CODE_FOUNDRY },
       { type: 'code', lang: 'bash', code: CODE_FORGE_CMD },
 
       { type: 'h2', text: 'Ejemplo B — TypeScript / viem' },
-      { type: 'p', text: 'La misma llamada desde Node.js — un envío de ETH más un transfer de USDC en un solo batch:' },
+      { type: 'p', text: 'La misma llamada desde Node.js: un envío de ETH más una transferencia de USDC en un lote:' },
       { type: 'code', lang: 'typescript', code: CODE_VIEM },
       {
         type: 'p',
-        text: 'Si la llamada revierte, simúlala primero (`client.simulateContract` con los mismos args) — viem decodifica el nombre del custom error, que mapea directo a la referencia de errores de arriba.',
+        text: 'Si la llamada revierte, simúlala antes (`client.simulateContract` con los mismos argumentos). viem decodifica el nombre del error, que corresponde a la referencia de errores de arriba.',
       },
 
-      {"type": "h2", "text": "Wallets V5: diferencias para integradores"},
-      {"type": "list", "items": ["`executeAsAgent(bytes32 mode, bytes executionData)` solo acepta el modo lote (`0x01` seguido de ceros). `executionData` es `abi.encode(Execution[])`; una llamada sola es un lote de una.", "`getAgentPermission(agent)` devuelve una estructura nueva: añade `paused` y quita los contadores de gasto. El gasto se lee con `getAgentSpending(agent)`, `getDailySpent(agent)` y `getTokenSpent(agent, token)`.", "Límites: `0` significa nada permitido y `type(uint128).max`, sin límite. Una lista de destinos vacía significa ningún destino.", "Toda llamada a un protocolo necesita un validador: `execute` del Universal Router (swaps V3 de entrada o salida exacta y swaps V4, solo ERC-20, salida a la wallet), `modifyLiquidities` del PositionManager y el Pool de Aave (`supply`, `withdraw`, `borrow`, `repay`, `setUserUseReserveAsCollateral`, `setUserEMode`; factor de salud de al menos 1,2 tras el lote).", "Los approve hechos dentro de un lote vuelven a cero al terminar. Los permisos de Permit2 para el Universal Router y el PositionManager los da el dueño.", "La comisión del agente, 0,15 %, se cobra sobre lo que sale de la wallet, en el mismo activo, y cuenta dentro de los límites.", "Errores nuevos, entre otros: `AgentPermissionsExpired`, `AgentPaused`, `EnforcedPause` (todos los agentes pausados), `TargetIsBlocked`, `PolicyValidationFailed`, `PostCheckFailed`, `AgentCannotCallWallet` y `UnsupportedExecutionMode`.", "El SDK y el servidor MCP están hoy pensados para wallets V4."]},
+      { type: 'h2', text: 'Wallets antiguas (V4)' },
+      {
+        type: 'p',
+        text: 'El punto de entrada, la codificación del lote y los ejemplos son iguales en las wallets de agente V4. Lo que cambia:',
+      },
+      {
+        type: 'list',
+        items: [
+          '`0` significa ilimitado y un `allowedRecipients` vacío significa cualquier destino. `maxPerTxWei` se aplica a cada operación, no al lote.',
+          'Las llamadas a protocolos necesitan una policy por función, pero solo el Universal Router y el PositionManager de Uniswap v4 pasan por un validador; las demás policies anclan el destinatario a la wallet (`PinnedArgMismatch`). SwapRouter02 está disponible. Los spender de `approve` se comprueban contra `allowedRecipients`.',
+          'La wallet no mide las salidas: los presupuestos de token solo cuentan transferencias y aprobaciones, así que gastar con una aprobación que dio antes el dueño no cuenta. Las aprobaciones del agente no se restauran.',
+          'La caducidad es opcional, no hay pausa por agente ni bloqueo de contratos. El error del presupuesto nativo total es `AgentBudgetExceeded`; `getAgentPermission` incluye los contadores de gasto.',
+          'La comisión del 0,15 % sigue los tres casos del dueño: sale del valor en envíos nativos, se suma encima en transferencias de tokens y se calcula sobre las subidas de saldo en las demás llamadas.',
+        ],
+      },
+      { type: 'callout', tone: 'info', text: 'Las wallets de agente nuevas son V5. Para mover una existente, ver Pasar a la wallet V5.' },
     ],
   },
 }

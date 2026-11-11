@@ -154,14 +154,14 @@ Developer docs live in [`docs/`](docs/) and on the web at [bvccwallet.blockventu
 
 ## Security Report
 
-Internal security & test report for the BVCC Agent Wallet, covering four rounds: the Arbitrum Sepolia engagement (V1, 2026-06), the V2 mainnet gas hardening and multichain deploy, the V3 call-policy layer verified on Arbitrum One, and V4 (2026-07) — seven high-severity findings fixed, including a cross-function reentrancy that let a compromised agent bypass every limit and guardian squatting through the factory. Two issues remain open by decision, documented with their mitigations. Full files in [`audits/`](audits).
+Internal security & test report for the BVCC Agent Wallet, covering every generation from V1 to V5. V5 is the current one: five review rounds and a red-team exercise, run by the team with AI analysis tools, found seventeen issues before it was deployed. Thirteen were fixed and four are documented trust assumptions, so nothing is open in V5. It closes BVCC-03, the one risk V4 left open, by measuring what each agent batch takes out of the wallet. All 72 V5 contracts are source-verified on six networks. The V4 findings stay in the report, because V4 wallets still exist. Full files in [`audits/`](audits).
 
 | Report | PDF | View in browser |
 |---|---|---|
 | English | [Security Report (PDF)](audits/BVCC-Agent-Wallet-Security-Report.pdf) | [Open HTML](https://htmlpreview.github.io/?https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent/blob/main/audits/bvcc-security-report.html) |
 | Español | [Informe de Seguridad (PDF)](audits/BVCC-Agent-Wallet-Informe-Seguridad.pdf) | [Abrir HTML](https://htmlpreview.github.io/?https://github.com/blockventurechaincapital-crypto/bvcc-wallet-agent/blob/main/audits/bvcc-security-report-es.html) |
 
-> Clicking a PDF opens it in GitHub's built-in viewer. "View in browser" renders the HTML source via htmlpreview.github.io. The report is internal (not an external third-party audit).
+> Clicking a PDF opens it in GitHub's built-in viewer. "View in browser" renders the HTML source via htmlpreview.github.io. The report is internal, not an external third-party audit.
 
 ## License
 

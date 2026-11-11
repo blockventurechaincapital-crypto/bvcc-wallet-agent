@@ -139,25 +139,25 @@ export const press = {
       // ── Security ──────────────────────────────────────────
       secHeading: 'Security, in full',
       secIntro:
-        'The review is internal, carried out by the developer on his own code. No independent party has audited it, and we would rather you write that than not. The whole findings register is published, including what is still open.',
+        'The review is internal, carried out by the developer on his own code. The five review rounds and the red-team exercise behind V5 were run with AI analysis tools. No independent party has audited it, and we would rather you write that than not. The whole findings register is published: 30 findings across every generation, below with their status on V5, the current one.',
       secRows: [
         ['Critical', '2', 'both fixed'],
-        ['High', '3', '2 fixed · 1 open'],
-        ['Medium', '5', '3 fixed · 1 open · 1 accepted'],
-        ['Low', '1', 'fixed'],
-        ['Informational', '2', '1 mitigated · 1 accepted'],
+        ['High', '13', '12 fixed · 1 accepted'],
+        ['Medium', '10', '8 fixed · 2 accepted'],
+        ['Low', '3', '2 fixed · 1 accepted'],
+        ['Informational', '2', 'both fixed'],
       ],
-      secOpenHeading: 'The one that is still open',
+      secOpenHeading: 'What is accepted, and what is still open on older wallets',
       secOpenBody:
-        'BVCC-03. Where the owner has already granted a token allowance to a protocol, anchoring a call’s destination does not bound its value, so a compromised agent key can be worth more than its budget. The mitigation is to hold zero standing allowances before authorizing an agent that can reach that protocol.',
+        'Nothing is open on V5. Four findings are accepted as stated trust assumptions: validators must be immutable, approved Uniswap v4 hooks and the tokens an owner allows are trusted, and the wallet only measures tokens a validator declares. On V4 wallets, BVCC-03 is still open: where the owner has already granted a token allowance to a protocol, a compromised agent key can be worth more than its budget. V5 closes it by measuring what each agent operation takes out of the wallet.',
       secUpgradeBody:
-        'Also worth stating: a deployed wallet cannot be upgraded in place. Wallets still on V1, V2 or V3 run the older bytecode until their owners migrate.',
-      secLinkEn: 'Full report (English, 44 pages)',
-      secLinkEs: 'Informe completo (español, 46 páginas)',
+        'Also worth stating: a deployed wallet cannot be upgraded in place. Wallets still on V1 to V4 run their older bytecode until their owners move to V5.',
+      secLinkEn: 'Full report (English, 61 pages)',
+      secLinkEs: 'Informe completo (español, 64 páginas)',
 
       // ── Proof ─────────────────────────────────────────────
       proofHeading: 'Proof it works on mainnet',
-      proofNote: 'All on Arbitrum One, all checkable on the explorer.',
+      proofNote: 'All on Arbitrum One, with a V4 agent wallet, all checkable on the explorer.',
       proofRows: [
         ['Swap', 'Agent swap through the Universal Router. Fee came out at 0.15% to the wei.'],
         ['Lending', 'A full Aave v3 cycle by the agent: supply, borrow, repay, withdraw. Position closed.'],
@@ -357,24 +357,24 @@ export const press = {
 
       secHeading: 'Seguridad, entera',
       secIntro:
-        'La revisión es interna, hecha por el propio desarrollador sobre su código. Ningún tercero independiente la ha auditado, y preferimos que lo escribas a que no. El registro completo de hallazgos está publicado, incluido lo que sigue abierto.',
+        'La revisión es interna, hecha por el propio desarrollador sobre su código. Las cinco rondas de revisión y el equipo rojo de la V5 se hicieron con herramientas de análisis con IA. Ningún tercero independiente la ha auditado, y preferimos que lo escribas a que no. El registro completo de hallazgos está publicado: 30 hallazgos de todas las generaciones, abajo con su estado en la V5, la actual.',
       secRows: [
         ['Críticos', '2', 'ambos corregidos'],
-        ['Altos', '3', '2 corregidos · 1 abierto'],
-        ['Medios', '5', '3 corregidos · 1 abierto · 1 aceptado'],
-        ['Bajo', '1', 'corregido'],
-        ['Informativos', '2', '1 mitigado · 1 aceptado'],
+        ['Altos', '13', '12 corregidos · 1 aceptado'],
+        ['Medios', '10', '8 corregidos · 2 aceptados'],
+        ['Bajos', '3', '2 corregidos · 1 aceptado'],
+        ['Informativos', '2', 'ambos corregidos'],
       ],
-      secOpenHeading: 'El que sigue abierto',
+      secOpenHeading: 'Lo aceptado, y lo que sigue abierto en wallets antiguas',
       secOpenBody:
-        'BVCC-03. Cuando el dueño ya ha concedido un allowance de token a un protocolo, fijar el destino de una llamada no acota su valor, así que una clave de agente comprometida puede valer más que su presupuesto. La mitigación es tener cero allowances previos antes de autorizar a un agente que pueda alcanzar ese protocolo.',
+        'En la V5 no hay nada abierto. Cuatro hallazgos se aceptan como supuestos de confianza declarados: los validadores deben ser inmutables, los hooks de Uniswap v4 aprobados y los tokens que permite el dueño son de confianza, y la wallet solo mide los tokens que declara un validador. En las wallets V4, BVCC-03 sigue abierto: si el dueño ya ha concedido un allowance de token a un protocolo, una clave de agente comprometida puede valer más que su presupuesto. La V5 lo cierra midiendo lo que cada operación de un agente saca de la wallet.',
       secUpgradeBody:
-        'Conviene decirlo también: una wallet desplegada no se puede actualizar en el sitio. Las wallets que sigan en V1, V2 o V3 ejecutan el bytecode antiguo hasta que sus dueños migren.',
-      secLinkEn: 'Informe completo (inglés, 44 páginas)',
-      secLinkEs: 'Informe completo (español, 46 páginas)',
+        'Conviene decirlo también: una wallet desplegada no se puede actualizar por dentro. Las wallets que sigan en V1 a V4 ejecutan su bytecode antiguo hasta que sus dueños pasen a la V5.',
+      secLinkEn: 'Informe completo (inglés, 61 páginas)',
+      secLinkEs: 'Informe completo (español, 64 páginas)',
 
       proofHeading: 'Prueba de que funciona en mainnet',
-      proofNote: 'Todo en Arbitrum One y todo comprobable en el explorer.',
+      proofNote: 'Todo en Arbitrum One, con una wallet de agente V4, y todo comprobable en el explorer.',
       proofRows: [
         ['Swap', 'Swap del agente por el Universal Router. La comisión salió al 0,15 % exacto, al wei.'],
         ['Préstamo', 'Ciclo completo en Aave v3 hecho por el agente: supply, borrow, repay, withdraw. Posición cerrada.'],

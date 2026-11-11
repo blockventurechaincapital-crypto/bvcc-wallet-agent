@@ -10,10 +10,10 @@
 - [Recover your wallet](https://bvccwallet.blockventurechaincapital.com/docs/recovery): Move a wallet to a new passkey with two of its three guardians, step by step and network by network.
 - [Move to wallet V5](https://bvccwallet.blockventurechaincapital.com/docs/migrate): Create a V5 wallet with the same passkey, then move funds, positions and agents across.
 - [Connect an AI](https://bvccwallet.blockventurechaincapital.com/docs/connect-ai): Connect Hermes, Claude, Cursor, or LM Studio over MCP — install, configure, authorize, verify.
-- [How agent permissions work](https://bvccwallet.blockventurechaincapital.com/docs/agent-permissions): Capabilities vs addresses, the four permission layers, call policies.
-- [Agent integration](https://bvccwallet.blockventurechaincapital.com/docs/agent-integration): How an agent transacts within on-chain limits.
+- [How agent permissions work](https://bvccwallet.blockventurechaincapital.com/docs/agent-permissions): On wallet V5: the wallet measures what leaves, limits include the fee, 0 and empty mean nothing, every DeFi call goes through a validator.
+- [Agent integration](https://bvccwallet.blockventurechaincapital.com/docs/agent-integration): How an agent transacts within on-chain limits on wallet V5, with V4 differences at the end.
 - [Self-hosting](https://bvccwallet.blockventurechaincapital.com/docs/self-hosting): Run the wallet yourself.
-- [Contracts](https://bvccwallet.blockventurechaincapital.com/docs/contracts): Smart-contract details.
+- [Contracts](https://bvccwallet.blockventurechaincapital.com/docs/contracts): V5 contract reference and addresses (current), V4 as the previous generation.
 - [Bundler API](https://bvccwallet.blockventurechaincapital.com/docs/bundler-api): ERC-4337 bundler API.
 
 ## Packages and source
@@ -24,9 +24,9 @@
 - [SDK source](https://github.com/blockventurechaincapital-crypto/bvcc-agent-sdk)
 
 ## Security
-- [Security report (English)](https://bvccwallet.blockventurechaincapital.com/audits/BVCC-Agent-Wallet-Security-Report.pdf): Internal security review — findings register, threat model, remediation and on-chain verification.
+- [Security report (English)](https://bvccwallet.blockventurechaincapital.com/audits/BVCC-Agent-Wallet-Security-Report.pdf): Internal security review of every generation, V1 to V5: findings register, threat model, remediation, deployment and on-chain verification.
 - [Informe de seguridad (Spanish)](https://bvccwallet.blockventurechaincapital.com/audits/BVCC-Agent-Wallet-Informe-Seguridad.pdf)
-- The review is internal. No independent party has audited this code. Status: Public Beta.
+- The review is internal; the V5 review rounds were run with AI analysis tools. No independent party has audited this code. Nothing is open on V5: 26 of 30 findings are fixed and 4 are documented trust assumptions. Status: Public Beta.
 
 ## Legal
 - [Terms](https://bvccwallet.blockventurechaincapital.com/legal/terms)
@@ -46,7 +46,8 @@
 - MCP clients: Hermes, Claude, Cursor, LM Studio.
 - What an agent can do: send native and ERC-20 tokens, swap on Uniswap v3 and v4, supply/borrow/repay on Aave v3 (including closing, deleveraging and swapping collateral or debt), and open, collect, reduce and close Uniswap v3 and v4 liquidity positions.
 - MCP surface: 53 tools — 12 read, 15 simulate, 26 write — plus 4 operating guides. Most writes have a matching dry-run. `BVCC_MCP_READONLY=true` exposes only the 27 read/simulate tools; `BVCC_MCP_MODULES` narrows by feature group (`core`, `aave`, `lp`).
-- Fees: a 0.15% BVCC agent fee is charged on-chain on agent actions, separate from gas and from the agent's budget.
+- Fees: a 0.15% BVCC agent fee is charged on-chain on what agent actions take out of the wallet, separate from gas. On wallet V5 it is added on top and counts inside the agent's limits.
+- Wallet generation: new wallets are V5 (non-upgradeable clones, same address on every network). V5 measures what each agent operation takes out of the wallet and charges it against the agent's limits, whatever approvals exist. Older V4 wallets keep working and can move to V5 with the same passkey.
 - Networks: Ethereum, Arbitrum, Base, BNB Chain, Polygon. Active testnet: Arbitrum Sepolia.
 - Open source and self-hostable. Status: Public Beta.
 

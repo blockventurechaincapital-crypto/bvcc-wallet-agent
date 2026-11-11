@@ -1,30 +1,32 @@
 # Audits
 
-Internal security review of the BVCC Agent Wallet, covering four review rounds (2026-06 → 2026-07) of the contracts at commit `a3e28f1` (`contracts/src` tree `337e84f0`, generation V4).
+Internal security review of the BVCC Agent Wallet, covering every generation from V1 (2026-06) to V5 (2026-11). V5 is the current generation: commit `838a70f`, `contracts-v5/src` tree `64a5c674`. The review of V4 and earlier refers to commit `a3e28f1` (`contracts/src` tree `337e84f0`).
 
-**This is an internal review, not an external audit.** It was performed by the development team on its own code, and **no independent party has reviewed it**. Four of the findings came from a later pass over the V3 code with a different analysis tool, and each had survived three earlier rounds — changing the tool found what repeating the method did not. That pass was internal too. Section 7 of the report states the limits of what it establishes.
+**This is an internal review, not an external audit.** The development team performed it on its own code. The five V5 review rounds and the red-team exercise were run by the team with AI analysis tools, and **no independent party has reviewed any generation**. Section 7 of the report states the limits of what it establishes.
 
 ## Findings
 
-Thirteen findings in the current codebase, plus two closed in superseded generations. Severity is impact × likelihood, recorded as found rather than as it stands after remediation.
+Thirty findings: thirteen from the review of V4 and earlier (`BVCC-01` … `BVCC-13`) and seventeen from the V5 rounds (`BVCC-14` … `BVCC-30`), plus two closed in superseded generations. Severity is impact × likelihood, recorded as found rather than as it stands after remediation.
 
-| Severity | Count | Status |
+| Severity | V4 review | V5 review |
 |---|---|---|
-| Critical | 2 | both fixed |
-| High | 3 | 2 fixed, **1 open** |
-| Medium | 5 | 3 fixed, 1 open (interface), 1 accepted |
-| Low | 1 | fixed |
-| Informational | 2 | 1 mitigated, 1 accepted |
+| Critical | 2 | 0 |
+| High | 3 | 10 |
+| Medium | 5 | 5 |
+| Low | 1 | 2 |
+| Informational | 2 | 0 |
 
-Nine findings are remediated in bytecode deployed and verified on all six networks. Seven of them required a bytecode change and shipped together as the **V4** generation.
+**On V5 nothing is open.** Twenty-six findings are closed in code. Four are accepted and documented as trust assumptions: validators must be immutable, approved Uniswap v4 hooks and allowed tokens are trusted, and the wallet only measures tokens a validator declares. Every V5 finding was handled before deployment.
 
-**The one that should change behaviour today is BVCC-03**, which V4 does not close: where the owner has already granted a token allowance to a protocol, anchoring a call's destination does not bound its value, so a compromised agent key is worth more than its budget. Zero standing allowances before authorizing an agent that can reach that protocol.
+**V5 closes BVCC-03**, the one material risk V4 left open, by measuring what each agent batch takes out of the wallet and charging it, fee included, against the agent's limits, whatever allowances already exist.
 
-**A deployed wallet cannot be upgraded in place.** Wallets still on V1, V2 or V3 run the vulnerable bytecode — including the Critical BVCC-01 — until their owners migrate.
+**V5 is live on six networks** (Ethereum, Arbitrum One, Base, BNB Chain, Polygon, Arbitrum Sepolia). All 72 contracts are source-verified and all 30 validators are active, both read back from each network on 2026-11-11.
+
+**A deployed wallet cannot be upgraded in place.** V4 wallets still have BVCC-03 open, and wallets on V1 to V3 run the Critical BVCC-01, until their owners migrate to V5.
 
 ## Structure
 
-Part I is the audit: executive summary, scope and severity model, the findings register, the findings in detail (`BVCC-01` … `BVCC-13`), remediation and deployment verification, residual risk, conclusion and limitations. Part II holds the appendices: security architecture, test evidence, static analysis, the V1 and V2 findings with their evidence, the remediation timeline, key identifiers, and process notes.
+Part I is the audit: executive summary, scope and severity model, the findings register, the findings in detail (`BVCC-01` … `BVCC-30`), remediation and deployment verification, residual risk, conclusion and limitations. Part II holds the appendices: security architecture (V5 first), test evidence, static analysis, the V1 and V2 findings with their evidence, the remediation timeline, key identifiers, and process notes.
 
 Findings are cited by identifier throughout, not by section number.
 
