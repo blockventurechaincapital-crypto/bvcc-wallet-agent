@@ -109,6 +109,8 @@ const jsonLd = {
       featureList: [
         'Non-custodial self-custody with WebAuthn / passkeys (Face ID, fingerprint, security key)',
         'AI-agent permissions enforced on-chain: period budget, allowed tokens, allowed protocols, recipient whitelist, expiry, instant pause',
+        'Wallet V5: the wallet measures what each agent operation takes out and charges it against the agent\'s limits, whatever approvals exist',
+        'Public internal security report covering every contract generation, in English and Spanish',
         'MCP integration with Hermes, Claude, Cursor, and LM Studio — 53 tools registered in one command',
         'Agent DeFi actions within those limits: token transfers, Uniswap v3/v4 swaps, Aave v3 lending, Uniswap v3/v4 liquidity positions',
         'ERC-4337 account abstraction and ERC-7821 batch execution',
@@ -136,7 +138,7 @@ const jsonLd = {
           name: 'What limits can I set on an AI agent?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'You define the limits and the contract enforces them on-chain: spending caps (per transaction, daily, per period and total, in the native token and per ERC-20), an allowed-tokens list, the protocols it may call, an optional recipient whitelist, an expiry date, and an instant pause. The agent holds its own keypair and can never exceed them — BVCC never sees the agent keys.',
+            text: 'You define the limits and the contract enforces them on-chain: spending caps (per transaction, daily, per period and total, in the native token and per ERC-20), an allowed-tokens list, the protocols it may call, a recipient whitelist, an expiry date of at most one year, and an instant pause, per agent or for all of them. On wallet V5 a limit of 0 or an empty list allows nothing, and the wallet measures every token that leaves, so the agent cannot exceed its budget through old approvals. The agent holds its own keypair — BVCC never sees the agent keys.',
           },
         },
         {
@@ -169,6 +171,14 @@ const jsonLd = {
           acceptedAnswer: {
             '@type': 'Answer',
             text: 'The wallet runs on Ethereum, Arbitrum, Base, BNB Chain and Polygon, using ERC-4337 account abstraction and ERC-7821 batch execution. Arbitrum Sepolia is the active testnet.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'Has the BVCC Agent Wallet been audited?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Not by an independent third party. The contracts went through an internal security review, published in full in English and Spanish: 30 findings across every generation, from V1 to V5, with their fixes. On V5, the current generation, nothing is open: 26 findings are fixed and 4 are documented trust assumptions. The V5 review rounds were run with AI analysis tools. All 72 V5 contracts are source-verified on the block explorers.',
           },
         },
         {
